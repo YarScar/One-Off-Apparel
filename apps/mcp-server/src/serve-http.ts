@@ -45,7 +45,7 @@ const httpServer = createServer((req, res) => {
     try {
       const url = req.url ?? '/';
 
-      if (url === '/health') {
+      if (url === '/health' || url === '/') {
         try {
           await prisma.$queryRaw`SELECT 1`;
           send(res, 200, { status: 'ok', ts: new Date().toISOString() });
