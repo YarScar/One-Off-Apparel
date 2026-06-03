@@ -28,6 +28,15 @@ With AWS App Runner deprecated as of April 2026, both MCP servers are deployed u
         "AWS_MCP_URL": "http://localhost:8081/mcp",
         "AWS_MCP_TOKEN": "lpInc123!"
       }
+    },
+    "aws-agent-toolkit": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy-for-aws@latest",
+        "https://aws-mcp.us-east-1.api.aws/mcp",
+        "--metadata",
+        "AWS_REGION=us-east-1"
+      ]
     }
   }
 }
@@ -71,6 +80,15 @@ In Windows JSON configuration files, you must escape backslashes using `\\` or u
         "AWS_MCP_URL": "http://localhost:8081/mcp",
         "AWS_MCP_TOKEN": "lpInc123!"
       }
+    },
+    "aws-agent-toolkit": {
+      "command": "uvx",
+      "args": [
+        "mcp-proxy-for-aws@latest",
+        "https://aws-mcp.us-east-1.api.aws/mcp",
+        "--metadata",
+        "AWS_REGION=us-east-1"
+      ]
     }
   }
 }
@@ -97,6 +115,19 @@ In Windows JSON configuration files, you must escape backslashes using `\\` or u
      pnpm --filter @lp-ai/aws-mcp-server dev:http
      ```
    * **Production Deployment**: Once the infrastructure server is also deployed to Amazon ECS Express Mode, update the `AWS_MCP_URL` in the config file to point to the new ECS ALB DNS address instead of `localhost`.
+
+4. **Run Official Amazon AWS Agent Toolkit**:
+   * **Install `uv` (Prerequisite)**: The AWS MCP proxy server runs via Python and is launched with `uvx`. Ensure `uv` is installed on your machine:
+     ```bash
+     # Linux / macOS
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
+   * **Configure AWS Credentials**: Ensure you have logged in or set up your local AWS credentials via the AWS CLI:
+     ```bash
+     aws sso login --profile dev
+     # or standard credentials setup
+     ```
+   * The proxy server will launch automatically when Claude starts, proxying standard input/output requests to Amazon's secure, remote AWS MCP API.
 
 ## Verification & Troubleshooting Checklist
 
