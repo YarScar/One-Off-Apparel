@@ -47,21 +47,29 @@ async function fetchSecret(
   id: string,
   group: SecretGroup,
 ): Promise<Record<string, string>> {
-  const response = await client.send(new GetSecretValueCommand({ SecretId: id }));
-  const raw = response.SecretString;
-  if (!raw) {
-    throw new Error(`Secret ${id} has no SecretString`);
-  }
-  const parsed: unknown = JSON.parse(raw);
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error(`Secret ${id} is not a JSON object`);
-  }
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(parsed)) {
-    if (typeof value !== 'string') {
-      throw new Error(`Secret ${id} key ${key} is not a string (group=${group})`);
+  try {
+    const response = await client.send(new GetSecretValueCommand({ SecretId: id }));
+    const raw = response.SecretString;
+    if (!raw) {
+      throw new Error(`Secret ${id} has no SecretString`);
     }
-    out[key] = value;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error(`Secret ${id} is not a JSON object`);
+    }
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value !== 'string') {
+        throw new Error(`Secret ${id} key ${key} is not a string (group=${group})`);
+      }
+      out[key] = value;
+    }
+    return out;
+  } catch (error: any) {
+    if (error.name === 'ResourceNotFoundException') {
+      console.warn(`[Config] Optional secret group '${group}' (${id}) not found in Secrets Manager. Skipping.`);
+      return {};
+    }
+    throw error;
   }
-  return out;
 }

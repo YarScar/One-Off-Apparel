@@ -54,7 +54,7 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates wget \
+  && apt-get install -y --no-install-recommends openssl ca-certificates wget curl \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd -r nodejs && useradd -r -g nodejs next
 
@@ -74,7 +74,7 @@ COPY --from=builder --chown=next:nodejs \
 USER next
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
 CMD ["node", "apps/hq/server.js"]

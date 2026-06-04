@@ -28,6 +28,20 @@ export async function loadEnv(): Promise<Env> {
   }
 
   cached = parsed.data;
+
+  // Propagate parsed configuration back to process.env
+  for (const [key, value] of Object.entries(cached)) {
+    if (value !== undefined) {
+      if (typeof value === 'string') {
+        process.env[key] = value;
+      } else if (typeof value === 'boolean') {
+        process.env[key] = value ? 'true' : 'false';
+      } else {
+        process.env[key] = String(value);
+      }
+    }
+  }
+
   return cached;
 }
 

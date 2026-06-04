@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@lp-ai/lib-config": "workspace:*",
     "@prisma/client": "^7.0.0",
     "@prisma/client-runtime-utils": "^7.0.0",
     "@prisma/adapter-pg": "^7.0.0",

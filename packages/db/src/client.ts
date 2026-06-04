@@ -1,6 +1,7 @@
 import { PrismaClient } from '../generated/prisma/index.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import { loadEnv } from '@lp-ai/lib-config';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -12,7 +13,8 @@ let prismaClient: PrismaClient;
 if (globalForPrisma.prisma) {
   prismaClient = globalForPrisma.prisma;
 } else {
-  const dbUrl = process.env['DATABASE_URL'] || 'postgresql://mock:mock@localhost:5432/mock';
+  const env = await loadEnv();
+  const dbUrl = env.DATABASE_URL;
   const pool = new pg.Pool({ connectionString: dbUrl });
   const adapter = new PrismaPg(pool);
   prismaClient = new PrismaClient({

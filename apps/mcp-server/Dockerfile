@@ -49,7 +49,7 @@ ENV NODE_ENV=production
 ENV PORT=8080
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates wget \
+  && apt-get install -y --no-install-recommends openssl ca-certificates wget curl \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd -r nodejs && useradd -r -g nodejs mcp
 
@@ -64,7 +64,7 @@ WORKDIR /workspace/apps/mcp-server
 USER mcp
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:8080/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
 
 CMD ["node", "dist/serve-http.js"]
