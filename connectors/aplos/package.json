@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "sync": "node --security-revert=CVE-2023-46809 dist/cli.js",
+    "sync": "node dist/cli.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
