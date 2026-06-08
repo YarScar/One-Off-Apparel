@@ -27,7 +27,7 @@ Status legend: ✅ Complete · 🟡 Built (awaiting credential to activate) · �
 | 6 | Embeddings + pgvector search | [06-embeddings-pgvector.md](06-embeddings-pgvector.md) | 🟡 Built | `@lp-ai/lib-embedding` ready; awaiting `OPENAI_API_KEY` for runtime |
 | 7 | MCP server — 14 tools | [07-mcp-server.md](07-mcp-server.md) | ✅ Complete | All 14 tools wired to Prisma; stdio + HTTP transports; smoke-tested |
 | 8 | HQ dashboard — Next.js + NextAuth | [08-hq-dashboard.md](08-hq-dashboard.md) | 🟡 Built | All pages live; sign-in awaits `AUTH_GOOGLE_ID`/`SECRET` |
-| 9 | AWS App Runner deployment | [09-app-runner.md](09-app-runner.md) | 🔲 Pending | Docker images built and verified locally; awaiting AWS |
+| 9 | ECS Fargate deployment | [09-ecs-express-mode.md](09-ecs-express-mode.md) | 🔲 Pending | Docker images built and verified locally; awaiting AWS |
 | 10 | AWS EventBridge cron scheduling | [10-eventbridge-cron.md](10-eventbridge-cron.md) | 🔲 Pending | |
 | 11 | Sentry error monitoring | [11-sentry.md](11-sentry.md) | 🔲 Pending | |
 | 12 | Notion knowledge base | [12-notion.md](12-notion.md) | 🔲 Pending | |
@@ -70,7 +70,7 @@ When a phase is complete, update the status column above to `✅ Complete`.
 | Relational DB | Postgres on AWS RDS |
 | Vector search | pgvector (on RDS) |
 | Embeddings | OpenAI `text-embedding-3-large` |
-| App hosting | AWS App Runner |
+| App hosting | AWS ECS (Fargate) behind ALB |
 | Cron | AWS EventBridge |
 | Secrets | AWS Secrets Manager |
 | Auth | NextAuth (Auth.js) + Google |

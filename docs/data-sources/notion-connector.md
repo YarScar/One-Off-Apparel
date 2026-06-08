@@ -154,7 +154,7 @@ Seeded manually for now (V1) by an admin; later sourced from Google Workspace gr
 
 The MCP server today has no idea who invoked a tool. To fix:
 
-- **Streamable HTTP transport** (production via App Runner): require an `X-Caller-Email` header on every tool call; reject if missing. EventBridge / scheduled jobs use a service-account email with a known set of roles.
+- **Streamable HTTP transport** (production via ECS Fargate): require an `X-Caller-Email` header on every tool call; reject if missing. EventBridge / scheduled jobs use a service-account email with a known set of roles.
 - **stdio transport** (Claude Desktop locally): the desktop client passes the signed-in user's email via the MCP `init` handshake or via an env var (`MCP_CALLER_EMAIL`). For local dev convenience, default to a configurable `MCP_LOCAL_CALLER_EMAIL` env var so the developer doesn't have to set it each invocation.
 
 Either way, the MCP server resolves caller email → roles via `user_roles` at the start of each tool call and stashes them in the request context.

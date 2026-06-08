@@ -77,44 +77,66 @@ export AWS_REGION=us-east-1
 
 ---
 
-## 4. Create the App Runner execution role
+## 4. Create the ECS task + execution roles
 
-App Runner needs an IAM role to pull images from ECR and read secrets.
+ECS on Fargate splits responsibilities into two roles:
+
+- **Execution role** (`lp-ecs-execution-role`) — used by the ECS agent to pull the image from ECR, fetch Secrets Manager values for injection, and write CloudWatch logs. The container itself never assumes this role.
+- **Task role** (`lp-ecs-task-role`) — assumed by the running container; this is what application code uses when it calls AWS APIs at runtime.
+
+Both trust the ECS task service principal.
 
 ```bash
-# Create the trust policy document
-cat > /tmp/apprunner-trust.json << 'EOF'
+# Trust policy (shared by both roles)
+cat > /tmp/ecs-trust.json << 'EOF'
 {
   "Version": "2012-10-17",
   "Statement": [
     {
       "Effect": "Allow",
-      "Principal": {
-        "Service": [
-          "build.apprunner.amazonaws.com",
-          "tasks.apprunner.amazonaws.com"
-        ]
-      },
-      "Action": "sts:AssumeRole"
+      "Principal": { "Service": "ecs-tasks.amazonaws.com" },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": { "aws:SourceAccount": "${AWS_ACCOUNT_ID}" }
+      }
     }
   ]
 }
 EOF
+envsubst < /tmp/ecs-trust.json > /tmp/ecs-trust-resolved.json
 
-# Create the role
+# Execution role
 aws iam create-role \
-  --role-name lp-app-runner-role \
-  --assume-role-policy-document file:///tmp/apprunner-trust.json
+  --role-name lp-ecs-execution-role \
+  --assume-role-policy-document file:///tmp/ecs-trust-resolved.json
 
-# Attach ECR read access (to pull images)
+# Attach the AWS-managed execution policy (ECR pulls + CloudWatch logs)
 aws iam attach-role-policy \
-  --role-name lp-app-runner-role \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+  --role-name lp-ecs-execution-role \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
 
-# Attach Secrets Manager read access
+# Allow the execution role to fetch lp-internal/* secrets for env injection
+# (See docs/runbooks/aws-permissions.md §4.2 for the scoped policy JSON)
+envsubst < infra/iam/lp-ecs-execution-policy.json > /tmp/lp-ecs-execution-policy.json
+aws iam create-policy \
+  --policy-name lp-ecs-execution-policy \
+  --policy-document file:///tmp/lp-ecs-execution-policy.json
 aws iam attach-role-policy \
-  --role-name lp-app-runner-role \
-  --policy-arn arn:aws:iam::aws:policy/SecretsManagerReadWrite
+  --role-name lp-ecs-execution-role \
+  --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-ecs-execution-policy
+
+# Task role — runtime identity for the container
+aws iam create-role \
+  --role-name lp-ecs-task-role \
+  --assume-role-policy-document file:///tmp/ecs-trust-resolved.json
+
+envsubst < infra/iam/lp-ecs-task-policy.json > /tmp/lp-ecs-task-policy.json
+aws iam create-policy \
+  --policy-name lp-ecs-task-policy \
+  --policy-document file:///tmp/lp-ecs-task-policy.json
+aws iam attach-role-policy \
+  --role-name lp-ecs-task-role \
+  --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-ecs-task-policy
 ```
 
 ---
@@ -153,6 +175,7 @@ aws iam attach-role-policy \
 ```bash
 aws ecr create-repository --repository-name lp-internal/hq --region us-east-1
 aws ecr create-repository --repository-name lp-internal/mcp-server --region us-east-1
+aws ecr create-repository --repository-name lp-internal/aws-mcp-server --region us-east-1
 ```
 
 ---
@@ -161,22 +184,27 @@ aws ecr create-repository --repository-name lp-internal/mcp-server --region us-e
 
 - [ ] `aws sts get-caller-identity` returns your user ARN
 - [ ] MFA enabled on your IAM user
-- [ ] `lp-app-runner-role` visible in IAM → Roles
+- [ ] `lp-ecs-execution-role` and `lp-ecs-task-role` visible in IAM → Roles
 - [ ] `rds-monitoring-role` visible in IAM → Roles
-- [ ] Both ECR repositories visible in ECR console
+- [ ] All three ECR repositories visible in ECR console
 
 ---
 
 ## Teardown
 
 ```bash
-aws iam detach-role-policy --role-name lp-app-runner-role --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-aws iam detach-role-policy --role-name lp-app-runner-role --policy-arn arn:aws:iam::aws:policy/SecretsManagerReadWrite
-aws iam delete-role --role-name lp-app-runner-role
+aws iam detach-role-policy --role-name lp-ecs-execution-role --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+aws iam detach-role-policy --role-name lp-ecs-execution-role --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-ecs-execution-policy
+aws iam delete-role --role-name lp-ecs-execution-role
+aws iam detach-role-policy --role-name lp-ecs-task-role --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-ecs-task-policy
+aws iam delete-role --role-name lp-ecs-task-role
+aws iam delete-policy --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-ecs-execution-policy
+aws iam delete-policy --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-ecs-task-policy
 aws iam detach-role-policy --role-name rds-monitoring-role --policy-arn arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
 aws iam delete-role --role-name rds-monitoring-role
 aws ecr delete-repository --repository-name lp-internal/hq --force
 aws ecr delete-repository --repository-name lp-internal/mcp-server --force
+aws ecr delete-repository --repository-name lp-internal/aws-mcp-server --force
 ```
 
 ---
@@ -184,7 +212,7 @@ aws ecr delete-repository --repository-name lp-internal/mcp-server --force
 ## Known pitfalls
 
 - **"Unable to locate credentials"** — run `aws configure --profile lp-internal` again; check `~/.aws/credentials` exists
-- **Role already exists** — safe to skip; check with `aws iam get-role --role-name lp-app-runner-role`
+- **Role already exists** — safe to skip; check with `aws iam get-role --role-name lp-ecs-task-role`
 - **Region mismatch** — all resources must be in the same region; double-check every command uses `us-east-1`
 
 ---

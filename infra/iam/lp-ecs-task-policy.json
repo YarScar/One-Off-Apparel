@@ -2,28 +2,6 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "PullAppImagesFromECR",
-      "Effect": "Allow",
-      "Action": [
-        "ecr:GetAuthorizationToken",
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:BatchGetImage",
-        "ecr:DescribeImages",
-        "ecr:DescribeRepositories"
-      ],
-      "Resource": [
-        "arn:aws:ecr:us-east-1:${AWS_ACCOUNT_ID}:repository/lp-internal/hq",
-        "arn:aws:ecr:us-east-1:${AWS_ACCOUNT_ID}:repository/lp-internal/mcp-server"
-      ]
-    },
-    {
-      "Sid": "ECRAuthTokenIsAccountWide",
-      "Effect": "Allow",
-      "Action": "ecr:GetAuthorizationToken",
-      "Resource": "*"
-    },
-    {
       "Sid": "ReadAppSecrets",
       "Effect": "Allow",
       "Action": [
@@ -52,8 +30,9 @@
         "logs:DescribeLogStreams"
       ],
       "Resource": [
-        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/aws/apprunner/lp-hq:*",
-        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/aws/apprunner/lp-mcp-server:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-hq:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-mcp-server:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-aws-mcp-server:*",
         "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/lp-internal/app:*"
       ]
     }

@@ -17,7 +17,7 @@ An internal AI intelligence layer for Launchpad that lets team members query Cla
 | Embeddings | OpenAI `text-embedding-3-large` (1536 dimensions) |
 | Structured DB | Postgres 16 via Prisma ORM (local Docker today, AWS RDS in production) |
 | Vector search | pgvector extension |
-| App hosting | AWS App Runner (production); local Docker images built and verified |
+| App hosting | AWS ECS Fargate (production); local Docker images built and verified |
 | Cron / scheduling | AWS EventBridge |
 | Secrets | AWS Secrets Manager (production); `.env` for local dev |
 | Monitoring | Sentry |
@@ -70,7 +70,7 @@ pnpm --filter @lp-ai/mcp-server dev:http  # HTTP at :8080, hot-reload
 
 # MCP server (production-like)
 pnpm --filter @lp-ai/mcp-server start      # stdio (for Claude Desktop)
-pnpm --filter @lp-ai/mcp-server start:http # HTTP at :8080 (for App Runner)
+pnpm --filter @lp-ai/mcp-server start:http # HTTP at :8080 (for ECS / local testing)
 
 # Connector syncs (noop until credentials are set)
 pnpm sync:givebutter

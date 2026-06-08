@@ -3,8 +3,8 @@
 **Goal:** Deploy Airbyte so it's ready to use when a non-Sheets data source is needed. No pipelines are built in this phase — this is infrastructure-only.
 
 **Prerequisites:**
-- Phase 9 complete — App Runner set up
-- Phase 1 complete — EC2 access (Airbyte is heavier than App Runner can comfortably handle; EC2 is preferred)
+- Phase 9 complete — ECS Fargate set up
+- Phase 1 complete — EC2 access (Airbyte is heavier than the standard ECS Fargate task size and benefits from a persistent EBS volume; EC2 is preferred for the platform itself)
 
 ---
 

@@ -78,7 +78,7 @@ aws secretsmanager create-secret \
   --description "Roam API credentials" \
   --secret-string '{"ROAM_API_KEY":"...","ROAM_GRAPH_NAME":"..."}'
 
-# Sync shared secret (EventBridge → App Runner auth)
+# Sync shared secret (EventBridge → MCP server auth)
 aws secretsmanager create-secret \
   --name lp-internal/sync \
   --description "Shared secret for sync endpoint auth" \
@@ -163,7 +163,7 @@ USE_AWS_SECRETS=false  → reads from process.env / .env file (local dev)
 USE_AWS_SECRETS=true   → fetches from AWS Secrets Manager at startup (production)
 ```
 
-In production (App Runner), no `.env` file exists. The IAM role attached to the App Runner service (`lp-app-runner-role`) has `SecretsManagerReadWrite` — no credentials needed in environment variables.
+In production (ECS Fargate), no `.env` file exists. The execution role attached to the ECS task definition (`lp-ecs-execution-role`) fetches Secrets Manager values via the `secrets` block in the task definition and injects them as environment variables before the container starts. The task role (`lp-ecs-task-role`) can also fetch secrets directly at runtime if needed.
 
 ---
 

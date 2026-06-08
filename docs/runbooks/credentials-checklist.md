@@ -6,7 +6,7 @@ What credentials to request, from whom, and what each one unlocks. Suggested gat
 
 | # | Credential | Who can provide | Unlocks | Local-dev workaround |
 |---|---|---|---|---|
-| 1 | AWS IAM user (admin or specific policy) | AWS account admin | All AWS phases (RDS, App Runner, EventBridge, Secrets Manager, S3/Athena) | Docker Postgres works for everything except the production deploy |
+| 1 | AWS IAM user (admin or specific policy) | AWS account admin | All AWS phases (RDS, ECS, EventBridge, Secrets Manager, S3/Athena) | Docker Postgres works for everything except the production deploy |
 | 2 | `OPENAI_API_KEY` | OpenAI billing-account owner | Embedding generation; `search_documents`, `search_conversations`, `search_by_person` MCP tools | Other 11 MCP tools work without it |
 | 3 | `ANTHROPIC_API_KEY` | Anthropic billing-account owner | Only needed for systems that *call* Claude directly. The MCP server is *called by* Claude (via Claude Desktop or claude.ai), so MCP itself does not need this key. | n/a |
 | 4 | Google OAuth client (`AUTH_GOOGLE_ID` + `AUTH_GOOGLE_SECRET`) | Google Workspace admin (launchpadphilly.org) | HQ dashboard sign-in | Disable middleware locally to view pages without auth |
@@ -16,16 +16,16 @@ What credentials to request, from whom, and what each one unlocks. Suggested gat
 | 8 | `SLACK_BOT_TOKEN` + `SLACK_SIGNING_SECRET` | Launchpad Slack admin | `slack` connector + `search_conversations` Slack source | Drive-only `search_conversations` until Slack lands |
 | 9 | `ROAM_API_KEY` + `ROAM_GRAPH_NAME` | Roam workspace owner | `roam` connector | n/a |
 | 10 | `SENTRY_DSN_HQ` + `SENTRY_DSN_MCP` | Sentry workspace owner | Production error monitoring | Local errors print to stderr |
-| 11 | `SYNC_SECRET` | Generated; share between EventBridge + App Runner | Bearer auth on the MCP server's `/mcp` HTTP endpoint | Endpoint is unauthed when unset |
+| 11 | `SYNC_SECRET` | Generated; share between EventBridge + the ECS MCP service | Bearer auth on the MCP server's `/mcp` HTTP endpoint | Endpoint is unauthed when unset |
 
 ## Recommended order
 
 **Tier 1 — unlocks the most work**
 
 1. **AWS IAM access (#1)**
-   - Unlocks: RDS Postgres, App Runner deploy, Secrets Manager, EventBridge scheduling, S3 + Athena.
+   - Unlocks: RDS Postgres, ECS deploy, Secrets Manager, EventBridge scheduling, S3 + Athena.
    - Even basic AWS access lets us deploy the Docker images already built locally (`apps/hq/Dockerfile`, `apps/mcp-server/Dockerfile`) and move secrets out of the local `.env`.
-   - Request: an IAM user (or SSO role) with permissions for RDS, App Runner, Secrets Manager, EventBridge, S3, IAM (for App Runner service role creation). Phase 1 setup guide ([docs/setup/01-aws-baseline.md](../setup/01-aws-baseline.md)) has the policy template.
+   - Request: an IAM user (or SSO role) with permissions for RDS, ECS, Secrets Manager, EventBridge, S3, IAM (for ECS task role creation). Phase 1 setup guide ([docs/setup/01-aws-baseline.md](../setup/01-aws-baseline.md)) has the policy template.
 
 2. **OpenAI API key (#2)**
    - Unlocks 3 of 14 MCP tools (everything that needs query embedding).
@@ -44,8 +44,8 @@ What credentials to request, from whom, and what each one unlocks. Suggested gat
 **Tier 3 — auth + observability**
 
 8. **Google OAuth client (#4)** — needed once you want to share the HQ dashboard with the team rather than running it locally.
-9. **Sentry DSNs (#10)** — production-only; not strictly required until App Runner deploy.
-10. **`SYNC_SECRET` (#11)** — generate with `openssl rand -base64 32` once we have App Runner + EventBridge.
+9. **Sentry DSNs (#10)** — production-only; not strictly required until ECS deploy.
+10. **`SYNC_SECRET` (#11)** — generate with `openssl rand -base64 32` once we have ECS + EventBridge.
 
 ## What's safe to share with admins
 
@@ -81,4 +81,4 @@ Once `USE_AWS_SECRETS=true` in production, `packages/config` fetches all of thes
 ## Pending docs to write once we have credentials
 
 - A "first sync" runbook for each connector (commands, what to expect in logs, how to verify rows landed in Postgres) — currently only the GiveButter pattern exists, in `connectors/givebutter/src/index.ts`.
-- Production deployment runbook for App Runner once Phase 9 begins.
+- Production deployment runbook for ECS once Phase 9 begins (see docs/setup/09-ecs-express-mode.md).

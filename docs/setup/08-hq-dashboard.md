@@ -17,7 +17,7 @@
 4. Name: `LP Internal AI HQ`
 5. Authorized redirect URIs:
    - `http://localhost:3000/api/auth/callback/google` (local dev)
-   - `https://hq.launchpadphilly.org/api/auth/callback/google` (production — add after Phase 9)
+   - `https://hq.launchpadphilly.org/api/auth/callback/google` (production — add once Phase 9 deploys)
 6. Copy the **Client ID** and **Client Secret** → store in `.env` as `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`
 7. Generate an `AUTH_SECRET`: `openssl rand -base64 32`
 
@@ -113,9 +113,9 @@ export const { GET, POST } = handlers;
 | `/` | Dashboard home — data freshness cards + recent tool calls |
 | `/sync` | Sync status — last run time + row counts per connector |
 | `/tools` | Tool call log — searchable `usage_logs` table |
-| `/api/health` | Health check endpoint (used by App Runner) |
+| `/api/health` | Health check endpoint (used by ALB target group) |
 
-The health endpoint is critical for App Runner:
+The health endpoint is critical for the ALB target group health checks:
 
 **`apps/hq/app/api/health/route.ts`:**
 ```typescript
@@ -160,4 +160,4 @@ Open `http://localhost:3000`. Sign in with your `@launchpadphilly.org` Google ac
 
 ---
 
-**Next:** [09-app-runner.md](09-app-runner.md)
+**Next:** [09-ecs-express-mode.md](09-ecs-express-mode.md)

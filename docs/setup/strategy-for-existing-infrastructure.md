@@ -50,10 +50,10 @@ Three principles the client CTO operates by, which shape every section below:
 
 | Phase | Greenfield (current) | Existing-infra (this strategy) |
 |---|---|---|
-| 1 — AWS baseline | Create IAM user, App Runner role, RDS monitoring role, ECR repos via CLI | **Deleted.** Consume the workload account; Terraform module describes the role and is applied by client CI |
+| 1 — AWS baseline | Create IAM user, ECS task role, RDS monitoring role, ECR repos via CLI | **Deleted.** Consume the workload account; Terraform module describes the role and is applied by client CI |
 | 2 — RDS Postgres | Create RDS instance | We don't create RDS. Client DBA Terraform module produces it. We hand over a schema requirement: Postgres 16, `pgvector`, `pg_trgm`, a parameter group they review, sizing assumption. They produce the instance and a Secrets Manager secret containing the connection string |
 | 3 — Secrets Manager | Create secrets, attach policies | Consume the prefix. `@lp-ai/lib-config` already supports this |
-| 9 — App Runner | Create services with broad role | App Runner is fine, but it needs a VPC connector to reach the private-subnet RDS. Our Terraform module declares the connector; platform team reviews the security group attachment |
+| 9 — ECS Fargate | Create ECS cluster, services, ALB, and broad role from scratch | ECS Fargate behind an ALB. The client's platform team usually owns ECS clusters; we contribute the task definitions and service definitions as IaC and submit them as PRs. Our Terraform module declares the task definitions, service definitions, target groups, and listener rules; platform team reviews the security group attachments and ALB integration |
 | 10 — EventBridge | Create rules and broad role | Submit IaC. Invoke role policies are exactly the `infra/iam/lp-eventbridge-*` docs |
 
 ---
@@ -254,7 +254,7 @@ What the client does *not* want: a doc that says "first, create an IAM user with
 
 Three things to start working on before any rewriting of the existing phase guides:
 
-1. **Promote `infra/iam/*.json` to a Terraform module.** Static JSON is a stepping stone; the deliverable is `infra/terraform/modules/iam/` that emits those role/policy resources with input variables. Same for VPC connector, App Runner, EventBridge, RDS parameter group, ECR, Secrets Manager.
+1. **Promote `infra/iam/*.json` to a Terraform module.** Static JSON is a stepping stone; the deliverable is `infra/terraform/modules/iam/` that emits those role/policy resources with input variables. Same for VPC connector, ECS task/service definitions, EventBridge, RDS parameter group, ECR, Secrets Manager.
 2. **Replace `docs/setup/01–21` with two parallel tracks.** One track is "self-hosted greenfield" (close to what we have now, for the no-existing-infra case). The other is "client-provisioned" (this document — consume primitives, ship IaC). Most clients will be the second; keep the first as the dev/demo path.
 3. **Treat secrets as inputs, not as something the app fetches by name.** Right now `@lp-ai/lib-config` fetches by name. That's fine, but document the *contract*: "given a secret at path `lp-internal/database/url` containing JSON `{ url: string }`, the app will work." The client then wires our contract into their secret-naming conventions without us having to know what they are.
 

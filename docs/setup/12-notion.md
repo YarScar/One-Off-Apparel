@@ -56,12 +56,12 @@ CONNECTORS
 
 INFRASTRUCTURE
 - Database: AWS RDS Postgres 16 (us-east-1) + pgvector extension
-- App hosting: AWS App Runner (lp-internal-hq + lp-internal-mcp)
-- Cron: AWS EventBridge → Lambda → App Runner sync endpoint
+- App hosting: AWS ECS Fargate behind ALB (lp-internal-hq + lp-internal-mcp)
+- Cron: AWS EventBridge → Lambda → MCP server sync endpoint (via ALB)
 - Secrets: AWS Secrets Manager (prefix: lp-internal/)
 - Monitoring: Sentry (lp-internal-hq, lp-internal-mcp projects)
-- BI: Metabase (self-hosted on App Runner)
-- Automation: n8n (self-hosted on App Runner)
+- BI: Metabase (self-hosted on ECS Fargate)
+- Automation: n8n (self-hosted on ECS Fargate)
 
 MCP TOOLS (14)
 get_student_info, query_students, query_outcomes, query_enrollment,
@@ -89,7 +89,7 @@ Consequences: [what this means for the system]
 ```
 
 Starter ADRs to create:
-- ADR-001: Migrate from Railway to AWS App Runner
+- ADR-001: Migrate from Railway to AWS ECS Fargate
 - ADR-002: Migrate from Drizzle to Prisma
 - ADR-003: Migrate from Pinecone to pgvector
 - ADR-004: Migrate from Voyage AI to OpenAI embeddings

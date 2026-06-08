@@ -30,7 +30,7 @@ SG_ID=$(aws ec2 create-security-group \
 echo "Security Group ID: $SG_ID"
 ```
 
-Allow your local IP (for setup) and App Runner's egress range (add later in Phase 9):
+Allow your local IP (for setup) and the ECS task security group (added later in Phase 9):
 
 ```bash
 MY_IP=$(curl -s https://checkip.amazonaws.com)
@@ -128,7 +128,7 @@ aws rds modify-db-instance \
 aws rds wait db-instance-available --db-instance-identifier lp-internal-db
 ```
 
-> Remove public access after Phase 9 (App Runner) is set up and can reach RDS through the VPC.
+> Remove public access after Phase 9 (ECS Fargate) is set up and can reach RDS through the VPC.
 
 ---
 

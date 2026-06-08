@@ -1,6 +1,6 @@
 # Phase 14 — Metabase BI Dashboards (Self-Hosted)
 
-**Goal:** Deploy Metabase on AWS App Runner, connect it to a read-only Postgres user, and build the first three dashboards: enrollment by phase, attendance trend, and donor pipeline.
+**Goal:** Deploy Metabase on AWS ECS Fargate, connect it to a read-only Postgres user, and build the first three dashboards: enrollment by phase, attendance trend, and donor pipeline.
 
 **Prerequisites:**
 - Phase 4 complete — all tables in RDS with real data
@@ -48,32 +48,22 @@ GRANT ALL PRIVILEGES ON DATABASE metabase TO metabaseapp;
 
 ---
 
-## 2. Deploy Metabase on App Runner
+## 2. Deploy Metabase on ECS Fargate
 
-```bash
-aws apprunner create-service \
-  --service-name lp-internal-metabase \
-  --source-configuration '{
-    "ImageRepository": {
-      "ImageIdentifier": "metabase/metabase:latest",
-      "ImageConfiguration": {
-        "Port": "3000",
-        "RuntimeEnvironmentVariables": {
-          "MB_DB_TYPE": "postgres",
-          "MB_DB_HOST": "<rds-host>",
-          "MB_DB_PORT": "5432",
-          "MB_DB_DBNAME": "metabase",
-          "MB_DB_USER": "metabaseapp",
-          "MB_DB_PASS": "<password>"
-        }
-      },
-      "ImageRepositoryType": "ECR_PUBLIC"
-    }
-  }' \
-  --instance-configuration '{"Cpu": "1 vCPU", "Memory": "2 GB"}'
+Follow the same task-definition + service pattern from Phase 9, using `metabase/metabase:latest` as the container image, port 3000, and the `lp-ecs-task-role` for runtime access to Secrets Manager. Set the following runtime environment variables (pulled from `lp-internal/metabase` via the task definition's `secrets` block):
+
+```
+MB_DB_TYPE=postgres
+MB_DB_HOST=<rds-host>
+MB_DB_PORT=5432
+MB_DB_DBNAME=metabase
+MB_DB_USER=metabaseapp
+MB_DB_PASS=<password>
 ```
 
-> Metabase requires at least 1 vCPU / 2 GB RAM to start reliably.
+Recommended task size: **1 vCPU / 2 GB RAM** — Metabase requires at least this to start reliably.
+
+Add an ALB listener rule that routes `metabase.launchpadphilly.org` to this service's target group.
 
 ---
 
@@ -129,7 +119,7 @@ In Metabase:
 
 ## Verification checklist
 
-- [ ] Metabase accessible at its App Runner URL
+- [ ] Metabase accessible at its ALB-fronted URL
 - [ ] Admin account created
 - [ ] `lpinternal` database connected (read-only user)
 - [ ] All 17 tables visible in the schema browser

@@ -70,7 +70,7 @@ aws athena create-work-group \
 
 Athena reads from S3, not directly from Postgres. Set up a nightly export job that dumps key tables to S3 as Parquet files.
 
-Create a Lambda or App Runner endpoint for the export:
+Create a Lambda (or an ECS-scheduled task) for the export:
 
 ```typescript
 import { prisma } from '@lp-ai/lib-db';

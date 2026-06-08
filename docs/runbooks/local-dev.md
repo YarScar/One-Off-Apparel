@@ -4,8 +4,8 @@ Goal: a fresh clone runs end-to-end on Docker Postgres in ~5 minutes — no AWS,
 
 ## Prerequisites
 
-- Node.js ≥ 20 (`node --version`)
-- pnpm ≥ 9 (`npm install -g pnpm@latest`)
+- Node.js ≥ 22 (`node --version`)
+- pnpm ≥ 10 (`npm install -g pnpm@latest`)
 - Docker Desktop running
 
 ## Bootstrap
@@ -65,7 +65,7 @@ pnpm --filter @lp-ai/mcp-server start
 
 Point Claude Desktop at the built `dist/index.js` (see `docs/setup/07-mcp-server.md`).
 
-### MCP server (HTTP — for App Runner-like environments)
+### MCP server (HTTP — for the ECS Fargate deployment / local testing)
 ```bash
 pnpm --filter @lp-ai/mcp-server build
 pnpm --filter @lp-ai/mcp-server start:http   # http://localhost:8080

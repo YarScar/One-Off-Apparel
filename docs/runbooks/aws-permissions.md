@@ -12,9 +12,9 @@ There are three distinct identities to authorize. Conflating them is the most co
 
 | Boundary | Who/what holds it | Lifetime | Example |
 |---|---|---|---|
-| **Builder IAM user** | The human running setup (Christian) | Months — only during build/maintenance | Creates roles, RDS, App Runner services |
+| **Builder IAM user** | The human running setup (Christian) | Months — only during build/maintenance | Creates roles, RDS, ECS services |
 | **Service roles** | Assumed by AWS services themselves | Permanent | RDS enhanced monitoring, EventBridge Scheduler |
-| **Application runtime role** | Assumed by App Runner / ECS tasks at runtime | Permanent — actively used by running code | App Runner pulling secrets, ECS sync tasks writing logs |
+| **Application runtime roles** | Assumed by ECS tasks at runtime | Permanent — actively used by running code | ECS execution role injecting secrets at container start, task role fetching secrets at runtime |
 
 The current `docs/setup/01-aws-baseline.md` assumes the builder gets `AdministratorAccess`. That's fine for the initial buildout, but the **runtime** roles should be tight from day one — they are the credentials that actually live inside the running system and would matter if compromised.
 
@@ -29,7 +29,7 @@ The current `docs/setup/01-aws-baseline.md` assumes the builder gets `Administra
 **Builder grants:**
 - `IAMFullAccess` (managed), or scoped policy with: `iam:CreateRole`, `iam:DeleteRole`, `iam:AttachRolePolicy`, `iam:DetachRolePolicy`, `iam:PassRole`, `iam:GetRole`, `iam:ListRoles`, `iam:CreatePolicy`, `iam:CreateServiceLinkedRole` on `lp-*` and `rds-monitoring-role`.
 
-**Service-linked roles** (AWS auto-creates these on first use of the service): `AWSServiceRoleForRDS`, `AWSServiceRoleForAppRunner`, `AWSServiceRoleForECS`, `AWSServiceRoleForAmazonEventBridge`.
+**Service-linked roles** (AWS auto-creates these on first use of the service): `AWSServiceRoleForRDS`, `AWSServiceRoleForECS`, `AWSServiceRoleForElasticLoadBalancing`, `AWSServiceRoleForAmazonEventBridge`.
 
 **One-time admin actions:** enable MFA on the builder user; reset the temporary console password.
 
@@ -56,11 +56,11 @@ Trivial but required: `sts:GetCallerIdentity`. Included in nearly every managed 
 
 **KMS:** use `aws/secretsmanager` (the AWS-managed key) to avoid managing a customer-managed key.
 
-**Runtime grant:** `secretsmanager:GetSecretValue` scoped by ARN to `arn:aws:secretsmanager:us-east-1:<account>:secret:lp-internal/*`. **The Phase 1 setup currently attaches the broader `SecretsManagerReadWrite` to the App Runner role — tighten this before going live.** See §4 below for the scoped JSON.
+**Runtime grant:** `secretsmanager:GetSecretValue` scoped by ARN to `arn:aws:secretsmanager:us-east-1:<account>:secret:lp-internal/*`. Both the ECS execution role (for `secrets[]` injection at container start) and the ECS task role (for `loadEnv()` calls at runtime) carry this scoped grant — never the broader managed `SecretsManagerReadWrite`. See §4 below for the scoped JSON.
 
 ### 2.5 ECR — container registry (Phases 1 + 9)
 
-**Why:** both production Docker images (`lp-internal/hq`, `lp-internal/mcp-server`) live here. App Runner pulls from ECR; engineer or CI pushes.
+**Why:** the production Docker images (`lp-internal/hq`, `lp-internal/mcp-server`, `lp-internal/aws-mcp-server`) live here. The ECS execution role pulls from ECR at task-start; engineer or CI pushes.
 
 **Builder grants:** `AmazonEC2ContainerRegistryFullAccess` (managed).
 
@@ -68,15 +68,19 @@ Trivial but required: `sts:GetCallerIdentity`. Included in nearly every managed 
 
 **Runtime grant:** `AmazonEC2ContainerRegistryReadOnly` (already attached in Phase 1).
 
-### 2.6 App Runner (Phase 9)
+### 2.6 ECS Fargate + ALB (Phase 9)
 
-**Why:** hosts the HQ Next.js app and the MCP server's HTTP transport (`apps/mcp-server/src/serve-http.ts`).
+**Why:** hosts the HQ Next.js app and both MCP servers (`apps/mcp-server/src/serve-http.ts`, `apps/aws-mcp-server/src/serve-http.ts`) as Fargate tasks behind an Application Load Balancer.
 
 **Builder grants:**
-- `AWSAppRunnerFullAccess` (managed) — `apprunner:CreateService`, `UpdateService`, `DeleteService`, `CreateVpcConnector` (so App Runner can reach RDS), `CreateAutoScalingConfiguration`.
-- `iam:PassRole` on `lp-app-runner-role` — **commonly missed**. Without it `AppRunnerFullAccess` alone cannot hand the role to the service at create time.
+- `AmazonECS_FullAccess` (managed) — `ecs:CreateCluster`, `ecs:RegisterTaskDefinition`, `ecs:CreateService`, `ecs:UpdateService`, `ecs:DescribeTasks`.
+- `ElasticLoadBalancingFullAccess` (managed) — ALB + target groups + listeners.
+- `AWSCertificateManagerFullAccess` (managed) — ACM cert for HTTPS termination.
+- `iam:PassRole` scoped to `lp-ecs-task-role` and `lp-ecs-execution-role` — **commonly missed**. Without it `RegisterTaskDefinition` cannot hand the role to the task at start time.
 
-**Service role:** `lp-app-runner-role` trusts both `build.apprunner.amazonaws.com` and `tasks.apprunner.amazonaws.com`. See §4.1.
+**Service roles:**
+- `lp-ecs-task-role` — the container's runtime identity. Trusts `ecs-tasks.amazonaws.com`. See §4.1 + §4.2.
+- `lp-ecs-execution-role` — the ECS agent's identity for image pulls and secret injection. Trusts the same principal, attaches the managed `AmazonECSTaskExecutionRolePolicy` plus the scoped policy in §4.2b.
 
 ### 2.7 EventBridge — cron scheduling (Phase 10)
 
@@ -88,11 +92,11 @@ Trivial but required: `sts:GetCallerIdentity`. Included in nearly every managed 
 
 ### 2.8 CloudWatch
 
-**Why:** App Runner, RDS, EventBridge, and ECS write logs and metrics here by default.
+**Why:** ECS, RDS, EventBridge, and ALB write logs and metrics here by default.
 
 **Builder grants:** `CloudWatchLogsFullAccess` + `CloudWatchFullAccess` (managed).
 
-**Runtime grant:** if the Node code writes to a custom log group (e.g. `/lp-internal/app`), the App Runner role needs `logs:CreateLogStream` and `logs:PutLogEvents` on that log group ARN. Default App Runner-managed log groups are written via the service-linked role and need no extra permissions.
+**Runtime grant:** the task role needs `logs:CreateLogStream` and `logs:PutLogEvents` on the `/ecs/lp-internal-*` log groups (and any custom group like `/lp-internal/app`). The Fargate awslogs driver itself uses the execution role's CloudWatch logs perms granted by `AmazonECSTaskExecutionRolePolicy`.
 
 ### 2.9 S3 + Athena + Glue (Phase 21 — analytics warehouse)
 
@@ -117,7 +121,7 @@ If the admin prefers a single EC2 host instead of ECS, swap ECS for `AmazonEC2Fu
 
 To preempt the obvious questions, the V1 spec **does not** require:
 
-- **Lambda** — App Runner is the chosen compute. (Lambda is only an *option* for sync tasks in Phase 10; ECS is the default.)
+- **Lambda** — ECS Fargate is the chosen compute. (Lambda is only an *option* for sync tasks in Phase 10; ECS RunTask is the default.)
 - **Amazon Bedrock** — Claude is accessed via the Anthropic API directly, not Bedrock.
 - **SageMaker / OpenSearch / Aurora** — pgvector on RDS replaces all of these.
 - **Cognito** — NextAuth + Google handles auth.
@@ -135,13 +139,15 @@ Paste-able request for the AWS account owner:
 > - `AmazonVPCFullAccess`
 > - `SecretsManagerReadWrite`
 > - `AmazonEC2ContainerRegistryFullAccess`
-> - `AWSAppRunnerFullAccess`
+> - `AmazonECS_FullAccess`
+> - `ElasticLoadBalancingFullAccess`
+> - `AWSCertificateManagerFullAccess`
+> - `AmazonRoute53FullAccess`
 > - `AmazonEventBridgeFullAccess`
 > - `CloudWatchLogsFullAccess`
 > - `AmazonS3FullAccess`
 > - `AmazonAthenaFullAccess`
 > - `AWSGlueConsoleFullAccess`
-> - `AmazonECS_FullAccess`, `ElasticLoadBalancingFullAccess`, `AmazonRoute53FullAccess`, `AWSCertificateManagerFullAccess` *(only if Phases 13–15 are in scope)*
 >
 > Plus: enable MFA on the user, confirm a console password reset on first login, and confirm the account has no SCP that blocks `us-east-1`.
 
@@ -153,62 +159,39 @@ Paste-able request for the AWS account owner:
 
 These are the policies that **must** be tight from day one — they describe what the running system can do, not what a human is allowed to set up. All policies live in [`infra/iam/`](../../infra/iam/) and use `${AWS_ACCOUNT_ID}` as a placeholder that must be substituted before applying.
 
-### 4.1 `lp-app-runner-role` — trust policy
+### 4.1 `lp-ecs-task-role` / `lp-ecs-execution-role` — trust policy
 
-Trusts both App Runner build and task principals. Same as the current Phase 1 trust doc; included here for completeness.
+Both runtime roles trust the ECS task service principal, with an `aws:SourceAccount` confused-deputy guard.
 
-[`infra/iam/lp-app-runner-trust-policy.json`](../../infra/iam/lp-app-runner-trust-policy.json)
+[`infra/iam/lp-ecs-task-trust-policy.json`](../../infra/iam/lp-ecs-task-trust-policy.json)
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AllowAppRunnerBuildAndTasks",
+      "Sid": "AllowEcsTasksAssume",
       "Effect": "Allow",
-      "Principal": {
-        "Service": [
-          "build.apprunner.amazonaws.com",
-          "tasks.apprunner.amazonaws.com"
-        ]
-      },
-      "Action": "sts:AssumeRole"
+      "Principal": { "Service": "ecs-tasks.amazonaws.com" },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": { "aws:SourceAccount": "${AWS_ACCOUNT_ID}" }
+      }
     }
   ]
 }
 ```
 
-### 4.2 `lp-app-runner-role` — task policy (replaces the broad managed policies)
+### 4.2 `lp-ecs-task-role` — task (runtime) policy
 
-This is the policy to attach to `lp-app-runner-role` **instead of** `SecretsManagerReadWrite` + `AmazonEC2ContainerRegistryReadOnly`. It scopes ECR pulls to our two repos, scopes Secrets Manager reads to `lp-internal/*`, and adds CloudWatch log writes.
+The runtime identity assumed by the container. Reads its own secrets at runtime (for `loadEnv()` calls), and writes application logs.
 
-[`infra/iam/lp-app-runner-task-policy.json`](../../infra/iam/lp-app-runner-task-policy.json)
+[`infra/iam/lp-ecs-task-policy.json`](../../infra/iam/lp-ecs-task-policy.json)
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
-    {
-      "Sid": "PullAppImagesFromECR",
-      "Effect": "Allow",
-      "Action": [
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:BatchGetImage",
-        "ecr:DescribeImages",
-        "ecr:DescribeRepositories"
-      ],
-      "Resource": [
-        "arn:aws:ecr:us-east-1:${AWS_ACCOUNT_ID}:repository/lp-internal/hq",
-        "arn:aws:ecr:us-east-1:${AWS_ACCOUNT_ID}:repository/lp-internal/mcp-server"
-      ]
-    },
-    {
-      "Sid": "ECRAuthTokenIsAccountWide",
-      "Effect": "Allow",
-      "Action": "ecr:GetAuthorizationToken",
-      "Resource": "*"
-    },
     {
       "Sid": "ReadAppSecrets",
       "Effect": "Allow",
@@ -238,8 +221,9 @@ This is the policy to attach to `lp-app-runner-role` **instead of** `SecretsMana
         "logs:DescribeLogStreams"
       ],
       "Resource": [
-        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/aws/apprunner/lp-hq:*",
-        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/aws/apprunner/lp-mcp-server:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-hq:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-mcp-server:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-aws-mcp-server:*",
         "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/lp-internal/app:*"
       ]
     }
@@ -247,9 +231,44 @@ This is the policy to attach to `lp-app-runner-role` **instead of** `SecretsMana
 }
 ```
 
+### 4.2b `lp-ecs-execution-role` — execution policy (scoped Secrets Manager + KMS)
+
+Attach this alongside the AWS-managed `AmazonECSTaskExecutionRolePolicy` (which already covers ECR pulls and CloudWatch logs for the awslogs driver). The scoped Secrets Manager grant lets the ECS agent fetch each secret listed in the task definition's `secrets` block at container-start time and inject them as environment variables.
+
+[`infra/iam/lp-ecs-execution-policy.json`](../../infra/iam/lp-ecs-execution-policy.json)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "FetchSecretsForEnvInjection",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/*"
+    },
+    {
+      "Sid": "DecryptSecretsViaSecretsManager",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "secretsmanager.us-east-1.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
+```
+
 **Notes:**
-- `ecr:GetAuthorizationToken` cannot be ARN-scoped — AWS only accepts `Resource: "*"` for that action. The Sid is separated so the audit trail is clear.
-- The KMS statement uses the `kms:ViaService` condition so the role can decrypt *only* keys used by Secrets Manager — even if more keys are added later, this policy doesn't grant decrypt on them.
+- The execution role and task role have an identical Secrets Manager grant because they run at different lifecycle stages: the execution role fetches at container start (for `secrets[]` injection in the task definition), the task role fetches at runtime (for `loadEnv()` calls inside Node code). Splitting them keeps the blast radius diagram clean even though the policies look duplicate.
+- The KMS statement uses the `kms:ViaService` condition so each role can decrypt *only* keys used by Secrets Manager — even if more KMS keys are added later, these policies don't grant decrypt on them.
+- ECR pull permissions live in the AWS-managed `AmazonECSTaskExecutionRolePolicy` already attached to `lp-ecs-execution-role`; the scoped repo restriction can be re-added with an inline deny-by-default policy if AppSec demands it.
 
 ### 4.3 `lp-eventbridge-invoke-role` — trust policy
 
@@ -405,25 +424,27 @@ Substitute `${AWS_ACCOUNT_ID}` (e.g. via `envsubst` or `sed`) before passing to 
 ```bash
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-# Example: create the tightened App Runner task policy and attach it
-envsubst < infra/iam/lp-app-runner-task-policy.json > /tmp/lp-app-runner-task-policy.json
+# Example: create the scoped ECS task policy and attach it
+envsubst < infra/iam/lp-ecs-task-policy.json > /tmp/lp-ecs-task-policy.json
 
 aws iam create-policy \
-  --policy-name lp-app-runner-task-policy \
-  --policy-document file:///tmp/lp-app-runner-task-policy.json
+  --policy-name lp-ecs-task-policy \
+  --policy-document file:///tmp/lp-ecs-task-policy.json
 
 aws iam attach-role-policy \
-  --role-name lp-app-runner-role \
-  --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-app-runner-task-policy
+  --role-name lp-ecs-task-role \
+  --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-ecs-task-policy
 
-# Detach the broad managed policies that Phase 1 added
-aws iam detach-role-policy \
-  --role-name lp-app-runner-role \
-  --policy-arn arn:aws:iam::aws:policy/SecretsManagerReadWrite
+# And the execution-role policy for secret injection at container start
+envsubst < infra/iam/lp-ecs-execution-policy.json > /tmp/lp-ecs-execution-policy.json
 
-aws iam detach-role-policy \
-  --role-name lp-app-runner-role \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+aws iam create-policy \
+  --policy-name lp-ecs-execution-policy \
+  --policy-document file:///tmp/lp-ecs-execution-policy.json
+
+aws iam attach-role-policy \
+  --role-name lp-ecs-execution-role \
+  --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/lp-ecs-execution-policy
 ```
 
 The same pattern applies to the EventBridge and sync-task policies once Phases 9–10 are reached.
@@ -433,7 +454,7 @@ The same pattern applies to the EventBridge and sync-task policies once Phases 9
 ## 6. Audit checklist before going to production
 
 - [ ] Builder IAM user has MFA enabled.
-- [ ] `lp-app-runner-role` no longer has `SecretsManagerReadWrite` attached; uses the scoped policy in §4.2.
+- [ ] `lp-ecs-task-role` and `lp-ecs-execution-role` use the scoped policies in §4.2 / §4.2b — no broad managed policies on either.
 - [ ] Secrets in Secrets Manager are all prefixed `lp-internal/` so the ARN scoping works.
 - [ ] `aws:SourceAccount` condition is present on every service trust policy that supports it.
 - [ ] No IAM users or roles have `*:*` on `Resource: "*"` (other than ECR auth token and KMS-conditioned decrypt).

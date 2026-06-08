@@ -74,7 +74,7 @@ Four logical layers: **data sources → connectors → storage → MCP server + 
 │  as Model Context Protocol tools.                                   │
 │                                                                     │
 │  Transport A: stdio  → Claude Desktop (local)                       │
-│  Transport B: Streamable HTTP → AWS App Runner (production)         │
+│  Transport B: Streamable HTTP → AWS ECS Fargate behind ALB (production) │
 │                                                                     │
 │  All tool calls are logged to usage_log for adoption tracking.      │
 │  All tools return structured { error: { code, message } } on fail. │
@@ -129,7 +129,7 @@ At query time, Claude calls MCP tools → the server runs Prisma queries or pgve
 
 | Concern | Technology |
 |---|---|
-| App hosting | AWS App Runner |
+| App hosting | AWS ECS Fargate behind ALB |
 | Scheduling | AWS EventBridge |
 | Secrets | AWS Secrets Manager (prod) / `.env` (local) |
 | Monitoring | Sentry |
@@ -157,7 +157,7 @@ lp-internal-ai-v1/
 │   └── mcp-server/                  # MCP server — 14 tools
 │       ├── src/
 │       │   ├── index.ts             # Entry: stdio (Claude Desktop)
-│       │   ├── serve-http.ts        # Entry: Streamable HTTP (App Runner)
+│       │   ├── serve-http.ts        # Entry: Streamable HTTP (ECS Fargate)
 │       │   ├── make-server.ts       # Tool registration
 │       │   ├── usage-log.ts         # Logs every tool call
 │       │   └── tools/               # One file per MCP tool (14 files)
@@ -357,7 +357,7 @@ Each connector's `sync()` is wrapped by `runSync()`, which writes a success/erro
 | HQ dashboard | ✅ Renders against live Postgres; auth gated |
 | GiveButter connector | ✅ Full REST client implemented |
 | Other 6 connectors | 🟡 Working skeletons — awaiting API credentials |
-| AWS production | 🟡 Docker images built; awaiting Phase 2 (RDS + App Runner) |
+| AWS production | 🟡 Docker images built; awaiting Phase 2 (RDS + ECS Fargate) |
 | CI | ✅ GitHub Actions with pgvector service container |
 
 See [docs/runbooks/credentials-checklist.md](docs/runbooks/credentials-checklist.md) for credential requirements. See [docs/setup/README.md](docs/setup/README.md) for the phase-by-phase AWS production setup status.

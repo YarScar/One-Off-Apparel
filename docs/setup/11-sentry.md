@@ -3,7 +3,7 @@
 **Goal:** Add Sentry to both the HQ dashboard and MCP server so errors surface immediately with full context, without waiting to notice something broke.
 
 **Prerequisites:**
-- Phase 9 complete — both apps deployed to App Runner
+- Phase 9 complete — both apps deployed to ECS Fargate
 - Sentry account (sentry.io — free tier is sufficient to start)
 
 ---

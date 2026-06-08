@@ -1,9 +1,9 @@
 # Phase 10 — AWS EventBridge Cron Scheduling
 
-**Goal:** Replace Railway's cron with AWS EventBridge schedule rules that trigger each connector sync on its own cadence, authenticated against App Runner via a shared secret.
+**Goal:** Replace Railway's cron with AWS EventBridge schedule rules that trigger each connector sync on its own cadence, authenticated against the MCP server via a shared secret.
 
 **Prerequisites:**
-- Phase 9 complete — App Runner services running
+- Phase 9 complete — ECS services running
 - `SYNC_SECRET` stored in `lp-internal/sync` in Secrets Manager
 - Each connector exposes a `POST /sync/<connector>` endpoint on the MCP server (or a dedicated sync service)
 
@@ -11,7 +11,7 @@
 
 ## 1. Add sync endpoints to the MCP server
 
-Add a lightweight HTTP server alongside the MCP stdio transport that accepts authenticated sync triggers.
+Add a lightweight HTTP server alongside the MCP stdio transport that accepts authenticated sync triggers. (On ECS, this is the same container that serves the Streamable HTTP MCP endpoint behind the ALB.)
 
 **`apps/mcp-server/src/sync-handler.ts`:**
 ```typescript
@@ -61,7 +61,7 @@ export function startSyncServer(port = 3001): void {
 
 ## 2. Create a Lambda function to trigger syncs
 
-The EventBridge rule calls a Lambda; the Lambda calls the App Runner sync endpoint. This keeps EventBridge decoupled from App Runner's URL.
+The EventBridge rule calls a Lambda; the Lambda calls the ECS sync endpoint via the ALB hostname. This keeps EventBridge decoupled from the ECS service URL.
 
 ```bash
 # Create the Lambda execution role
@@ -131,7 +131,7 @@ aws lambda create-function \
 ## 3. Create EventBridge schedule rules
 
 ```bash
-MCP_URL="https://<your-mcp-server-apprunner-url>"
+MCP_URL="https://mcp.launchpadphilly.org"
 LAMBDA_ARN="arn:aws:lambda:us-east-1:${AWS_ACCOUNT_ID}:function:lp-sync-trigger"
 
 # Allow EventBridge to invoke the Lambda
@@ -204,7 +204,7 @@ Repeat the pattern for Slack, Roam, and BigQuery connectors once those are built
 
 - **EventBridge cron syntax** — AWS uses `cron(min hour day month dow year)` not standard Unix cron. The `?` is required in either day-of-month or day-of-week.
 - **Lambda timeout** — set to 30s. If a sync takes longer (large Drive folder), increase to 300s.
-- **App Runner cold start** — if App Runner scaled to zero, the Lambda may time out waiting for it. Set App Runner minimum instances to 1.
+- **ECS task placement delay** — Fargate task startup is ~30s. If the EventBridge target has no retry policy and the service has `desiredCount: 0`, the Lambda invocation will fail. Keep `desiredCount >= 1` for sync-target services.
 
 ---
 
