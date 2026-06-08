@@ -1,0 +1,50 @@
+{
+  "family": "lp-internal-aws-mcp-server",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "aws-mcp-server",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/lp-internal/aws-mcp-server:latest",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 8081, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "NODE_ENV",           "value": "production" },
+        { "name": "USE_AWS_SECRETS",    "value": "true" },
+        { "name": "AWS_REGION",         "value": "us-east-1" },
+        { "name": "AWS_SECRETS_PREFIX", "value": "lp-internal" },
+        { "name": "AWS_MCP_PORT",       "value": "8081" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/db:DATABASE_URL::" },
+        { "name": "SYNC_SECRET",   "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/sync:SYNC_SECRET::" },
+        { "name": "SENTRY_DSN_MCP","valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/sentry:SENTRY_DSN_MCP::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/lp-internal-aws-mcp-server",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}
