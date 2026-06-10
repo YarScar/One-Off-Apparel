@@ -8,7 +8,7 @@ import { toolError } from '../errors.js';
 const NAME = 'get_student_info';
 
 const DESCRIPTION =
-  'Get structured profile information for a student — grade, cohort, program, IEP/ELL status, interests, goals, and known aliases across all data sources. Use this tool to understand who a student is before asking follow-up questions about their attendance or outcomes.';
+  'Get structured profile information for a student — grade, cohort, program, IEP/ELL status, interests, goals, and known aliases across all data sources. The `school_name` field on this profile is the **high school** the student attended before/during Launchpad. For college/university attendance, use `query_postsecondary` instead. Use this tool to understand who a student is before asking follow-up questions about their attendance or outcomes.';
 
 const inputSchema = {
   student_name: z.string().describe('Name, nickname, or ID of the student.'),

@@ -36,7 +36,8 @@ const CLASS_LEVEL_DESCRIPTIONS = [
   'T=Post-bacc cert',
 ].join(', ');
 
-const DESCRIPTION = `Postsecondary enrollment data from National Student Clearinghouse — colleges + universities each Launchpad student attended, enrollment status, class level, majors, and graduation outcomes. Useful for tracking college persistence and completion rates. ` +
+const DESCRIPTION = `**Postsecondary (college/university) enrollment data** from the National Student Clearinghouse — every college or university each Launchpad student has attended, enrollment status, class level, majors, and graduation outcomes. Useful for tracking college persistence and completion rates. ` +
+  `IMPORTANT: This is NOT the student's high school. The high school they attended before/during Launchpad lives in the students table (\`school_name\` column), accessible via \`get_student_info\` or \`query_students\`. If a user asks about "school" or "schools" without specifying, confirm whether they mean high school or college/university before answering. ` +
   `Enrollment status codes: ${ENROLLMENT_STATUS_DESCRIPTIONS}. ` +
   `Class level codes: ${CLASS_LEVEL_DESCRIPTIONS}.`;
 

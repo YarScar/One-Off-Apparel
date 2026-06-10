@@ -8,7 +8,7 @@ import { runTool, parseStr, parseNum } from '../tool-helpers.js';
 const NAME = 'query_students';
 
 const DESCRIPTION =
-  'Population-level analytics on the students table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table.';
+  'Population-level analytics on the students table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table. NOTE: When a user mentions "school" or "schools", confirm whether they mean **high school** (the `school_name` column on the students table — accessible here and via `get_student_info`) or **college/university**, which lives in a separate dataset accessed via `query_postsecondary`. Default to asking which they mean before answering rather than guessing.';
 
 const inputSchema = {
   query_type: z.enum(['numeric_stats', 'breakdown', 'list']),
