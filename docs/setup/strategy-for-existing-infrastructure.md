@@ -20,31 +20,55 @@ Three principles the client CTO operates by, which shape every section below:
 
 ## 1. AWS
 
-### What the client already has
+Most clients we work with are small-to-medium nonprofits, not enterprises with multi-account AWS Organizations. The AWS setup needs to accommodate two realities: the client we typically encounter, and the more sophisticated client who brings their own infrastructure.
 
-- An AWS Organization with at least four accounts: `mgmt` (root/billing), `security-audit` (CloudTrail + Config aggregator), `shared-services` (ECR, central DNS, transit gateway), and per-workload accounts (`dev`, `prod`).
-- Service Control Policies that deny: root user actions, region use outside `us-east-1` / `us-east-2`, disabling CloudTrail/GuardDuty, IAM user creation in workload accounts, public S3 buckets.
-- IAM Identity Center as the only human entry point. Permission sets are git-controlled.
-- A platform Terraform repo that owns VPCs, transit gateway, baseline IAM roles, KMS keys, CMK rotation schedules.
-- A FinOps tagging contract: every taggable resource has `CostCenter`, `Application`, `Environment`, `Owner`. Untagged resources get flagged in a weekly report.
+### Typical client (most engagements)
 
-### What the client will grant us
+**What they have:**
+- A single AWS account, often newly created for this project. No Organization, no SCPs, no multi-account hierarchy.
+- One IAM user with broad permissions (often `AdministratorAccess`) used by whoever set up the account. No IAM Identity Center, no SSO federation.
+- No existing VPC, ECS cluster, or infrastructure primitives. We build everything.
 
-- **A dedicated workload account**, `lp-internal-prod` (and `-dev`). We operate inside it. We do **not** get anything in `mgmt` or `security-audit`.
-- **One SSO permission set** mapped to our engineers — `LPInternalAppDeveloper`. It is `PowerUserAccess` *minus* IAM, *minus* Organizations, *minus* account-level CloudTrail/Config, scoped to the workload account only. Our engineers do exploratory work and console debugging through this, never via static keys.
-- **A GitHub OIDC trust** so our CI in our repo can assume a deploy role in the workload account. The deploy role is the *only* identity that gets to mutate production resources, and its policy is tight — it can manage exactly the resources Terraform owns.
-- **A pre-provisioned VPC** with public/private/database subnet tiers, NAT, route tables, baseline security groups, all tagged. We consume the VPC and subnet IDs as Terraform variables; we don't create networking.
-- **A KMS CMK** (`alias/lp-internal`) with rotation enabled. We use this for RDS storage, Secrets Manager, and any S3 buckets. The policy already grants `kms:Decrypt` to the runtime roles we'll create.
-- **A Secrets Manager prefix** `lp-internal/*` carved out for us. Our runtime roles read from it; our CI role can write to it; nothing else in the account can touch it.
+**How we actually set it up (current reality):**
 
-### What the client wants from us
+This is how our reference deployment (account `851725317896`) is configured:
 
-- The current `docs/runbooks/aws-permissions.md` is the right shape but conflates **build-time IAM** with **runtime IAM**. The client only cares about the runtime policies — build-time happens through Terraform PRs against the workload account's IaC repo, where the platform team reviews and merges. The "builder IAM user" section is stripped out of the handover; it's replaced by the Terraform module that defines all six runtime roles.
-- The six JSON policies in `infra/iam/` are good. Two changes required before merge:
-  - Replace the inline `kms:ViaService: secretsmanager.us-east-1.amazonaws.com` condition with a `kms:KeyArn` condition naming the client's CMK ARN. "Any key Secrets Manager uses" is broader than "the key the client gave us."
-  - Add `aws:ResourceTag/Application: lp-internal` conditions to the S3 and CloudWatch Logs statements in `lp-sync-task-policy.json`. Tag-based scoping is how the client enforces blast radius across the whole account.
-- An **egress inventory**: every external host our app talks to (OpenAI, Anthropic, GitHub raw, GiveButter, Aplos, Slack, Notion, Google APIs). If the list is short and stable, the client will consider VPC endpoints / PrivateLink where they exist (Secrets Manager, S3, ECR). For everything else we go through the client's egress firewall, and they will need to allowlist destinations.
-- An **incident playbook**: who do they call when the app is on fire at 2 AM? What metric do they watch? What's the rollback procedure?
+| Resource | What exists | How it was created |
+|---|---|---|
+| **IAM user** | `Kunkelch` — used for CLI access during setup | Created manually in console. Scoped permissions (not full IAM admin — cannot create OIDC providers, for example). |
+| **IAM roles (5)** | `lp-ecs-execution-role`, `lp-ecs-task-role`, `lp-ecs-infra-role`, `lp-ecs-task-execution-role`, `lp-eventbridge-invoke-role` | Created via CLI during setup phases. Policies defined in `infra/iam/*.json`. |
+| **ECS cluster** | `lp-internal` | One cluster, three long-running services (mcp-server, hq, aws-mcp-server), plus on-demand sync tasks. |
+| **ECS services (3)** | `lp-internal-mcp-server` (1 task), `lp-internal-hq` (1 task), `lp-internal-aws-mcp-server` (1 task) | All Fargate ARM64, behind ALB target groups. Task definitions in `infra/ecs/*.json` with `${AWS_ACCOUNT_ID}` placeholders. |
+| **ECR repos (4)** | `lp-internal/mcp-server`, `lp-internal/hq`, `lp-internal/aws-mcp-server`, `lp-internal/sync` | Created during setup. Images built locally or in CI, pushed to ECR, deployed to ECS. |
+| **Secrets Manager** | `lp-internal/*` prefix | 10+ secrets covering database, API keys, OAuth, JWT. Runtime roles have read access; builder user has write access. |
+| **RDS** | Postgres 16 with pgvector | Single instance, `us-east-1`. Connection string in Secrets Manager. |
+| **GitHub Actions OIDC** | Pending setup | `lp-github-deploy` role and policy defined in `infra/iam/lp-github-deploy-*.json`. OIDC provider creation requires IAM admin permissions (blocked on approval). |
+
+**Key gap: no Terraform.** The current setup was done via CLI commands following the `docs/setup/` phase guides. The `infra/iam/*.json` and `infra/ecs/*.json` files define the resources declaratively but are applied manually, not through a pipeline. This is acceptable for a single deployment but doesn't scale to multiple clients. The path forward is `infra/terraform/` modules (see section 12).
+
+**Key gap: IAM user, not federated identity.** The builder IAM user (`Kunkelch`) has static access keys and scoped (not admin) permissions. For production client handoffs, this should be replaced with IAM Identity Center or at minimum time-limited credentials. For the initial buildout with a small client, a single IAM user with scoped permissions and MFA is pragmatically fine.
+
+### Sophisticated client (enterprise engagements)
+
+These clients bring their own infrastructure and expect us to consume it, not create our own:
+
+- An AWS Organization with workload accounts, SCPs, IAM Identity Center, and a platform team.
+- A pre-provisioned VPC with public/private/database subnets, NAT, and tagged security groups.
+- A KMS CMK for encryption at rest. They expect us to use it, not the AWS-managed key.
+- A Terraform or CDK repo where all infrastructure changes are reviewed as PRs.
+- A FinOps tagging requirement on every resource.
+
+**What they grant us:**
+- A dedicated workload account (or namespace within one). We operate inside it, nothing in mgmt or security accounts.
+- An SSO permission set for our engineers — `PowerUserAccess` minus IAM, scoped to the workload account.
+- A GitHub OIDC trust for our CI deploy role — the only identity that can mutate production.
+- A Secrets Manager prefix (`lp-internal/*`) and KMS key grants for our runtime roles.
+
+**What they want from us:**
+- The policies in `infra/iam/` adapted to their conventions: `kms:KeyArn` conditions referencing their specific CMK (not the broad `kms:ViaService` pattern), `aws:ResourceTag/Application: lp-internal` conditions on S3 and CloudWatch statements for blast-radius scoping.
+- An **egress inventory**: every external host the app contacts (OpenAI, Anthropic, GiveButter, Aplos, Slack, Notion, Google APIs, Sentry). Their egress firewall needs to allowlist these.
+- An **incident playbook**: who to call, what to watch, how to roll back.
+- Infrastructure delivered as Terraform modules, not CLI scripts.
 
 ### Secure credential provisioning during onboarding
 
