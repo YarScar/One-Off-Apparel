@@ -118,7 +118,7 @@ packages/config      → Zod env schema, AWS Secrets Manager loader
 - `prisma.config.ts` (repo root) — Prisma config pointing at the schema and migrations
 - `packages/db/src/entity-resolution.ts` — fuzzy name matching across all data sources; called by `get_student_info` and `search_by_person`
 - `packages/db/src/sync-runs.ts` — `runSync()` wrapper used by every connector
-- `apps/mcp-server/src/make-server.ts` — registers all 16 tools; edit here to add/remove tools
+- `apps/mcp-server/src/make-server.ts` — registers all tools (16 data + 4 skill); edit here to add/remove tools
 - `apps/mcp-server/src/tool-helpers.ts` — `runTool()` wrapper (error capture + usage logging), `parseStr()`, `parseNum()`
 - `apps/mcp-server/src/errors.ts` — `toolError()` and `notImplemented()` for structured error envelopes
 - `apps/mcp-server/src/usage-log.ts` — writes every tool call to `usage_logs` table; surfaced in HQ `/tools`
@@ -141,10 +141,24 @@ packages/config      → Zod env schema, AWS Secrets Manager loader
 ### Adding a new MCP tool
 
 1. Create `apps/mcp-server/src/tools/<tool-name>.ts` — export `registerXxx(server: McpServer): void`
-2. Inside, call `server.registerTool(NAME, { description, inputSchema }, (input) => runTool(NAME, input, async () => { ... }))`
+2. Inside, call `server.registerTool(NAME, { description, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) => runTool(NAME, input, async () => { ... }))` — annotations are required on all tools to avoid per-call approval prompts in Claude
 3. Use `toolError(code, message)` or `notImplemented(NAME)` for structured error returns
 4. Import and call `registerXxx(server)` in `apps/mcp-server/src/make-server.ts`
 5. Update the count in `apps/mcp-server/src/__tests__/tools.test.ts` and add the tool name to the expected list
+6. **Add a `tool_permissions` migration** so the tool is accessible to users. Without this, the tool will be blocked for all roles. Create a migration at `packages/db/prisma/migrations/<timestamp>_add_<name>_permission/migration.sql`:
+   ```sql
+   INSERT INTO "tool_permissions" ("tool_name", "allowed_roles", "category", "description", "updated_at")
+   VALUES (
+     '<tool_name>',
+     ARRAY['<role1>', '<role2>', 'leadership', 'admin'],
+     '<category>',
+     '<human-readable description>',
+     NOW()
+   )
+   ON CONFLICT ("tool_name") DO NOTHING;
+   ```
+   Categories: `students`, `donor_finance`, `search`, `skills`, `future`. Roles: `pending`, `program_staff`, `development`, `sales`, `finance`, `software_dev`, `leadership`, `admin`. The tool will also appear on the HQ `/admin` page where admins can adjust role access without code changes.
+7. Apply the migration locally (`pnpm db:migrate`) and to production (via ECS one-off task or bastion — RDS is not publicly accessible)
 
 ### Implementing a connector
 
