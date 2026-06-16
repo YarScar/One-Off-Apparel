@@ -31,11 +31,11 @@ Most clients we work with are small-to-medium nonprofits, not enterprises with m
 
 **How we actually set it up (current reality):**
 
-This is how our reference deployment (account `851725317896`) is configured:
+This is how our reference deployment is configured:
 
 | Resource | What exists | How it was created |
 |---|---|---|
-| **IAM user** | `Kunkelch` — used for CLI access during setup | Created manually in console. Scoped permissions (not full IAM admin — cannot create OIDC providers, for example). |
+| **IAM user** | `userID` — used for CLI access during setup | Created manually in console. Scoped permissions (not full IAM admin — cannot create OIDC providers, for example). |
 | **IAM roles (5)** | `lp-ecs-execution-role`, `lp-ecs-task-role`, `lp-ecs-infra-role`, `lp-ecs-task-execution-role`, `lp-eventbridge-invoke-role` | Created via CLI during setup phases. Policies defined in `infra/iam/*.json`. |
 | **ECS cluster** | `lp-internal` | One cluster, three long-running services (mcp-server, hq, aws-mcp-server), plus on-demand sync tasks. |
 | **ECS services (3)** | `lp-internal-mcp-server` (1 task), `lp-internal-hq` (1 task), `lp-internal-aws-mcp-server` (1 task) | All Fargate ARM64, behind ALB target groups. Task definitions in `infra/ecs/*.json` with `${AWS_ACCOUNT_ID}` placeholders. |
@@ -46,7 +46,7 @@ This is how our reference deployment (account `851725317896`) is configured:
 
 **Key gap: no Terraform.** The current setup was done via CLI commands following the `docs/setup/` phase guides. The `infra/iam/*.json` and `infra/ecs/*.json` files define the resources declaratively but are applied manually, not through a pipeline. This is acceptable for a single deployment but doesn't scale to multiple clients. The path forward is `infra/terraform/` modules (see section 12).
 
-**Key gap: IAM user, not federated identity.** The builder IAM user (`Kunkelch`) has static access keys and scoped (not admin) permissions. For production client handoffs, this should be replaced with IAM Identity Center or at minimum time-limited credentials. For the initial buildout with a small client, a single IAM user with scoped permissions and MFA is pragmatically fine.
+**Key gap: IAM user, not federated identity.** The builder IAM user (`userID`) has static access keys and scoped (not admin) permissions. For production client handoffs, this should be replaced with IAM Identity Center or at minimum time-limited credentials. For the initial buildout with a small client, a single IAM user with scoped permissions and MFA is pragmatically fine.
 
 ### Sophisticated client (enterprise engagements)
 
@@ -125,7 +125,7 @@ The client creates a shared vault in their password manager (1Password, Bitwarde
 
 **Process:**
 
-1. **Client creates the vault.** Name it something obvious: `LP Internal AI — Credentials`. Invite the implementation team's designated contact(s) — not the whole team, just whoever is wiring secrets into infrastructure.
+1. **Client creates the vault.** Name it something obvious: `Internal AI — Credentials`. Invite the implementation team's designated contact(s) — not the whole team, just whoever is wiring secrets into infrastructure.
 2. **Client adds credentials as they're provisioned.** Each entry should include:
    - The credential itself (API key, JSON key file, connection string, etc.)
    - Which service it's for (e.g., "GiveButter API Key — read-only")
