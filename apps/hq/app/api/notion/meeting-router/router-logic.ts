@@ -49,6 +49,19 @@ export async function pageBelongsToMeetingsDb(page: NotionPage): Promise<boolean
   );
 }
 
+// Google sets `organizer` to the *calendar* an event lives on. For events on a
+// shared/group/resource calendar that's not a person — fall back to `creator`
+// (the human who made the event), which is the real "sender" for routing.
+function isGroupCalendar(email: string | undefined): boolean {
+  return !!email && (email.endsWith('@group.calendar.google.com') || email.endsWith('@resource.calendar.google.com'));
+}
+
+function pickOrganizerEmail(event: CalendarEvent): string | null {
+  const organizer = event.organizer?.email;
+  if (!organizer || isGroupCalendar(organizer)) return event.creator?.email ?? organizer ?? null;
+  return organizer;
+}
+
 function eventTimeMs(event: CalendarEvent, which: 'start' | 'end'): number | null {
   const value = event[which]?.dateTime ?? event[which]?.date;
   if (!value) return null;
@@ -105,7 +118,7 @@ async function resolveMeeting(page: NotionPage): Promise<ResolvedMeeting> {
   const event = pickMatchingEvent(events, tsMs);
   if (!event) return empty;
 
-  const organizer = event.organizer?.email ?? event.creator?.email ?? null;
+  const organizer = pickOrganizerEmail(event);
   const attendeeEmails = (event.attendees ?? [])
     .filter((a): a is { email: string } => typeof a.email === 'string' && !a.resource)
     .map((a) => a.email.toLowerCase());
