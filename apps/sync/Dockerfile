@@ -20,12 +20,9 @@ COPY packages/config/package.json packages/config/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/embedding/package.json packages/embedding/package.json
 COPY connectors/aplos/package.json connectors/aplos/package.json
-COPY connectors/bigquery/package.json connectors/bigquery/package.json
-COPY connectors/givebutter/package.json connectors/givebutter/package.json
 COPY connectors/google-drive/package.json connectors/google-drive/package.json
 COPY connectors/google-sheets/package.json connectors/google-sheets/package.json
 COPY connectors/notion/package.json connectors/notion/package.json
-COPY connectors/roam/package.json connectors/roam/package.json
 COPY connectors/slack/package.json connectors/slack/package.json
 
 RUN pnpm install --frozen-lockfile

@@ -5,11 +5,9 @@ export const dynamic = 'force-dynamic';
 const CONNECTORS = [
   'google-sheets',
   'google-drive',
-  'bigquery',
-  'givebutter',
   'aplos',
+  'notion',
   'slack',
-  'roam',
 ] as const;
 
 interface ConnectorRow {

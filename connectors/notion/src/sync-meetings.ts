@@ -21,8 +21,10 @@ interface NotionPage {
 interface ExtractedMeta {
   title: string;
   meeting_date: string | null;
-  visibility: string[];
+  visibility: string | null;
   attendees: string[];
+  attendee_emails: string[];
+  visible_to_emails: string[];
   owner: string | null;
   project: string[];
   tags: string[];
@@ -103,6 +105,7 @@ function extractRelationOrMultiSelect(prop: NotionProperty | undefined): string[
 // into human-readable names. Cached per run so a person referenced across many meetings
 // is only fetched once.
 const personNameCache = new Map<string, string>();
+const personEmailCache = new Map<string, string | null>();
 
 async function resolvePersonName(pageId: string): Promise<string> {
   const cached = personNameCache.get(pageId);
@@ -111,13 +114,29 @@ async function resolvePersonName(pageId: string): Promise<string> {
     const related = await getPage<NotionPage>(pageId);
     const name = extractTitle(related.properties) || pageId;
     personNameCache.set(pageId, name);
+    // Also cache email while we have the page
+    const email = extractEmail(related.properties);
+    personEmailCache.set(pageId, email);
     return name;
   } catch {
-    // A related page the integration can't read (or a stale id) — fall back to the id
-    // rather than failing the whole meeting.
     personNameCache.set(pageId, pageId);
+    personEmailCache.set(pageId, null);
     return pageId;
   }
+}
+
+function extractEmail(props: Record<string, NotionProperty>): string | null {
+  const p = props['Email'];
+  if (!p || p.type !== 'email') return null;
+  return (p as { email?: string | null }).email ?? null;
+}
+
+async function resolvePersonEmail(pageId: string): Promise<string | null> {
+  const cached = personEmailCache.get(pageId);
+  if (cached !== undefined) return cached;
+  // resolvePersonName also populates the email cache as a side effect
+  await resolvePersonName(pageId);
+  return personEmailCache.get(pageId) ?? null;
 }
 
 function extractRelationIds(prop: NotionProperty | undefined): string[] {
@@ -145,13 +164,35 @@ async function resolveOwner(prop: NotionProperty | undefined): Promise<string | 
   return extractSinglePerson(prop);
 }
 
+function extractRichText(prop: NotionProperty | undefined): string {
+  if (!prop || prop.type !== 'rich_text') return '';
+  return richTextToPlain((prop as { rich_text?: unknown }).rich_text).trim();
+}
+
 export async function extractMeta(page: NotionPage): Promise<ExtractedMeta> {
   const props = page.properties;
+
+  // Resolve Visible To relation → emails from People DB
+  const visibleToIds = extractRelationIds(props['Visible To']);
+  const visibleToEmails: string[] = [];
+  for (const id of visibleToIds) {
+    const email = await resolvePersonEmail(id);
+    if (email) visibleToEmails.push(email.toLowerCase());
+  }
+
+  // Extract raw attendee emails (set by the meeting router)
+  const rawAttendeeEmails = extractRichText(props['Attendee Emails']);
+  const attendeeEmails = rawAttendeeEmails
+    ? rawAttendeeEmails.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
+    : [];
+
   return {
     title: extractTitle(props),
     meeting_date: extractDate(props['Date']),
-    visibility: extractMultiSelect(props['Visibility']),
+    visibility: extractSelect(props['Visibility']),
     attendees: await resolveAttendees(props['Attendees']),
+    attendee_emails: attendeeEmails,
+    visible_to_emails: visibleToEmails,
     owner: await resolveOwner(props['Owner']),
     project: extractRelationOrMultiSelect(props['Project']),
     tags: extractMultiSelect(props['Tags']),
@@ -207,7 +248,7 @@ export async function syncMeetings(opts?: { incrementalSince?: Date }): Promise<
       }
 
       const meta = await extractMeta(page);
-      if (meta.visibility.length === 0) {
+      if (!meta.visibility) {
         stats.pages_skipped_no_visibility += 1;
         console.warn(`  skipping page ${page.id} ("${meta.title || '<untitled>'}"): no Visibility tag`);
         continue;
@@ -261,6 +302,18 @@ async function syncOnePage(
     const content = chunks[i]!;
     const embedding = embeddings[i]!;
     const embeddingLiteral = `[${embedding.join(',')}]`;
+    // Compute allowed_emails for access control:
+    // - Internal → null (all authenticated users)
+    // - Attendees Only → attendee emails only (+ visible_to)
+    // - Any level + Visible To set → those people are always included
+    const allowedEmails: string[] | null =
+      meta.visibility === 'Internal' && meta.visible_to_emails.length === 0
+        ? null
+        : [...new Set([
+            ...(meta.visibility === 'Attendees Only' ? meta.attendee_emails : []),
+            ...meta.visible_to_emails,
+          ])];
+
     const metadata = {
       subtype: 'meeting',
       notion_page_id: page.id,
@@ -273,7 +326,8 @@ async function syncOnePage(
       project: meta.project,
       tags: meta.tags,
       recording_url: meta.recording_url,
-      visibility: meta.visibility,
+      visibility_level: meta.visibility,
+      allowed_emails: allowedEmails,
       chunk_index: i,
       chunk_count: chunks.length,
     };

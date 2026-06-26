@@ -44,7 +44,6 @@ export const envSchema = z.object({
   BIGQUERY_PROJECT_ID: z.string().trim().min(1).default('lp-internal-ai'),
   BIGQUERY_DATASET: optional,
 
-  GIVEBUTTER_API_KEY: optional,
   APLOS_CLIENT_ID: optional,
   APLOS_API_KEY: optional,
   SLACK_BOT_TOKEN: optional,

@@ -12,6 +12,10 @@ export function setCurrentCaller(caller: CallerIdentity | null): void {
   currentCaller = caller;
 }
 
+export function getCurrentCallerEmail(): string | null {
+  return currentCaller?.kind === 'user' ? currentCaller.email : null;
+}
+
 // Tools that service callers (SYNC_SECRET) are allowed to invoke.
 // This scopes the blast radius if the secret leaks — skill tools and
 // write-capable tools are excluded.

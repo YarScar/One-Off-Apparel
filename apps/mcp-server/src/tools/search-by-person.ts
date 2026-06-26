@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { resolveEntityWithAliases } from '@lp-ai/lib-db';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseStr, parseNum, getCurrentCallerEmail } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
 import { searchDocuments } from './search-documents.js';
 
@@ -56,6 +56,7 @@ export function registerSearchByPerson(server: McpServer): void {
         query: effectiveQuery,
         topK: topK * 5,
         minSimilarity: MIN_SIMILARITY,
+        callerEmail: getCurrentCallerEmail(),
       });
 
       const filtered = candidates.filter((r) =>

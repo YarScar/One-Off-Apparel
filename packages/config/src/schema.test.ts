@@ -36,10 +36,10 @@ describe('envSchema', () => {
   it('treats blank optional fields as omitted', () => {
     const result = envSchema.parse({
       ...validBase,
-      GIVEBUTTER_API_KEY: '',
       OPENAI_API_KEY: '',
+      NOTION_API_KEY: '',
     });
-    expect(result.GIVEBUTTER_API_KEY).toBeUndefined();
     expect(result.OPENAI_API_KEY).toBeUndefined();
+    expect(result.NOTION_API_KEY).toBeUndefined();
   });
 });

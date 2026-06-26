@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseStr, parseNum, getCurrentCallerEmail } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
 import { searchDocuments } from './search-documents.js';
 
@@ -44,6 +44,7 @@ export function registerSearchConversations(server: McpServer): void {
         sources,
         topK,
         minSimilarity: MIN_SIMILARITY,
+        callerEmail: getCurrentCallerEmail(),
       });
 
       return {

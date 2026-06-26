@@ -34,6 +34,16 @@ const INDEXED_BLOCK_TYPES = new Set([
   'callout',
 ]);
 
+// Block types that contain children worth indexing but have no text of their own.
+// The walker recurses into these without extracting text from the parent block.
+const CONTAINER_BLOCK_TYPES = new Set([
+  'transcription',  // Notion AI Meeting Notes wrapper
+  'column_list',
+  'column',
+  'synced_block',
+  'template',
+]);
+
 const MAX_RECURSION_DEPTH = 5;
 
 function richTextToPlain(rt: RichTextItem[] | undefined): string {
@@ -88,6 +98,9 @@ async function walk(blockId: string, depth: number, out: string[]): Promise<void
       if (block.has_children) {
         await walk(block.id, depth + 1, out);
       }
+    } else if (CONTAINER_BLOCK_TYPES.has(block.type) && block.has_children) {
+      // Recurse into container blocks without extracting text from the parent.
+      await walk(block.id, depth, out);
     }
   }
 }
