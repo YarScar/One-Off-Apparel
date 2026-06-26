@@ -5,9 +5,18 @@ import { parseEmploymentRow } from './parse.js';
 // ---------------------------------------------------------------------------
 // Employment tab (Student Information V2)
 //
-// One row per (student x job). source_id uses a stable composite natural key:
-//   employment:<studentNumber>:<employerName>:<startDate>
+// One row per (student × job × date-range). The same logical job may span
+// multiple rows when the student's hourly rate or weekly hours changed —
+// each row covers one date range at one rate so that hours and total pay
+// can be tracked accurately over time.
+//
+// source_id uses a stable composite natural key:
+//   employment:<studentNumber>:<employerName>:<startDate>:<jobTitle>
 // so that row reordering in the sheet does not create orphans.
+//
+// Consolidation into logical jobs (same student + employer + title = one job)
+// happens at query time in query_employment, not here. This connector
+// faithfully stores every row from the sheet.
 //
 // Upsert + stale cleanup: rows are upserted, then any sourceIds NOT seen in
 // this run are deleted. If the sync crashes midway, existing data survives.
