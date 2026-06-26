@@ -81,3 +81,24 @@ export async function updatePageProperties(
 ): Promise<void> {
   await notionFetch(`/pages/${pageId}`, { method: 'PATCH', body: { properties } });
 }
+
+/** Create a new People & Entities row. Returns the new page id. */
+export async function createPerson(
+  peopleDbId: string,
+  opts: { name: string; email: string; type: string; organization?: string },
+): Promise<string> {
+  const properties: Record<string, unknown> = {
+    Name: { title: [{ text: { content: opts.name } }] },
+    Email: { email: opts.email },
+    Type: { multi_select: [{ name: opts.type }] },
+    Status: { select: { name: 'Active' } },
+  };
+  if (opts.organization) {
+    properties['Organization'] = { rich_text: [{ text: { content: opts.organization } }] };
+  }
+  const res = await notionFetch<{ id: string }>(
+    `/pages`,
+    { method: 'POST', body: { parent: { database_id: peopleDbId }, properties } },
+  );
+  return res.id;
+}

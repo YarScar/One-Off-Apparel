@@ -4,6 +4,7 @@ import {
   getUserEmail,
   findPeopleByEmail,
   updatePageProperties,
+  createPerson,
   type NotionPage,
 } from './notion';
 import { listEventsForUser, type CalendarEvent } from './google-calendar';
@@ -90,9 +91,14 @@ function pickMatchingEvent(events: CalendarEvent[], tsMs: number): CalendarEvent
   return best;
 }
 
+interface AttendeeInfo {
+  email: string;
+  displayName: string | null;
+}
+
 interface ResolvedMeeting {
   organizer: string | null;
-  attendeeEmails: string[];
+  attendees: AttendeeInfo[];
   event: CalendarEvent | null;
 }
 
@@ -102,7 +108,7 @@ interface ResolvedMeeting {
  * calendar, searching a window around the note's created_time.
  */
 async function resolveMeeting(page: NotionPage): Promise<ResolvedMeeting> {
-  const empty: ResolvedMeeting = { organizer: null, attendeeEmails: [], event: null };
+  const empty: ResolvedMeeting = { organizer: null, attendees: [], event: null };
 
   const recorderEmail = await getUserEmail(page.created_by.id);
   if (!recorderEmail) return empty;
@@ -119,11 +125,11 @@ async function resolveMeeting(page: NotionPage): Promise<ResolvedMeeting> {
   if (!event) return empty;
 
   const organizer = pickOrganizerEmail(event);
-  const attendeeEmails = (event.attendees ?? [])
-    .filter((a): a is { email: string } => typeof a.email === 'string' && !a.resource)
-    .map((a) => a.email.toLowerCase());
+  const attendees: AttendeeInfo[] = (event.attendees ?? [])
+    .filter((a): a is { email: string; displayName?: string } => typeof a.email === 'string' && !a.resource)
+    .map((a) => ({ email: a.email.toLowerCase(), displayName: a.displayName ?? null }));
 
-  return { organizer, attendeeEmails, event };
+  return { organizer, attendees, event };
 }
 
 export interface RoutingResult {
@@ -131,8 +137,21 @@ export interface RoutingResult {
   organizer: string | null;
   track: Track | null;
   attendeesLinked?: number;
+  attendeesCreated?: number;
   applied: boolean;
   skipped?: string;
+}
+
+/** Derive a display name for a new People record from email + calendar displayName. */
+function nameForNewPerson(attendee: AttendeeInfo): string {
+  if (attendee.displayName) return attendee.displayName;
+  // Fall back to the local part of the email, title-cased.
+  const local = attendee.email.split('@')[0] ?? attendee.email;
+  return local
+    .replace(/[._-]/g, ' ')
+    .replace(/\d+/g, '')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase()) || attendee.email;
 }
 
 /**
@@ -141,6 +160,7 @@ export interface RoutingResult {
  *   - Track (from organizer)
  *   - Attendees relation (matched People rows) + Attendee Emails (raw, lossless)
  *   - Calendar Event ID
+ * If an attendee has no People record, one is auto-created (Type: Contact).
  * Visibility is intentionally left UNSET (see note below).
  */
 export async function applyRouting(pageId: string): Promise<RoutingResult> {
@@ -150,16 +170,31 @@ export async function applyRouting(pageId: string): Promise<RoutingResult> {
     return { pageId, organizer: null, track: null, applied: false, skipped: 'not a Meetings DB page' };
   }
 
-  const { organizer, attendeeEmails, event } = await resolveMeeting(page);
+  const { organizer, attendees, event } = await resolveMeeting(page);
   const track = routeTrack(organizer);
+  const attendeeEmails = attendees.map((a) => a.email);
 
-  // Link attendees to People by email where a record exists; always keep the raw list.
+  // Link attendees to People by email; auto-create a record for unknowns.
   const env = await loadEnv();
   const peopleDbId = env.NOTION_PEOPLE_DB_ID;
   const relationIds: string[] = [];
+  let created = 0;
   if (peopleDbId) {
-    for (const email of attendeeEmails) {
-      relationIds.push(...(await findPeopleByEmail(peopleDbId, email)));
+    for (const attendee of attendees) {
+      const existing = await findPeopleByEmail(peopleDbId, attendee.email);
+      if (existing.length > 0) {
+        relationIds.push(...existing);
+      } else {
+        // Auto-create a People record for this unknown attendee.
+        const name = nameForNewPerson(attendee);
+        const domain = attendee.email.split('@')[1] ?? '';
+        const type = domain === 'launchpadphilly.org' ? 'Staff'
+          : domain === 'b-21.org' ? 'Staff'
+          : 'Contact';
+        const newId = await createPerson(peopleDbId, { name, email: attendee.email, type });
+        relationIds.push(newId);
+        created += 1;
+      }
     }
   }
   const uniqueRelationIds = [...new Set(relationIds)];
@@ -182,5 +217,5 @@ export async function applyRouting(pageId: string): Promise<RoutingResult> {
   // A default-visibility policy can be added here later if desired.
 
   await updatePageProperties(pageId, properties);
-  return { pageId, organizer, track, attendeesLinked: uniqueRelationIds.length, applied: true };
+  return { pageId, organizer, track, attendeesLinked: uniqueRelationIds.length, attendeesCreated: created, applied: true };
 }
