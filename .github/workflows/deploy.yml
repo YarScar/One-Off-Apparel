@@ -165,7 +165,7 @@ jobs:
   # ─── Deploy MCP Server ─────────────────────────────────────────
   deploy-mcp-server:
     needs: [changes, migrate]
-    if: needs.changes.outputs.mcp-server == 'true'
+    if: always() && needs.changes.result == 'success' && needs.migrate.result == 'success' && needs.changes.outputs.mcp-server == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -232,7 +232,7 @@ jobs:
   # ─── Deploy HQ Dashboard ───────────────────────────────────────
   deploy-hq:
     needs: [changes, migrate]
-    if: needs.changes.outputs.hq == 'true'
+    if: always() && needs.changes.result == 'success' && needs.migrate.result == 'success' && needs.changes.outputs.hq == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -298,7 +298,7 @@ jobs:
   # ─── Deploy AWS MCP Server ─────────────────────────────────────
   deploy-aws-mcp-server:
     needs: [changes, migrate]
-    if: needs.changes.outputs.aws-mcp-server == 'true'
+    if: always() && needs.changes.result == 'success' && needs.migrate.result == 'success' && needs.changes.outputs.aws-mcp-server == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -364,7 +364,7 @@ jobs:
   # ─── Build Sync Image (no long-running service — used by EventBridge tasks) ─
   deploy-sync:
     needs: [changes]
-    if: needs.changes.outputs.sync == 'true'
+    if: always() && needs.changes.result == 'success' && needs.changes.outputs.sync == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
