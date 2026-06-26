@@ -9,7 +9,7 @@ import { runTool } from '../tool-helpers.js';
 // query_employment — reads student_employment, populated from the Employment
 // tab of the V2 Student Information sheet. One row per (student × position).
 //
-// Two business rules applied here that the raw sheet doesn't encode:
+// Three business rules applied here that the raw sheet doesn't encode:
 //
 // 1. ACTIVE JOBS (end_date is blank → still employed):
 //    total_earned in the sheet may be stale or blank. Compute
@@ -18,12 +18,19 @@ import { runTool } from '../tool-helpers.js';
 //    appear in aggregates. Per-row responses include current_earned alongside
 //    a current_earned_is_computed flag.
 //
-// 2. PROMOTIONS / DEMOTIONS (exit_code = E3 or E4 with a later same-employer
+// 2. RATE / HOURS CHANGES: The same job may appear on multiple rows when the
+//    student's hourly rate or weekly hours changed mid-employment. Rows with
+//    the same (student, employer, jobTitle) are consolidated into a single
+//    logical job. Each row covers a date range at one rate so that hours and
+//    total pay can be tracked accurately over time. The chain sums earnings
+//    across all rows.
+//
+// 3. PROMOTIONS / DEMOTIONS (exit_code = E3 or E4 with a later same-employer
 //    position) collapse into a single continuous job for counting and
-//    earnings totals. The chain's effective_exit_code is the LAST row's
-//    exit_code; intermediate E3/E4s are treated as transitions inside one
-//    job, not as separate jobs. Per-row responses include chain_id and
-//    chain_position so callers can see the linkage.
+//    earnings totals, even when the job title changes. The chain's
+//    effective_exit_code is the LAST row's exit_code; intermediate E3/E4s
+//    are treated as transitions inside one job. Per-row responses include
+//    chain_id and chain_position so callers can see the linkage.
 //
 // Exit code taxonomy (stored verbatim from the sheet, e.g. "E3 - Internal
 // Promotion"):
@@ -42,7 +49,7 @@ import { runTool } from '../tool-helpers.js';
 const NAME = 'query_employment';
 
 const DESCRIPTION =
-  'Student employment data — jobs held during/after the program, with earnings, exit codes, and active-job tracking. Active jobs (blank end_date) get a computed current_earned = weeks_since_start × weekly_hours × hourly_wage. E3/E4 promotion/demotion exits followed by a later position at the same employer are consolidated into one continuous job for aggregate counts; the chain_id / chain_position fields in listings expose the linkage.';
+  'Student employment data — jobs held during/after the program, with earnings, exit codes, and active-job tracking. Active jobs (blank end_date) get a computed current_earned = weeks_since_start × weekly_hours × hourly_wage. Multiple rows with the same (student, employer, jobTitle) but different date ranges (rate/hours changes) are consolidated into one logical job; E3/E4 promotion/demotion exits at the same employer also consolidate across title changes. The chain_id / chain_position fields in listings expose the linkage.';
 
 const inputSchema = {
   query_type: z.enum([
@@ -134,6 +141,10 @@ function employerKey(name: string | null | undefined): string {
   return (name ?? '').trim().toLowerCase();
 }
 
+function titleKey(title: string | null | undefined): string {
+  return (title ?? '').trim().toLowerCase();
+}
+
 function buildChains(rows: StudentEmployment[], asOf: Date): Chain[] {
   // Bucket by (student × employer) so chains can only form within the bucket.
   // The bucket-key separator is '|' (NOT a NUL byte — see V0 commit history
@@ -162,12 +173,27 @@ function buildChains(rows: StudentEmployment[], asOf: Date): Chain[] {
     for (let i = 0; i < bucket.length; i += 1) {
       const r = bucket[i]!;
       current.push(r);
-      // The sheet stores exit codes as full labels ("E3 - Internal Promotion"),
-      // not bare prefixes — match by prefix so "E3..." / "E4..." both trigger.
+
+      const hasNext = i + 1 < bucket.length;
+      if (!hasNext) {
+        chains.push(makeChain(current, asOf));
+        current = [];
+        continue;
+      }
+
+      const next = bucket[i + 1]!;
+      // Same job title → same logical job (rate/hours change across date
+      // ranges). Always chain these together.
+      const sameTitle = titleKey(r.jobTitle) === titleKey(next.jobTitle);
+
+      // E3/E4 promotion/demotion exit → chain across title changes at the
+      // same employer. The sheet stores exit codes as full labels
+      // ("E3 - Internal Promotion"), so we match by prefix.
       const code = (r.exitCode ?? '').trim().toUpperCase();
       const isPromoExit = /^E3(?:\b|\s|-|$)/.test(code) || /^E4(?:\b|\s|-|$)/.test(code);
-      const hasNext = i + 1 < bucket.length;
-      if (!isPromoExit || !hasNext) {
+
+      if (!sameTitle && !isPromoExit) {
+        // Truly separate job at the same employer — break the chain.
         chains.push(makeChain(current, asOf));
         current = [];
       }
@@ -263,7 +289,7 @@ function buildWhere(args: {
 }
 
 const NOTE_RULES =
-  'Active jobs (blank end_date in source): current_earned is computed from start_date to today using weekly_hours × hourly_wage. Promotions/demotions (exit_code E3 or E4) followed by another position at the same employer are consolidated into a single job for aggregate counts; chain_id / chain_position annotations identify the linkage in listings.';
+  'Active jobs (blank end_date in source): current_earned is computed from start_date to today using weekly_hours × hourly_wage. Multiple rows with the same (student, employer, job title) but different date ranges (reflecting rate or hours changes) are consolidated into one logical job. Promotions/demotions (exit_code E3 or E4) also consolidate across title changes at the same employer. chain_id / chain_position annotations identify the linkage in listings.';
 
 // ---------------------------------------------------------------------------
 // Aggregation accumulator
