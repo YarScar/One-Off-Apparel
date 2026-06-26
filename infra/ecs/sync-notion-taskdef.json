@@ -29,6 +29,7 @@
         { "name": "DATABASE_URL",                    "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/db:DATABASE_URL::" },
         { "name": "NOTION_API_KEY",                  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/notion:NOTION_API_KEY::" },
         { "name": "NOTION_MEETING_TRANSCRIPTS_DB_ID","valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/notion:NOTION_MEETING_TRANSCRIPTS_DB_ID::" },
+        { "name": "NOTION_SYNC_DATABASE_IDS",        "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/notion:NOTION_SYNC_DATABASE_IDS::" },
         { "name": "OPENAI_API_KEY",                  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/openai:OPENAI_API_KEY::" }
       ],
       "logConfiguration": {
