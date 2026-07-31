@@ -1,0 +1,85 @@
+# Grant writing layer — cover note
+
+**Date:** 2026-07-28
+**From:** Demitri DeLuca-Lyons
+**To:** Rob Thomas, VP of Technology
+**Re:** Where to look, and what to flag
+
+## Why there are four documents now
+
+The first pass was one long document that mixed the pitch, the architecture, and the build steps. It is split. Each document has one audience and one job.
+
+| Document | What it is | Who it is for | Your interest |
+|---|---|---|---|
+| `PROPOSAL.md` | Scope, deliverables, timeline, three decisions. Brief. | The project manager, and anyone outside engineering | Confirm the scope and the deliverables read correctly |
+| `TAD.md` | Architecture, security, compliance, data governance. | **You** | **This is the one to review for flags** |
+| `SPEC.md` | Build detail and release gates. | The developer | Skim only, if you want the depth |
+| `README.md` | Folder index. | Anyone opening the folder | None |
+
+`PROPOSAL.md` is the document that goes outside engineering. `TAD.md` and `SPEC.md` stay internal.
+
+## What changed from what you saw
+
+- **Scope and deliverables are now explicit.** `PROPOSAL.md` section 2 is scope, in and out. Section 3 is six named deliverables, each with a completion test. That was the main gap you hit.
+- **Security and compliance has a real home.** `TAD.md` section 2: a threat model line, a seven-control table, and the reasons. `PROPOSAL.md` section 5 carries a short summary that points at it, so a non-technical reader sees the posture without the detail.
+- **The proposal is much shorter.** It lost the module names, the code, the internal findings, and the revision history. All of it moved to `TAD.md` or `SPEC.md`. Nothing was deleted.
+- **The spec is now a build guide with release gates**, not a monolith. Five gates, G1 to G5, each with a pass condition. The architecture and the data rules moved out of it into `TAD.md`.
+
+## Three things worth your flag check
+
+**1. One security control is load-bearing, and it constrains the design.** The layer returns a *list* of data calls and never makes one. The caller runs each call under its own identity. The reason: the permission check reads the inbound tool name, so a grant tool that read the database itself would get finance and donor data authorised as a grant read. `TAD.md` section 2.3. If you disagree with that reading of the ACL, it changes the shape of the draft builder, so it is worth five minutes.
+
+**2. There is one external dependency, and it needs an owner.** Two Notion sources are not reaching the platform. The design requires every teamspace read to go through the platform so it is permission-checked and logged, and that rule does not work until this is fixed. It is a configuration change on the Notion connector, not code, but it is not our package. `TAD.md` section 4.3 has the evidence; `SPEC.md` section 7 has the mechanics.
+
+**3. One risk can move the timeline, and it is scheduled first for that reason.** The matcher needs a Python standard-library function rebuilt in TypeScript. If it does not reach parity, everything above it is unreliable. That is release gate G2, in week 2, with three named outcomes including "stop and re-plan". `SPEC.md` section 5.
+
+## Status
+
+Deliverable 1 — the question bank and knowledge base — is built and checked: 82 questions, 11 categories, 29 approved answers, 211 recorded funder wordings, 4 form fixtures. The knowledge base is a prototype build, sufficient to proceed, and it expands when the Data team finalises.
+
+A working prototype proves the whole method and runs today. Its test suite is the quality bar: 45 tests cover this path. We rewrite in TypeScript rather than move the Python, for toolchain consistency — `TAD.md` section 1.3.
+
+## Progress since this note was written (2026-07-29)
+
+We started building before approval, on the understanding that these documents stay open and get corrected as the work turns things up. **Gates G1 and G2 are complete. G2 was the risk gate, and it passed on the best of its three outcomes.**
+
+| | |
+|---|---|
+| Modules | 7 (added `seq-ratio.ts` and `matcher.ts`) |
+| Tests | 43 passing, no network, no database |
+| Tools registered | 1 of 3 — `grant_match_question` |
+| Type check | clean on `packages/grants` |
+
+**The sequence-ratio parity risk is closed.** `SPEC.md` section 5 called this the one real technical risk, because a divergence would change every match score. Result: 28,690 of 28,690 recorded `difflib` ratios reproduce exactly, and all 337 recorded `match_question` results reproduce field for field, including the winning variant source and the rounded confidence. All 69 questions across the four form fixtures produce byte-identical output from the TypeScript build and the Python original. Equality is asserted with `!==`, not a tolerance.
+
+The 13 tests this document offered as the G2 bar were not sufficient on their own — they are behavioural invariants that an approximate ratio function would also pass. The real bar is a pair of fixtures generated by running CPython's `difflib` and the prototype's own matcher over the real bank.
+
+### Five things worth your flag check
+
+1. **There was no platform Anthropic client, and we no longer need one.** `TAD.md` decision 6 said to reuse it. `@anthropic-ai/sdk` is in no `package.json` in this repository, and `ANTHROPIC_API_KEY` is declared in the config schema but never read. Building one would have solved the wrong problem: the prototype needs a Claude client because a Python CLI has no model in the loop, but an MCP tool is invoked *by* Claude. So the resize tool returns the answer, the limit, the measurement, and the guardrails, and the calling Claude does the rewrite. The layer now has no outbound call at all, which keeps "no new external dependency" true and removes all mocking from the test suite.
+
+2. **One of the two seed integrity warnings was a bug in the checker, not in the data.** It flagged all eight attachment questions for carrying a `kb_ref`, but all eight route correctly — `kb.docs` holds exactly the checklist of documents to attach. The check now allowlists the attachment slots and flags only an attachment question pointing at ordinary prose, which is the defect its own comment always described. The other warning was a stale slot name (`kb.serve`), retargeted to the real slot. **The content gap it was carrying is still open**: no answer in the knowledge base mentions Lightspeed, and that is a Data team task.
+
+3. **The Notion item is handed off and is out of our gate.** Two corrections: "configuration, not code" held for the Grant Applications database but never for the Playbook, because the connector reads databases only and the Playbook is a page. And the Playbook question is now moot — it is in the repository at `docs/PLAYBOOK.md`. A third source also surfaced that appears in none of these documents: a Research Wiki database the drafting guidance depends on.
+
+4. **The Playbook asks for things these documents do not sanction, and we deliberately have not resolved them.** It opens by having Claude *create* a Grant Applications record and closes by *updating* it — a write path, against control 6 and the `readOnlyHint` on every planned tool. It also carries two rules stronger than anything in `TAD.md` section 3 (never name an entity not traceable to a confirmed current source; ask the fiscal-sponsorship framing every time), and it reconciles the wage claim as $550K stale versus $300K current where `TAD.md` section 3.2 documents $350,268 versus $362,361.82. **Decision: build the pipeline first, then assess.** Watering either document down to match the other before we can see a real draft package would be guessing.
+
+5. **Two ordinary grant questions do not match confidently, and that is the prototype's behaviour, not a port defect.** "How will you measure whether the program succeeded?" and "Upload your IRS letter of determination." both score below the 0.42 threshold in the Python original and in ours. They route to human review, which is the safe outcome, but it suggests the bank wants variants for them. A matching quality review is worth scheduling separately from parity.
+
+### Not verified, and why
+
+The permission migration is written but **not applied, and the tools have not been invoked through the server.** There is no `.env` in this checkout and no Docker daemon running, so Postgres is unavailable, `prisma generate` cannot run, and every database-gated test skips. The tool code type-checks clean; its ACL path, its usage-log entry, and the HQ `/admin` Grants section are unproven until someone runs it against a live local database. `pnpm lint` is also broken repository-wide for an unrelated reason — `@eslint/js` is not installed.
+
+## The three decisions
+
+| # | Decision | Recommendation |
+|---|---|---|
+| 1 | Add the two Notion sources to the copy list, and name an owner. | Approve. Configuration change. |
+| 2 | Who may use the three grant tools. | Leadership and administrator. Mandatory — the platform denies any tool without a permission record. |
+| 3 | Keep the question bank in files for now, rather than the database. | Keep files until the tools pass their test bar, then review. |
+
+`PROPOSAL.md` section 8 holds the reasoning.
+
+## On process
+
+We have not defined a process for this kind of document, so treat the split as a first proposal for one rather than a finished standard. If the shape is wrong — different documents, different boundaries, a gate review you want to own — say so and I will restructure. A tune-up is cheap at this stage.

@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "funder": "GSK STEM Access Grants",
+    "program": "GSK US Charitable Investments — STEM Access (2026)",
+    "framing": "Building 21 primary, Launchpad as its Philadelphia initiative",
+    "due": "2026-08-07",
+    "note": "Real Aug-7 pilot form (Priority 0). Questions transcribed from sources/aug7-pilot-forms.md#form-1. GSK's form states no explicit word limits — narrative fields are open. This is the match → KB-retrieve completeness test case."
+  },
+  "questions": [
+    { "text": "Name of Program or Activity" },
+    { "text": "Target age group(s)" },
+    { "text": "Is this a new program or an existing program?" },
+    { "text": "Tell us your organization's main purpose." },
+    { "text": "Briefly describe your organization's main services or work areas." },
+    { "text": "Where does your work take place?" },
+    { "text": "Describe the program in detail: What problem or opportunity does your program address? Who are the main clients of this program? What specific interventions will this program deliver? How will this program help people in the Philadelphia area find, keep or improve current and future STEM-related fields?" },
+    { "text": "How will you ensure that this program drives economic mobility? What barriers to access does this program aim to remove, and how? What steps have you taken to make your services more accessible? Are there groups you find it difficult to connect with, and how will you address this?" },
+    { "text": "Is this a joint funding proposal?" },
+    { "text": "Organization Name" },
+    { "text": "Registered Address" },
+    { "text": "EIN #" },
+    { "text": "Year your organization received 501(c)(3) status" },
+    { "text": "Your contact details for this application (name, title, phone, email)" },
+    { "text": "Website" }
+  ]
+}
