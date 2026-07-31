@@ -69,7 +69,9 @@ The first measurement came back at **1,962**. That number is wrong and should no
 
 `packages/db` publishes its types from `dist/`, and `dist/` had never been built. Every consumer's `import type { Prisma, StudentEmployment } from '@lp-ai/lib-db'` therefore resolved to nothing, and `strictTypeChecked` reported each downstream property access as `no-unsafe-member-access` — "a type that cannot be resolved." Building `packages/db` dropped the count from 1,962 to 415. **Seventy-nine percent of the apparent debt was one missing build artifact.**
 
-The lesson is procedural, not incidental: any type-aware lint run in this repo is meaningless unless `pnpm db:generate && pnpm --filter @lp-ai/lib-db build` has run first. CI needs that ordering too, or it will report the inflated number.
+The lesson is procedural, not incidental: any type-aware lint run in this repo is meaningless unless `pnpm db:generate && pnpm --filter @lp-ai/lib-db build` has run first.
+
+`ci.yml` already gets this ordering right — generate, push, `pnpm -r build`, typecheck, test. The gap there is different: **CI never runs lint at all.** Adding a lint step after the build step would report the honest number; adding it anywhere earlier would report the inflated one. Until it is added, nothing enforces the config we just turned on.
 
 ### Where the 415 sits
 
