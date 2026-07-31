@@ -127,6 +127,9 @@ importers:
       '@lp-ai/lib-embedding':
         specifier: workspace:*
         version: link:../../packages/embedding
+      '@lp-ai/lib-grants':
+        specifier: workspace:*
+        version: link:../../packages/grants
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.29.0(zod@3.25.76)
@@ -164,22 +167,6 @@ importers:
         version: 5.9.3
 
   connectors/bigquery:
-    dependencies:
-      '@lp-ai/lib-config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@lp-ai/lib-db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      zod:
-        specifier: ^3.23.0
-        version: 3.25.76
-    devDependencies:
-      typescript:
-        specifier: ^5.4.5
-        version: 5.9.3
-
-  connectors/givebutter:
     dependencies:
       '@lp-ai/lib-config':
         specifier: workspace:*
@@ -342,6 +329,16 @@ importers:
       openai:
         specifier: ^4.52.0
         version: 4.104.0(zod@3.25.76)
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+
+  packages/grants:
+    dependencies:
       zod:
         specifier: ^3.23.0
         version: 3.25.76
