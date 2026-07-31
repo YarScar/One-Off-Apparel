@@ -32,6 +32,7 @@ export function pySplit(text: string): string[] {
  * encoding error. It costs nothing and removes the class.
  */
 export function pyLen(text: string): number {
+  // eslint-disable-next-line @typescript-eslint/no-misused-spread -- code points are the contract
   return [...text].length;
 }
 

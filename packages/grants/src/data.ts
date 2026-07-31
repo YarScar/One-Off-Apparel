@@ -64,13 +64,13 @@ function readJson(path: string): unknown {
     raw = readFileSync(path, 'utf8');
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    throw new Error(`grant seed: cannot read ${path} — ${reason}`);
+    throw new Error(`grant seed: cannot read ${path} — ${reason}`, { cause: err });
   }
   try {
     return JSON.parse(raw);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    throw new Error(`grant seed: ${path} is not valid JSON — ${reason}`);
+    throw new Error(`grant seed: ${path} is not valid JSON — ${reason}`, { cause: err });
   }
 }
 

@@ -42,6 +42,7 @@ export function truncatePreview(text: string, unit: Unit, max: number): string {
       return `${pySplit(text).slice(0, max).join(' ')} …`;
     case 'characters':
     case 'chars':
+      // eslint-disable-next-line @typescript-eslint/no-misused-spread -- must match pyLen's count
       return `${pyRstrip([...text].slice(0, Math.max(0, max - 1)).join(''))}…`;
     case 'sentences':
       return pySplitSentences(text).slice(0, max).join(' ');

@@ -164,7 +164,11 @@ function findLongestMatch(
  * preserves their total size. Blocks come back in the queue's discovery order, not sorted.
  */
 export function matchingBlocks(a: string, b: string): readonly MatchingBlock[] {
+  // Code points, not UTF-16 units: CPython iterates `str` by code point, and G2 parity is
+  // asserted exactly. Grapheme segmentation would diverge from difflib.
+  /* eslint-disable-next-line @typescript-eslint/no-misused-spread -- see above */
   const ax = [...a];
+  /* eslint-disable-next-line @typescript-eslint/no-misused-spread -- see above */
   const bx = [...b];
   const { b2j } = chainB(bx);
 
@@ -207,5 +211,6 @@ export function sequenceRatio(a: string, b: string): number {
  * the heuristic fired. Empty whenever `b` is shorter than {@link AUTOJUNK_MIN_LENGTH}.
  */
 export function autojunkedCharacters(b: string): ReadonlySet<string> {
+  // eslint-disable-next-line @typescript-eslint/no-misused-spread -- code points, as CPython does
   return chainB([...b]).popular;
 }

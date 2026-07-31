@@ -77,7 +77,7 @@ describe('matchQuestion', () => {
   it('matches every recorded funder variant confidently', () => {
     const failures: string[] = [];
     for (const q of bank.questions) {
-      for (const v of q.variants ?? []) {
+      for (const v of q.variants) {
         const r = matchQuestion(v.text, bank);
         if (!r.is_confident) {
           failures.push(`variant of ${q.id} scored only ${String(r.confidence)}: ${v.text.slice(0, 40)}`);

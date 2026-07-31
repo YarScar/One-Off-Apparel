@@ -19,7 +19,7 @@ describe('seed loader', () => {
     expect(bank.categories).toHaveLength(11);
     expect(bank.questions).toHaveLength(82);
     expect(bank.kb_entries).toHaveLength(29);
-    const variants = bank.questions.reduce((n, q) => n + (q.variants?.length ?? 0), 0);
+    const variants = bank.questions.reduce((n, q) => n + q.variants.length, 0);
     expect(variants).toBe(211);
   });
 

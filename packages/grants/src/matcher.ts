@@ -152,11 +152,11 @@ export function matchQuestion(
   for (const q of bank.questions) {
     let s = score(tokens, q.canonical);
     let via: MatchedVia = 'canonical';
-    for (const v of q.variants ?? []) {
+    for (const v of q.variants) {
       const vs = score(tokens, v.text);
       if (vs > s) {
         s = vs;
-        via = v.source ?? 'variant';
+        via = v.source;
       }
     }
     if (s > bestScore) {
