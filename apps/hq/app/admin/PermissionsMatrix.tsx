@@ -7,11 +7,22 @@ const CATEGORY_LABELS: Record<string, string> = {
   donor_finance: 'Donors & Finance',
   search: 'Cross-cutting search',
   skills: 'Skills',
+  grants: 'Grant writing',
   future: 'Future / not yet implemented',
   other: 'Other',
 };
 
-const CATEGORY_ORDER = ['students', 'donor_finance', 'search', 'skills', 'future', 'other'];
+// A category missing from this array is silently dropped from the matrix below, so any new
+// tool_permissions category must be added here as well as to CATEGORY_LABELS.
+const CATEGORY_ORDER = [
+  'students',
+  'donor_finance',
+  'search',
+  'skills',
+  'grants',
+  'future',
+  'other',
+];
 
 interface ToolRow {
   toolName: string;
