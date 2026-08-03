@@ -8,15 +8,40 @@
  */
 
 /**
+ * The characters Python considers whitespace, which are NOT the characters JS `\s` matches.
+ *
+ * `str.split()` uses `Py_UNICODE_ISSPACE`, and the two sets differ at both ends:
+ *
+ * - Python treats U+001C–U+001F (the file/group/record/unit separators) and U+0085 (NEL) as
+ *   whitespace; JS `\s` does not. U+0085 in particular rides in on text pasted out of Word or Google
+ *   Docs, and a run of it would be counted into the middle of a token, reporting one word fewer than
+ *   Python against a hard funder cap.
+ * - JS `\s` matches U+FEFF (BOM); Python does not. A leading BOM on a pasted answer is one word in
+ *   Python and zero in a naive port.
+ *
+ * As with {@link pyLen}, this is a latent class rather than an observed bug — no such character is in
+ * the seed today. It is spelled out because the fix is free and the failure would present as an
+ * arithmetic error in the one part of the layer that is supposed to be pure arithmetic.
+ */
+const PY_SPACE_CLASS =
+  '\\t\\n\\v\\f\\r\\x1c\\x1d\\x1e\\x1f \\x85\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
+
+const PY_SPACE_RUN = new RegExp(`[${PY_SPACE_CLASS}]+`, 'g');
+const PY_SPACE_LEADING = new RegExp(`^[${PY_SPACE_CLASS}]+`);
+const PY_SPACE_TRAILING = new RegExp(`[${PY_SPACE_CLASS}]+$`);
+/** Split point for {@link pySplitSentences}: terminal punctuation followed by Python whitespace. */
+const PY_SENTENCE_BREAK = new RegExp(`(?<=[.!?])[${PY_SPACE_CLASS}]+`);
+
+/**
  * Python's `str.split()` with no argument: splits on runs of whitespace, strips leading and
  * trailing whitespace, and returns `[]` for an all-whitespace string.
  *
  * The trap: `''.split(/\s+/)` is `['']` (length 1), so a naive port reports an empty answer as
- * 1 word.
+ * 1 word. Whitespace is {@link PY_SPACE_CLASS}, not JS `\s`.
  */
 export function pySplit(text: string): string[] {
-  const trimmed = text.trim();
-  return trimmed === '' ? [] : trimmed.split(/\s+/);
+  const trimmed = text.replace(PY_SPACE_LEADING, '').replace(PY_SPACE_TRAILING, '');
+  return trimmed === '' ? [] : trimmed.split(PY_SPACE_RUN);
 }
 
 /**
@@ -41,7 +66,7 @@ export function pyLen(text: string): number {
  * leading side, which would corrupt a truncation preview.
  */
 export function pyRstrip(text: string): string {
-  return text.replace(/\s+$/, '');
+  return text.replace(PY_SPACE_TRAILING, '');
 }
 
 /**
@@ -51,7 +76,7 @@ export function pyRstrip(text: string): string {
  * counting and another for truncating, and unifying them changes output.
  */
 export function pyCountSentences(text: string): number {
-  return text.split(/[.!?]+/).filter((s) => s.trim() !== '').length;
+  return text.split(/[.!?]+/).filter((s) => pySplit(s).length > 0).length;
 }
 
 /**
@@ -59,7 +84,7 @@ export function pyCountSentences(text: string): number {
  * sentence it ends.
  */
 export function pySplitSentences(text: string): string[] {
-  return text.split(/(?<=[.!?])\s+/);
+  return text.split(PY_SENTENCE_BREAK);
 }
 
 /**

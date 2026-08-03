@@ -123,7 +123,7 @@ work order is data, not a typed call.
 | Package management | pnpm workspaces, Node 22 | `@lp-ai/lib-grants` is a workspace member, so it takes part in `pnpm -r build` and `-r typecheck`. |
 | Language | TypeScript strict, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess` | `TAD.md` §1.3. No `any`, named exports only, explicit return types on exports. |
 | Validation | zod | Every seed file has a schema in `src/schemas.ts`. The loader reports integrity at load time, lazily and memoised (`TAD.md` decision 4). |
-| Tests | vitest | 43 tests in this package. No network, no database, no mocking — a property of decision 6, not an accident. Keep it. |
+| Tests | vitest | 79 tests in this package. No network, no database, no mocking — a property of decision 6, not an accident. Keep it. |
 | Lint | eslint + typescript-eslint `strictTypeChecked` | `packages/grants` is clean. **Any type-aware lint run needs `pnpm db:generate && pnpm --filter @lp-ai/lib-db build` first**, or the number is meaningless — `NEXT-SESSION.md` explains the 1,962-to-415 correction. |
 | Database | Prisma 7, Postgres in Docker | Use `pnpm db:migrate`. **Never `db:push`** — refer to §5.2. |
 | CI | GitHub Actions, pgvector service container | Runs on pull request. Refer to §5.2 before treating it as proof. |
@@ -141,7 +141,7 @@ pnpm --filter @lp-ai/lib-grants lint        # clean today; keep it that way
 
 pnpm db:up && pnpm db:migrate               # local schema, including the tool_permissions rows
 pnpm --filter @lp-ai/mcp-server build       # prerequisite for `pnpm test`, not optional
-pnpm test                                   # full suite: 82 tests, 8 files
+pnpm test                                   # full suite: 131 tests, 10 files
 ```
 
 ---
@@ -156,9 +156,9 @@ corrections that matter to a reader coming from an older document in this folder
 | Claim | State |
 |---|---|
 | Local development | **Works.** Postgres 16.14, `vector 0.8.6`, `pg_trgm 1.6`, 13 migrations applied. |
-| Full suite | 82 tests across 8 files, all passing, zero skipped — including the suite that spawns the real MCP server over stdio. |
+| Full suite | 131 tests across 10 files, all passing, zero skipped — including the suite that spawns the real MCP server over stdio. |
 | Tool surface | 21 registered. Every one has a `tool_permissions` row, so nothing fails closed today. |
-| This package | 43 tests, 7 modules, `grant_match_question` registered — 1 tool of 3. |
+| This package | 92 tests, 7 modules, `grant_match_question` registered — 1 tool of 3. |
 | Gates | **G1 passed 2026-08-03, locally.** **G2 passed exactly.** G3, G4, G5 not started. |
 
 **`NEXT-SESSION.md` is stale on one point.** It records the local database as unavailable and item 3

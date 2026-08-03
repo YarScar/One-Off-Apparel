@@ -27,6 +27,145 @@ entry can be verified rather than trusted.
 
 ## 2026-08-03
 
+### Fixed — mutation audit of the test suite: the integrity checker had no test that could fail, and the skip bound's soundness was argued but not asserted
+
+The suite was audited by breaking the code on purpose — 16 single-line mutations across `data.ts`,
+`limits.ts`, `py.ts`, `matcher.ts`, and `seq-ratio.ts`, each run against the full suite to see whether
+any test noticed. 13 were caught. Three survived: two of them disabled integrity checks (item 1) and
+one tightened the matcher's skip bound (item 2). **If you have a local clone:** `pnpm test` — expect
+**131 passing across 10 files**, up from 118.
+
+1. **The entire integrity report engine could be deleted with the suite still green.** Replacing
+   `loadIntegrityReport()`'s body with `return []` failed nothing; so did disabling any individual
+   check. Every assertion on it said the report is *empty* on the current seed, which a working
+   checker on a clean seed and a checker that has stopped firing produce identically — and the
+   latter is the failure that matters, because these warnings are what tells staff a KB slot was
+   renamed out from under a question or a figure check. The seven checks account for ~130 lines that
+   nothing exercised.
+
+   The pure checks are now `computeIntegrityReport(bank, kb)` in `src/data.ts`; `loadIntegrityReport()`
+   is the memoised wrapper over the seed on disk, unchanged in behaviour. `src/data.test.ts` runs each
+   of the seven codes against a mutated deep copy of the real seed — a declared slot with no answer, a
+   renamed figure slot, an attachment question on a narrative slot, and so on — and asserts the code,
+   the severity, and that the message names the offending id. It also pins the two near-miss cases the
+   checks must *not* flag: a `null` `kb_ref`, and an attachment question correctly routed to
+   `kb.docs`. Mutating the checker now fails 8 tests where it previously failed none.
+
+2. **`matchQuestion()`'s bounded skip could be tightened to `0.7 * J + 0.25` with the suite green.**
+   The skip is only exact while `0.7 * J + 0.3` is a true upper bound on the blended score, and both
+   the full-scan reference test and the prototype parity fixture are input-dependent: they diverge
+   only if the bank happens to hold a candidate the tighter bound wrongly skips. At 0.25 none did, so
+   an unsound optimization looked identical to a sound one. The bound is now
+   `scoreUpperBound(jaccard)` — one exported function, the only place the constant lives — and
+   `matcher.test.ts` asserts it against every one of the ~35,400 blended scores a reference pass computes
+   in full. Both 0.25 and 0.299 now fail.
+
+Two smaller items, no behaviour change: `pyLen`'s test asserted `'🚀'.length === 2`, a claim about
+JavaScript that no change to this package can falsify, alongside a BMP-only case (`—≥⚠✅`) that passes
+under a plain `.length` too and so proved nothing; it now uses a mixed astral string that does not.
+Nothing else in the audit needed changing — the sequence-ratio parity fixture, the autojunk cases, the
+`limits.ts` verdict and preview rules, and every `py.ts` primitive all caught their mutations,
+including the ones that reintroduced the original bugs those tests were written for.
+
+### Fixed — code review of `packages/grants`: a parity gate that had stopped covering the bank, and five latent defects
+
+A review of the package and its build wiring. All 43 tests, typecheck, and lint passed before it, so
+every item was either latent or a gate that had quietly stopped checking what it claimed. **If you
+have a local clone:** nothing to run beyond `pnpm test` — expect **118 passing across 10 files**, up
+from 82 across 8, because `limits.ts` and `py.ts` had no test file at all and now have one each.
+
+1. **The G2 `difflib` parity fixture had gone stale, and the assertions could not detect it.**
+   `src/__fixtures__/seq-ratio-parity.json` was generated on 2026-07-29 against the 82-question /
+   211-variant bank and never regenerated for v0.4.0. 35 of the current 322 candidate strings were
+   absent from it, including three of the six that now cross the 200-character autojunk threshold —
+   `program.description`/WPF-2026 (352 chars), `organization.history`/JEVS-C2L (244), and
+   `organization.why_this_funder`/Hamilton-2025 (221), the longest and most autojunk-exposed strings
+   the v0.4.0 bank added. The suite stayed green because it asserted `pairs.length > 28_000` and
+   `autojunk_candidates` `toHaveLength(3)`, both of which a stale fixture satisfies. So "G2 parity is
+   intact — all 28,690 ratios unchanged", in the entry below, was true of the pairs recorded and
+   silent about the ones that were not.
+
+   Fixed three ways. The fixture was regenerated: **58,926 of 58,926 pairs reproduce CPython 3.14.6
+   exactly**, and a control pass confirmed all 26,098 pairs carried over from the old fixture are
+   bit-identical, so the new harness is not quietly a different measurement. Coverage now spans every
+   candidate as `b`, every canonical and every captured form question as `a`, and every
+   autojunk-crossing candidate in both orientations. The assertions are derived from the live bank
+   rather than hard-coded — a candidate the fixture has never compared against CPython now fails
+   `seq-ratio.test.ts`. And the generator, which had never been checked in, is now
+   `scripts/regenerate-seq-ratio-parity.py` plus `scripts/dump-parity-strings.ts`; it needs no
+   prototype checkout, since `ratio()` is CPython stdlib, and it takes its normalized strings from
+   this package's own `normalize()` so the fixture cannot disagree with the port about tokenization.
+
+2. **`scripts/regenerate-matcher-parity.py` silently skipped every form fixture.** `REPO_ROOT =
+   parents[2]` resolved to `<repo>/packages`, so `repo_seed` pointed at a nonexistent
+   `packages/seed`; `Path.glob` on a missing directory yields nothing, so `form_texts()` returned
+   `[]` while the harness printed success. The documented procedure's "appends any new bank texts
+   **and form-fixture question texts**" had never done the second half. Now `parents[1]`, and
+   `form_texts()` raises on a missing directory rather than returning empty. Verified: 106 form
+   question texts are found, all 106 already covered by the checked-in fixture, so no regeneration
+   was needed — which is why this never surfaced. The next transcribed funder form would have been
+   the first to go missing.
+
+3. **Nothing validated the KB slot ids in `FIGURE_CHECKS`.** `loadIntegrityReport()` checked question
+   `kb_ref`s and the `kb_launchpad.json` meta prose, but not `figures.ts`. Since
+   `buildFigureWorkOrder()` scopes by intersecting `appears_in` with the caller's slots, one renamed
+   KB slot would have dropped a `severity: 'high'` check — `employment_earnings_total`, say — out of
+   every scoped work order, and the draft would publish the frozen `$350,268` with no verification
+   step and no warning. That is the exact failure `figures.ts` exists to prevent. Added the
+   `figure_check_ref_dangling` warning in `src/data.ts` and a test. All 26 refs resolve today.
+
+4. **Four Dockerfiles' `deps` stages were missing three workspace manifests.** `packages/grants`,
+   `connectors/bigquery`, and `connectors/roam` were absent from the `COPY */package.json` list in
+   all of `apps/{mcp-server,aws-mcp-server,hq,sync}/Dockerfile` — 11 of the lockfile's 14 importers.
+   The images build today only because grants' one dependency (`zod`) is already in the lockfile via
+   other packages; the first grants-only dependency would fail the builder's `pnpm install
+   --frozen-lockfile --offline` with `ERR_PNPM_NO_OFFLINE_TARBALL`. Verified by reproducing the deps
+   stage in a scratch directory: with the three added, pnpm resolves all 14 importers and leaves
+   `pnpm-lock.yaml` byte-identical.
+
+5. **`measure()` read its verdict off the rounded display ratio, and accepted `max: 0`.** At 4.04x
+   the ratio rounds to 4.0, compared false against `MAX_COMPRESSION_RATIO`, and came back
+   `over_limit` with "cut the least-essential supporting detail" guidance for a text needing more
+   than the 4x compression that constant exists to refuse. The verdict now uses the exact ratio and
+   the display keeps rounding. `max` is validated as a positive integer — it is a public export and
+   the seed schemas are not the only caller, so `max: 0` previously produced `ratio: Infinity` and
+   guidance reading "(Infinityx)".
+
+6. **A sentence-unit preview could itself be over the limit, and was unmarked.** `truncatePreview`
+   splits with `pySplitSentences` (terminal punctuation *plus* whitespace) while `countUnits` counts
+   with `pyCountSentences` (punctuation alone). Any decimal figure splits the two rules apart, and
+   grant narrative is made of decimal figures: `'Our FY2025 budget is $1.34M. We serve 145 young
+   people.'` is two chunks to the splitter and three sentences to the counter, so slicing to `max = 2`
+   chunks returned the whole string as a "preview" that re-measures as `over_limit`. The branch now
+   keeps chunks only while the counter agrees they fit, and marks the cut with `…` like the `words`
+   and `characters` branches always did. Both prototype rules are unchanged — neither can move. One
+   stated exception: when not even the first chunk fits, it is kept anyway, because an empty preview
+   tells a reviewer nothing and cutting inside the chunk would mangle the figure.
+
+7. **`pySplit`, `pyRstrip`, and `pySplitSentences` used JS `\s`, which is not Python's whitespace
+   set.** Python treats U+001C–U+001F and U+0085 as whitespace and JS does not; JS matches U+FEFF and
+   Python does not. Nothing in the seed hits either case today, but U+0085 rides in on text pasted
+   out of Word or Drive, and the result would be a word count off by one against a hard funder cap —
+   the same latent class `pyLen` is documented for. All three now use an explicit Python whitespace
+   class, and `pyCountSentences` counts blank pieces by the same rule.
+
+8. **`matchQuestion` re-normalized all 322 candidates on every call.** With `grant_match_question`
+   accepting up to 200 questions, one call burned ~1.7 s of synchronous CPU in the single-threaded
+   HTTP server, blocking every other request and `/health` for that window. Candidates are now
+   normalized once per bank (`WeakMap`-keyed), and a candidate whose `0.7 * J + 0.3` upper bound
+   cannot beat the incumbent skips the `difflib` call entirely. That second part is exact, not a
+   heuristic — `sequenceRatio ≤ 1` and IEEE `+`/`*` are monotone, so the bound never sits below the
+   true score, and a candidate only ever wins on a strictly greater score. A 200-question batch of
+   real form questions went from ~1.7 s to 0.53 s. **Worst case is unchanged in kind:** 200 questions
+   that match nothing keep the incumbent low enough that the bound never bites, and still cost ~1.2 s.
+   Guarded by a new test that pins the result against a full-scan reference matcher on every captured
+   form question and every autojunk-crossing candidate, in addition to the 377-case prototype fixture.
+
+Also corrected, mechanically: the autojunk table in `src/seq-ratio.ts` (293 candidates and three
+crossings, now 322 and six), and the suite counts in `CLAUDE.md` §3 and §6, `docs/runbooks/local-dev.md`,
+`admin/ARCHITECTURE.md`, `admin/SPEC.md`, and `README.md`. The dated G2 result table in `admin/SPEC.md`
+§5 is left as the 2026-07-29 record, with the re-verification noted beneath it.
+
 ### Fixed — the grant layer now builds as part of the MCP image; the regeneration harness is dev-only tooling
 
 Two deploy-path corrections that land with the v0.4.0 bank below. **If you have a local clone:**

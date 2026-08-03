@@ -36,7 +36,7 @@ pnpm db:seed
 #    the unhelpful failure `RPC initialize timed out`.
 pnpm --filter @lp-ai/mcp-server build
 
-# 7. Verify — expect 82 passed, 0 skipped, 8 files
+# 7. Verify — expect 131 passed, 0 skipped, 10 files
 pnpm -r typecheck
 pnpm test
 ```

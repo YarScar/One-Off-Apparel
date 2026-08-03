@@ -38,7 +38,8 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# .../packages/grants/scripts/this.py -> parents[1] is packages/grants, which owns seed/.
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
@@ -74,7 +75,7 @@ def main() -> int:
     fixture_path = args.fixture
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
     bank = json.loads(bank_path.read_text(encoding="utf-8"))
-    repo_seed = REPO_ROOT / "seed"
+    repo_seed = PACKAGE_ROOT / "seed"
 
     inputs = build_inputs(bank, fixture, repo_seed)
     cases = []
@@ -133,9 +134,18 @@ def all_bank_texts(bank: dict) -> list[str]:
 
 
 def form_texts(repo_seed: Path) -> list[str]:
-    """Every question text across the repo's form fixtures."""
+    """
+    Every question text across the repo's form fixtures.
+
+    Fails loudly on a missing directory. `Path.glob` on one that does not exist yields nothing, so a
+    wrong `repo_seed` silently returned `[]` here while the harness still printed success — the form
+    fixtures had never entered the parity fixture, and the next transcribed funder form never would.
+    """
+    forms = repo_seed / "forms"
+    if not forms.is_dir():
+        raise SystemExit(f"error: {forms} is not a directory. Check the seed path.")
     texts: list[str] = []
-    for fixture in sorted((repo_seed / "forms").glob("*.json")):
+    for fixture in sorted(forms.glob("*.json")):
         with open(fixture, encoding="utf-8") as fh:
             data = json.load(fh)
         for q in data.get("questions", []):

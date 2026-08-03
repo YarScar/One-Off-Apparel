@@ -6,7 +6,7 @@ A working prototype proves the method and runs today. This package moves that me
 
 **Scope: grant writing only.** Funder eligibility and fit scoring belong to the Data and Prospecting team and are not in this package.
 
-**Status.** Release gates G1 and G2 have both passed — see [`admin/SPEC.md`](./admin/SPEC.md) section 1. G1 passed on 2026-08-03, and the claim is local: nothing is verified against production. The seed data and seven modules are landed with 43 passing tests, and `grant_match_question` is registered in the MCP server. G2 was the parity risk gate and it passed exactly: 28,690 of 28,690 `difflib` ratios and all 337 recorded matcher results reproduce. `grant_build_draft` (G3) and `grant_resize_answer` (G4) are next. The package is a pnpm workspace member, so it takes part in the build.
+**Status.** Release gates G1 and G2 have both passed — see [`admin/SPEC.md`](./admin/SPEC.md) section 1. G1 passed on 2026-08-03, and the claim is local: nothing is verified against production. The seed data and seven modules are landed with 79 passing tests, and `grant_match_question` is registered in the MCP server. G2 was the parity risk gate and it passed exactly: 58,926 of 58,926 `difflib` ratios and all 377 recorded matcher results reproduce. `grant_build_draft` (G3) and `grant_resize_answer` (G4) are next. The package is a pnpm workspace member, so it takes part in the build.
 
 ## Start here
 

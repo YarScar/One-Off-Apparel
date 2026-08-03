@@ -84,9 +84,11 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **82 tests across 8 files,
-all passing, zero skipped**, including the integration suite that spawns the real MCP server over
-stdio.
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **131 tests across 10
+files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
+over stdio. (82 across 8 before 2026-08-03, when the code review added suites for `limits.ts` and
+`py.ts`, which had none; 118 before the mutation audit later that day added the integrity-checker and
+skip-bound cases.)
 
 Use `pnpm db:migrate`, never `db:push`, for local setup. `db push` writes no migration SQL, so the
 `tool_permissions` rows never land and every tool call fails closed. This is not a preference — it is
@@ -102,8 +104,10 @@ implementation; Slack awaits `SLACK_BOT_TOKEN`.
 
 **Grant writing layer:** **G1 and G2 have both passed.** G3 is the frontier and has not started.
 
-- **G1 half 1 proven** — `packages/grants/src/data.test.ts` passes 10/10 and asserts the seed
-  integrity report is empty, so it cannot silently regress.
+- **G1 half 1 proven** — `packages/grants/src/data.test.ts` passes 23/23. It asserts the seed
+  integrity report is empty, so a defect cannot regress silently, *and* exercises each of the seven
+  checks against a corpus that has the defect — an empty report proves the seed is clean only if the
+  checker still fires, and until 2026-08-03 nothing tested that.
 - **G1 half 2 proven** — "the three tools resolve in the ACL", verified 2026-08-03 through
   `dist/serve-http.js` with real bearer tokens. A `leadership` caller succeeded, a `program_staff`
   caller was refused with `permission_denied`, and both calls landed in `usage_logs` with the caller
@@ -186,7 +190,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 82 passed, 0 skipped, 8 files.
+# Full suite — expect 131 passed, 0 skipped, 10 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

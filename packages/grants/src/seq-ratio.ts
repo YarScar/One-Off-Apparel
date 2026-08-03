@@ -18,21 +18,25 @@
  *
  * **1. Autojunk fires on the real bank.** When the second sequence reaches 200 characters,
  * `SequenceMatcher` treats any character occurring more than `len(b) // 100 + 1` times as
- * "popular" and drops it from the index. Measured over the bank's 293 candidate token-strings
- * (82 canonical + 211 variants), three cross that threshold:
+ * "popular" and drops it from the index. Measured over the bank's 322 unique candidate token-strings
+ * (87 canonical + 247 variants, deduplicated), six cross that threshold at bank v0.4.0:
  *
- * | Question id                  | Variant source  | Normalized length |
- * |------------------------------|-----------------|-------------------|
- * | `program.description`        | `GSK-STEM-2026` | 201               |
- * | `program.equitable_access`   | `GEPA-427`      | 210               |
- * | `program.partnerships`       | `PAsmart`       | 215               |
+ * | Question id                    | Variant source  | Normalized length |
+ * |--------------------------------|-----------------|-------------------|
+ * | `program.description`          | `GSK-STEM-2026` | 201               |
+ * | `program.equitable_access`     | `GEPA-427`      | 210               |
+ * | `program.partnerships`         | `PAsmart`       | 215               |
+ * | `organization.why_this_funder` | `Hamilton-2025` | 221               |
+ * | `organization.history`         | `JEVS-C2L`      | 244               |
+ * | `program.description`          | `WPF-2026`      | 352               |
  *
- * All three are variants rather than canonical phrasings, and all three sit in the `program`
- * category — the heuristic fires exactly where funder wording runs longest. Skipping it would
- * silently mis-score them.
+ * All six are variants rather than canonical phrasings — the heuristic fires exactly where funder
+ * wording runs longest. Skipping it would silently mis-score them. Do not maintain this table by
+ * hand: `seq-ratio.test.ts` derives the set from the live bank and fails if the parity fixture has
+ * not been regenerated for it.
  *
  * **2. The function is asymmetric.** Autojunk is computed over `b` alone, so `ratio(x, y)` and
- * `ratio(y, x)` differ for those three rows. In `matcher.py`, `a` is the *incoming* question and
+ * `ratio(y, x)` differ for those six rows. In `matcher.py`, `a` is the *incoming* question and
  * `b` is the *candidate*. Do not swap them.
  *
  * **3. Popular characters are dropped from the index but are not junk.** CPython keeps `bpopular`

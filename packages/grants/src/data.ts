@@ -18,6 +18,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// FIGURE_CHECKS is read inside loadIntegrityReport() only, never at module evaluation, so this
+// import cycle (data -> figures -> data) is safe in both load orders.
+import { FIGURE_CHECKS } from './figures.js';
 import {
   incomingFormSchema,
   knowledgeBaseSchema,
@@ -133,15 +136,19 @@ export function __resetSeedCacheForTesting(): void {
 const ATTACHMENT_SLOTS: ReadonlySet<string> = new Set(['kb.docs', 'kb.budget_narrative']);
 
 /**
- * Cross-file consistency checks over the writing corpus, computed once. Warnings render alongside
- * results; they never block. Tools echo the relevant slice as `integrity_warnings`.
+ * Cross-file consistency checks over the writing corpus. Warnings render alongside results; they
+ * never block. Tools echo the relevant slice as `integrity_warnings`.
+ *
+ * Separate from {@link loadIntegrityReport} so the checks can be exercised on a corpus that actually
+ * has the defect. Asserting the report is empty on the real seed proves the seed is clean; it proves
+ * nothing about the checker, and a check that has silently stopped firing looks exactly like a clean
+ * seed from the outside.
  */
-export function loadIntegrityReport(): readonly IntegrityWarning[] {
-  if (integrityCache !== undefined) return integrityCache;
-
+export function computeIntegrityReport(
+  bank: QuestionBank,
+  kb: KnowledgeBase,
+): readonly IntegrityWarning[] {
   const out: IntegrityWarning[] = [];
-  const bank = loadBank();
-  const kb = loadKnowledgeBase();
   const kbKeys = new Set(Object.keys(kb.answers));
 
   // -- kb_entries <-> answers must stay 1:1 ------------------------------------------------
@@ -201,6 +208,32 @@ export function loadIntegrityReport(): readonly IntegrityWarning[] {
     });
   }
 
+  // -- FIGURE_CHECKS appears_in slots must resolve -----------------------------------------
+  // `buildFigureWorkOrder()` scopes by intersecting `appears_in` with the caller's kb_refs, so a
+  // slot renamed in kb_launchpad.json silently drops its check from every scoped work order — the
+  // draft then publishes the frozen figure with no verification step and no warning, which is the
+  // failure figures.ts exists to prevent. Nothing else validates these ids: the checks above cover
+  // question kb_refs and the meta prose, not figures.ts. Content-gap checks carry no `appears_in`.
+  const danglingFigureRefs = [
+    ...new Set(
+      FIGURE_CHECKS.flatMap((check) => check.appears_in).filter((ref) => !kbKeys.has(ref)),
+    ),
+  ].sort();
+  if (danglingFigureRefs.length > 0) {
+    const affected = FIGURE_CHECKS.filter((c) => c.appears_in.some((r) => !kbKeys.has(r)))
+      .map((c) => `${c.key} (${c.severity})`)
+      .sort();
+    out.push({
+      severity: 'high',
+      code: 'figure_check_ref_dangling',
+      message:
+        `FIGURE_CHECKS in figures.ts names KB slot(s) that do not exist in answers: ` +
+        `${danglingFigureRefs.join(', ')}. Every scoped work order silently omits the check(s) ` +
+        `${affected.join(', ')}, so those frozen figures publish unverified. Fix appears_in in ` +
+        `figures.ts to the current slot id — do not create the slot, kb_entries and answers are 1:1.`,
+    });
+  }
+
   // -- attachment questions pointing at narrative KB prose --------------------------------
   // An attachment question needs a document, not text, so its stored answer is a checklist of what
   // to attach — never the answer itself. That does not make every kb_ref on an attachment question
@@ -239,6 +272,11 @@ export function loadIntegrityReport(): readonly IntegrityWarning[] {
     });
   }
 
-  integrityCache = out;
+  return out;
+}
+
+/** {@link computeIntegrityReport} over the seed on disk, computed once. */
+export function loadIntegrityReport(): readonly IntegrityWarning[] {
+  integrityCache ??= computeIntegrityReport(loadBank(), loadKnowledgeBase());
   return integrityCache;
 }

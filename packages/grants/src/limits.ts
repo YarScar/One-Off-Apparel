@@ -35,6 +35,22 @@ export function countUnits(text: string, unit: Unit): number {
  * Hard truncation, for PREVIEW ONLY. This is never a usable answer — it exists so a reviewer can
  * see how far over the limit the stored text runs, and as a last-resort fallback a person can trim
  * by hand. Real shortening is a rewrite.
+ *
+ * Every branch marks the cut with `…`, and the contract is on the content *before* that marker: it
+ * measures at or under `max` per {@link countUnits} — with one stated exception, the sentence case
+ * where not even the first chunk fits. The marker itself is not content and is not
+ * counted — under the sentence and word rules it would count as a unit of its own, so a preview that
+ * re-measured within the cap *including* the marker would have to drop a real unit to make room for
+ * punctuation. The `characters` branch reserves a slot for it because a character cap is the one case
+ * where the marker's own width plausibly matters to a reviewer eyeballing the field.
+ *
+ * The sentence branch cannot simply slice: {@link pySplitSentences} breaks on terminal punctuation
+ * followed by whitespace while {@link pyCountSentences} breaks on the punctuation alone. Any decimal
+ * figure splits the two rules apart — `'Our FY2025 budget is $1.34M. We serve 145 young people.'` is
+ * two chunks to the splitter and three sentences to the counter — and grant narrative is made of
+ * decimal figures. Both rules come from the prototype and neither can move, so the branch keeps
+ * chunks only while the counter still agrees the result fits; slicing to `max` chunks returned that
+ * whole example as a two-sentence "preview" that re-measures as three.
  */
 export function truncatePreview(text: string, unit: Unit, max: number): string {
   switch (unit) {
@@ -44,8 +60,18 @@ export function truncatePreview(text: string, unit: Unit, max: number): string {
     case 'chars':
       // eslint-disable-next-line @typescript-eslint/no-misused-spread -- must match pyLen's count
       return `${pyRstrip([...text].slice(0, Math.max(0, max - 1)).join(''))}…`;
-    case 'sentences':
-      return pySplitSentences(text).slice(0, max).join(' ');
+    case 'sentences': {
+      const chunks = pySplitSentences(text);
+      const kept: string[] = [];
+      for (const chunk of chunks) {
+        if (kept.length > 0 && pyCountSentences([...kept, chunk].join(' ')) > max) break;
+        kept.push(chunk);
+      }
+      // The first chunk is always kept, even when it alone counts as more than `max` sentences —
+      // an empty preview tells a reviewer nothing. The marker still says it was cut.
+      const preview = kept.join(' ');
+      return kept.length === chunks.length ? preview : `${preview} …`;
+    }
   }
 }
 
@@ -77,14 +103,25 @@ export interface MeasureInput {
 
 export function measure(input: MeasureInput): Measurement {
   const { text, unit, max } = input;
+  // The seed schemas enforce `positive()`, but this is a public export and the tool layer is not the
+  // only caller. `max: 0` would otherwise produce `ratio: Infinity` and guidance reading "(Infinityx)".
+  if (!Number.isInteger(max) || max < 1) {
+    throw new Error(`measure: max must be a positive integer number of ${unit}, got ${String(max)}`);
+  }
+
   const count = countUnits(text, unit);
   const fits = count <= max;
   const overBy = fits ? 0 : count - max;
-  const ratio = Math.round((count / max) * 10) / 10;
+  const exactRatio = count / max;
+  const ratio = Math.round(exactRatio * 10) / 10;
 
+  // Verdict from the exact ratio, not the rounded one. At 4.04x the display rounds to 4.0, and
+  // reading the verdict off that value called it `over_limit` with "cut the least-essential
+  // supporting detail" guidance — for a text needing more than the 4x compression that
+  // MAX_COMPRESSION_RATIO exists to refuse.
   const verdict: FitVerdict = fits
     ? 'fits'
-    : ratio > MAX_COMPRESSION_RATIO
+    : exactRatio > MAX_COMPRESSION_RATIO
       ? 'compression_infeasible'
       : 'over_limit';
 

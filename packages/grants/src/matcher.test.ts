@@ -4,16 +4,18 @@ import { fileURLToPath } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { __resetSeedCacheForTesting, loadBank } from './data.js';
+import { __resetSeedCacheForTesting, listFormIds, loadBank, loadForm } from './data.js';
 import {
   DEFAULT_THRESHOLD,
   matchForm,
   matchQuestion,
   normalize,
+  scoreUpperBound,
   weightedJaccard,
   type MatchResult,
 } from './matcher.js';
 import type { QuestionBank } from './schemas.js';
+import { sequenceRatio } from './seq-ratio.js';
 
 let bank: QuestionBank;
 
@@ -114,6 +116,96 @@ describe('matchForm', () => {
     const results = matchForm(qs, bank);
     expect(results).toHaveLength(3);
     expect(results.map((r) => r.incoming)).toEqual(qs);
+  });
+});
+
+// --------------------------------------------------------------------------- bounded-skip exactness
+// matchQuestion() skips the difflib call for any candidate whose `0.7 * J + 0.3` upper bound cannot
+// beat the incumbent. That is meant to be an exact optimization, not a heuristic, so it is pinned
+// against a reference that computes every score in full — including the ones the real path proves it
+// does not need. The prototype fixture would also catch a divergence, but only where the prototype
+// happened to record a case; this covers whatever is on disk.
+
+/** Every (incoming, candidate) pair where the skip bound came in below the score it must bound. */
+const unsoundBounds: { incoming: string; candidate: string; bound: number; score: number }[] = [];
+/** Pairs the ledger above actually saw, so an empty ledger cannot pass for a clean one. */
+let boundsChecked = 0;
+
+/** The unoptimized matcher: every candidate scored in full, same order and tie-breaks. */
+function referenceMatch(text: string, b: QuestionBank): { id: string | null; via: string | null } {
+  const tokens = normalize(text);
+  const joined = tokens.join(' ');
+  const blend = (candidate: string): number => {
+    const c = normalize(candidate);
+    const jaccard = weightedJaccard(tokens, c);
+    const score = 0.7 * jaccard + 0.3 * sequenceRatio(joined, c.join(' '));
+    // Checked here because this is the one place every score is computed in full. A full-scan
+    // comparison alone cannot catch a tightened bound: it only diverges if the bank happens to hold a
+    // candidate the tighter bound wrongly skips, so the guarantee is asserted directly.
+    const bound = scoreUpperBound(jaccard);
+    boundsChecked += 1;
+    if (bound < score) unsoundBounds.push({ incoming: text, candidate, bound, score });
+    return score;
+  };
+
+  let bestId: string | null = null;
+  let bestVia: string | null = null;
+  let bestScore = 0.0;
+  for (const q of b.questions) {
+    let s = blend(q.canonical);
+    let via = 'canonical';
+    for (const v of q.variants) {
+      const vs = blend(v.text);
+      if (vs > s) {
+        s = vs;
+        via = v.source;
+      }
+    }
+    if (s > bestScore) {
+      bestScore = s;
+      bestId = q.id;
+      bestVia = via;
+    }
+  }
+  return { id: bestId, via: bestVia };
+}
+
+describe('matchQuestion — bounded skip is exact', () => {
+  it('picks the same entry and variant as a full-scan reference on every captured form question', () => {
+    // Real funder wordings, which is where the incumbent climbs high enough for skips to happen.
+    // Scoped to the form fixtures rather than the whole bank to keep the naive side under a second.
+    const incoming = listFormIds().flatMap((id) => loadForm(id).questions.map((q) => q.text));
+    expect(incoming.length).toBeGreaterThan(80);
+
+    const divergences = incoming
+      .map((text) => ({ text, fast: matchQuestion(text, bank), slow: referenceMatch(text, bank) }))
+      .filter(({ fast, slow }) => fast.matched_id !== slow.id || fast.matched_via !== slow.via);
+    expect(divergences).toEqual([]);
+  });
+
+  it('never bounds a real score below its own value', () => {
+    // Runs the reference over the same corpus so `blend` populates the ledger; the full scan above
+    // does not run first in isolation.
+    for (const id of listFormIds()) {
+      for (const q of loadForm(id).questions) referenceMatch(q.text, bank);
+    }
+    // ~35,400 pairs per reference pass over the fixtures: every form question against every
+    // candidate. A collapsed loop would still report zero unsound bounds, so the count is the guard.
+    expect(boundsChecked).toBeGreaterThan(30_000);
+    expect(unsoundBounds.slice(0, 3)).toEqual([]);
+    expect(unsoundBounds).toHaveLength(0);
+  });
+
+  it('agrees on the long autojunk-crossing candidates, where the ratio term dominates', () => {
+    const long = bank.questions.flatMap((q) =>
+      q.variants.map((v) => v.text).filter((t) => normalize(t).join(' ').length >= 200),
+    );
+    expect(long.length).toBeGreaterThan(0);
+    for (const text of long) {
+      const fast = matchQuestion(text, bank);
+      const slow = referenceMatch(text, bank);
+      expect({ id: fast.matched_id, via: fast.matched_via }).toEqual(slow);
+    }
   });
 });
 

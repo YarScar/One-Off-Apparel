@@ -101,18 +101,90 @@ export function weightedJaccard(a: readonly string[], b: readonly string[]): num
   return unionW === 0 ? 0.0 : interW / unionW;
 }
 
+/** A candidate string with its normalization already done. See {@link candidatesFor}. */
+interface Candidate {
+  readonly tokens: readonly string[];
+  readonly joined: string;
+}
+
+interface PreparedQuestion {
+  readonly question: Question;
+  readonly canonical: Candidate;
+  readonly variants: readonly { readonly source: string; readonly candidate: Candidate }[];
+}
+
 /**
- * Blend of weighted token overlap (0.7) and sequence similarity (0.3).
+ * Normalized candidates for a bank, computed once.
+ *
+ * `normalize()` plus the join is pure and the bank is immutable, so re-running it per incoming
+ * question was pure waste — and not a rounding error: the v0.4.0 bank has 334 candidate strings, and
+ * `grant_match_question` accepts up to 200 questions per call. At ~8.6 ms per question that is ~1.7 s
+ * of synchronous CPU in a single-threaded HTTP server, blocking every other request and `/health`
+ * for the duration. Keyed weakly so a caller passing an ad-hoc bank cannot leak it.
+ *
+ * This changes no arithmetic. The tokens and joined strings are byte-identical to what the per-call
+ * path produced, so prototype parity is untouched — `matcher.test.ts` asserts that field for field.
+ */
+const candidateCache = new WeakMap<QuestionBank, readonly PreparedQuestion[]>();
+
+function prepare(text: string): Candidate {
+  const tokens = normalize(text);
+  return { tokens, joined: tokens.join(' ') };
+}
+
+function candidatesFor(bank: QuestionBank): readonly PreparedQuestion[] {
+  let prepared = candidateCache.get(bank);
+  if (prepared === undefined) {
+    prepared = bank.questions.map((q) => ({
+      question: q,
+      canonical: prepare(q.canonical),
+      variants: q.variants.map((v) => ({ source: v.source, candidate: prepare(v.text) })),
+    }));
+    candidateCache.set(bank, prepared);
+  }
+  return prepared;
+}
+
+
+/** Sentinel for a candidate proven unable to beat the incumbent. Below every real score. */
+const CANNOT_WIN = -1;
+
+/**
+ * The blend of weighted token overlap (0.7) and sequence similarity (0.3) — unless the candidate
+ * provably cannot beat `incumbent`, in which case a sentinel, with no difflib call made.
  *
  * Argument order into {@link sequenceRatio} is load-bearing: the incoming question is `a` and the
  * candidate is `b`, because `difflib`'s autojunk heuristic is computed over `b` alone.
+ *
+ * `sequenceRatio` is quadratic-ish and dominates the cost of a match; the weighted Jaccard is a set
+ * intersection. Since `sequenceRatio` is bounded by 1, `0.7 * J + 0.3` is an upper bound on the
+ * blended score, and IEEE multiplication and addition are both monotone, so the bound is never below
+ * the exact value. A candidate whose bound does not exceed the incumbent cannot displace it — a
+ * candidate only ever wins on a *strictly* greater score — so the difflib call is pure waste.
+ *
+ * This is an exact optimization, not a heuristic: every score that decides an outcome is still
+ * computed in full. The skipped ones cannot be the eventual winner, because `incumbent` only grows,
+ * so any skipped score stays at or below the final winner's. Ties still break to the earlier entry.
+ * `matcher.test.ts` asserts prototype parity field for field over the whole bank, which is what
+ * proves this claim rather than the argument above.
  */
-function score(incomingTokens: readonly string[], candidateText: string): number {
-  const cand = normalize(candidateText);
-  return (
-    0.7 * weightedJaccard(incomingTokens, cand) +
-    0.3 * sequenceRatio(incomingTokens.join(' '), cand.join(' '))
-  );
+function scoreOrSkip(incoming: Candidate, cand: Candidate, incumbent: number): number {
+  const jaccard = weightedJaccard(incoming.tokens, cand.tokens);
+  if (scoreUpperBound(jaccard) <= incumbent) return CANNOT_WIN;
+  return 0.7 * jaccard + 0.3 * sequenceRatio(incoming.joined, cand.joined);
+}
+
+/**
+ * The skip test's upper bound on the blended score, given the candidate's weighted Jaccard.
+ *
+ * Exported, and the single place the constant lives, so the soundness of the skip is asserted rather
+ * than only argued: `matcher.test.ts` checks this against every blended score it computes in full.
+ * Tightening it below `0.7 * J + 0.3` would skip candidates that can still win, and the effect is
+ * input-dependent — a bank where no such candidate happens to exist today keeps a full-scan
+ * comparison green while the optimization has stopped being exact.
+ */
+export function scoreUpperBound(jaccard: number): number {
+  return 0.7 * jaccard + 0.3;
 }
 
 const NO_MATCH = (text: string): MatchResult => ({
@@ -144,23 +216,26 @@ export function matchQuestion(
   bank: QuestionBank = loadBank(),
   threshold: number = DEFAULT_THRESHOLD,
 ): MatchResult {
-  const tokens = normalize(text);
+  const incoming = prepare(text);
   let best: Question | undefined;
   let bestScore = 0.0;
   let bestVia: MatchedVia | null = null;
 
-  for (const q of bank.questions) {
-    let s = score(tokens, q.canonical);
+  for (const q of candidatesFor(bank)) {
+    // CANNOT_WIN stands in for a score proven to be at or below the incumbent without computing it.
+    // Any candidate that is computed necessarily scores above the incumbent, hence above this, so it
+    // displaces — which is the same outcome the exact comparison would produce (see scoreOrSkip).
+    let s = scoreOrSkip(incoming, q.canonical, bestScore);
     let via: MatchedVia = 'canonical';
     for (const v of q.variants) {
-      const vs = score(tokens, v.text);
+      const vs = scoreOrSkip(incoming, v.candidate, bestScore);
       if (vs > s) {
         s = vs;
         via = v.source;
       }
     }
     if (s > bestScore) {
-      best = q;
+      best = q.question;
       bestScore = s;
       bestVia = via;
     }
