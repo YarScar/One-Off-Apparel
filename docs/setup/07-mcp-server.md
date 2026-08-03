@@ -45,7 +45,7 @@ mkdir -p "/Users/christian/Documents/Claude/Projects/LP Internal AI V1/apps/mcp-
 
 ## 2. Tool inventory
 
-All 16 tools are registered. Tool names and descriptions must remain **identical** — Claude's internal prompting depends on them.
+All 21 tools are registered. Tool names and descriptions must remain **identical** — Claude's internal prompting depends on them.
 
 | Tool | V0 source file | Primary table(s) |
 |---|---|---|
@@ -166,7 +166,7 @@ Restart Claude Desktop. The tools appear in the tool picker.
 ## Verification checklist
 
 - [ ] `pnpm --filter @lp-ai/mcp-server build` completes without errors
-- [ ] All 16 tools registered in MCP Inspector
+- [ ] All 21 tools registered in MCP Inspector
 - [ ] `get_student_info` returns a real student record
 - [ ] `query_finances` returns current finance snapshot data
 - [ ] `search_documents` returns semantically relevant chunks

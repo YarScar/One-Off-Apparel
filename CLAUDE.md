@@ -104,13 +104,14 @@ pnpm db:down                    # stop the local Postgres container
 
 ```
 apps/hq              → @lp-ai/lib-db, @lp-ai/lib-config
-apps/mcp-server      → @lp-ai/lib-db, @lp-ai/lib-config, @lp-ai/lib-embedding
+apps/mcp-server      → @lp-ai/lib-db, @lp-ai/lib-config, @lp-ai/lib-embedding, @lp-ai/lib-grants
 apps/aws-mcp-server  → @lp-ai/lib-db, @lp-ai/lib-config
 apps/sync            → connectors/* (one-off Fargate task runner for scheduled syncs)
 connectors/*         → @lp-ai/lib-db, @lp-ai/lib-config
 packages/db          → Prisma client, entity resolution, sync-runs helper, seed
 packages/embedding   → OpenAI embedding batch/retry helpers
 packages/config      → Zod env schema, AWS Secrets Manager loader
+packages/grants      → zod; deterministic grant-writing logic + seed (question bank, KB, form fixtures)
 ```
 
 ### Key files
@@ -119,7 +120,7 @@ packages/config      → Zod env schema, AWS Secrets Manager loader
 - `prisma.config.ts` (repo root) — Prisma config pointing at the schema and migrations
 - `packages/db/src/entity-resolution.ts` — fuzzy name matching across all data sources; called by `get_student_info` and `search_by_person`
 - `packages/db/src/sync-runs.ts` — `runSync()` wrapper used by every connector
-- `apps/mcp-server/src/make-server.ts` — registers all tools (16 data + 4 skill); edit here to add/remove tools
+- `apps/mcp-server/src/make-server.ts` — registers all tools (21: 16 data + `grant_match_question` + 4 skill); edit here to add/remove tools
 - `apps/mcp-server/src/tool-helpers.ts` — `runTool()` wrapper (error capture + usage logging), `parseStr()`, `parseNum()`
 - `apps/mcp-server/src/errors.ts` — `toolError()` and `notImplemented()` for structured error envelopes
 - `apps/mcp-server/src/usage-log.ts` — writes every tool call to `usage_logs` table; surfaced in HQ `/tools`
@@ -218,9 +219,16 @@ Before modifying any component, read the relevant spec:
 
 - [Architecture](docs/architecture.md) — system overview and data flow
 - [Database Schema](docs/database-schema.md) — all Postgres tables
-- [MCP Server Spec](docs/mcp-server-spec.md) — all 16 tool definitions with input/output schemas
+- [MCP Server Spec](docs/mcp-server-spec.md) — tool definitions with input/output schemas
 - [Entity Resolution](docs/entity-resolution.md) — how students/staff are resolved across sources
 - Per-connector specs in `docs/data-sources/`
+
+The grant writing layer keeps its own document set, scoped to that workstream — start at
+[`packages/grants/README.md`](packages/grants/README.md). Two of its files are worth knowing about
+from outside it, because the grant work landed platform-wide changes and recorded them there:
+
+- [Changelog](packages/grants/CHANGELOG.md) — material changes that workstream landed, including schema, tool surface, and corrections to documented procedures
+- [Documentation conventions](packages/grants/CLAUDE.md) — sources of truth, current verified state, and documentation debt
 
 ## Setup
 
