@@ -1,8 +1,8 @@
 {
   "meta": {
     "name": "Canonical Grant Question Bank",
-    "version": "0.3.0",
-    "updated": "2026-07-22",
+    "version": "0.4.0",
+    "updated": "2026-08-03",
     "description": "Normalized, deduplicated grant application questions synthesized from real, publicly published funder forms. Each canonical question aggregates the real-world variants that map to it, so an incoming funder question can be matched to one canonical entry and routed to the Knowledge Base answer that satisfies it. v0.2 extends the bank with the Philadelphia/regional, corporate, federal, and PA-state forms captured in sources/philadelphia-regional-and-sector-forms.md, adding eligibility-gate, innovation, risk, capacity, and federal/state structured-field questions. v0.3 adds the two Aug-7 pilot forms (GSK STEM Access, Truist Foundation Inspire Awards) as variants; see sources/aug7-pilot-forms.md.",
     "sources": [
       {
@@ -80,6 +80,18 @@
       {
         "id": "PhilaWorks",
         "name": "Philadelphia Works Career Connected Learning (WIOA Youth) RFP"
+      },
+      {
+        "id": "JEVS-C2L",
+        "name": "JEVS Human Services C2L-PHL Youth Provider RFP (2024-2025)"
+      },
+      {
+        "id": "WPF-2026",
+        "name": "William Penn Foundation Workforce Training Supports RFP (2026-2028)"
+      },
+      {
+        "id": "Hamilton-2025",
+        "name": "Hamilton Family Charitable Trust LOI (2025)"
       }
     ],
     "answer_types": [
@@ -291,6 +303,14 @@
         {
           "text": "Organization legal name:",
           "source": "FFTC"
+        },
+        {
+          "text": "Organization Name.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Legal Name of Organization",
+          "source": "WPF-2026"
         }
       ]
     },
@@ -317,6 +337,14 @@
         {
           "text": "Year your organization received 501(c)(3) status",
           "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Federal Tax ID (Organization or Legal Entity).",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "EIN",
+          "source": "WPF-2026"
         }
       ]
     },
@@ -343,6 +371,26 @@
         {
           "text": "Website",
           "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Organization Address.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Program Address (if different from organization).",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Please include all additional program addresses.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Address",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Does your program have multiple addresses?",
+          "source": "JEVS-C2L"
         }
       ]
     },
@@ -365,6 +413,14 @@
         {
           "text": "Your contact details for this application (name, title, phone, email)",
           "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Contact person (name and title).",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Contract signatory (name and title).",
+          "source": "JEVS-C2L"
         }
       ]
     },
@@ -398,6 +454,21 @@
         {
           "text": "Grant request amount:",
           "source": "FFTC"
+        },
+        {
+          "text": "Request Amount",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Amount Requested",
+          "source": "Hamilton-2025"
+        }
+      ],
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 20,
+          "source": "Hamilton-2025"
         }
       ]
     },
@@ -412,6 +483,10 @@
         {
           "text": "Type of request (general support, start-up, technical assistance, etc.):",
           "source": "NNG"
+        },
+        {
+          "text": "Type of Funding Requested (Select One)",
+          "source": "Hamilton-2025"
         }
       ]
     },
@@ -427,6 +502,16 @@
           "unit": "words",
           "max": 8,
           "source": "FFTC"
+        },
+        {
+          "unit": "characters",
+          "max": 120,
+          "source": "WPF-2026"
+        },
+        {
+          "unit": "characters",
+          "max": 250,
+          "source": "Hamilton-2025"
         }
       ],
       "variants": [
@@ -445,6 +530,18 @@
         {
           "text": "What is the name of your solution?",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Program Name.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Proposed Project Title",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Project/ Program/ Campaign Name",
+          "source": "Hamilton-2025"
         }
       ]
     },
@@ -465,6 +562,11 @@
           "unit": "words",
           "max": 50,
           "source": "FFTC"
+        },
+        {
+          "unit": "characters",
+          "max": 250,
+          "source": "WPF-2026"
         }
       ],
       "variants": [
@@ -501,6 +603,17 @@
         {
           "text": "Annual operating budget: / Total project budget:",
           "source": "FFTC"
+        },
+        {
+          "text": "Total Cost",
+          "source": "Hamilton-2025"
+        }
+      ],
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 20,
+          "source": "Hamilton-2025"
         }
       ]
     },
@@ -540,6 +653,11 @@
           "unit": "characters",
           "max": 1000,
           "source": "Barra"
+        },
+        {
+          "unit": "characters",
+          "max": 700,
+          "source": "WPF-2026"
         }
       ],
       "variants": [
@@ -574,6 +692,10 @@
         {
           "text": "Tell us your organization's main purpose.",
           "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Mission Statement",
+          "source": "WPF-2026"
         }
       ]
     },
@@ -600,6 +722,17 @@
         {
           "text": "How long have you been working on your solution?",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Describe the organization's qualifications and history of operating youth workforce and education programs, especially to those identified as priority populations by this RFP. Please include specific types of services provided, dates, locations, partnerships, contract values, and related performance outcomes.",
+          "source": "JEVS-C2L"
+        }
+      ],
+      "limits": [
+        {
+          "unit": "words",
+          "max": 500,
+          "source": "JEVS-C2L"
         }
       ]
     },
@@ -841,6 +974,11 @@
           "unit": "characters",
           "max": 6000,
           "source": "Barra"
+        },
+        {
+          "unit": "characters",
+          "max": 250,
+          "source": "WPF-2026"
         }
       ],
       "variants": [
@@ -875,6 +1013,14 @@
         {
           "text": "What is your solution and how does it work?",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Describe the proposed project. Include a detailed description of the proposed activities, including location of the work, frequency, and duration of interaction with proposed beneficiaries, the timeline for the entire project, and the number and demographics of beneficiaries/participants expected to be served. If the proposed project involves a partnership with other organizations, describe how the organizations will collaborate and the complementary roles each partner will play.",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Project description",
+          "source": "WPF-2026"
         }
       ]
     },
@@ -1101,6 +1247,10 @@
         {
           "text": "The quality of the project evaluation, including whether the methods are thorough, feasible, and produce measurable performance objectives.",
           "source": "ED-75.210"
+        },
+        {
+          "text": "Timeframe of Evaluation Results",
+          "source": "Hamilton-2025"
         }
       ]
     },
@@ -1326,6 +1476,10 @@
         },
         {
           "text": "Attach a copy of your organization's official notice of tax-exempt status from the IRS.",
+          "source": "FFTC"
+        },
+        {
+          "text": "Attach IRS letter.",
           "source": "FFTC"
         }
       ]
@@ -1791,6 +1945,10 @@
         {
           "text": "How many individuals do you plan to impact or engage with the project/program?",
           "source": "FFTC"
+        },
+        {
+          "text": "Proposed Number of Slots.",
+          "source": "JEVS-C2L"
         }
       ]
     },
@@ -1849,6 +2007,11 @@
           "unit": "characters",
           "max": 2000,
           "source": "Barra"
+        },
+        {
+          "unit": "words",
+          "max": 250,
+          "source": "JEVS-C2L"
         }
       ],
       "variants": [
@@ -1867,6 +2030,10 @@
         {
           "text": "What have you built and tested so far? Please share why you selected your stage of development.",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Provide a general organizational description, including but not limited to year established, legal status, governance structure, mission, annual budget, and number of full-time staff.",
+          "source": "JEVS-C2L"
         }
       ]
     },
@@ -2110,6 +2277,108 @@
         {
           "text": "Why are you applying to the Truist Foundation Inspire Awards?",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Investment Area Alignment: Please share how this request clearly connects to the primary investment area selected for the Trust (academic learning, social-emotional learning, career learning, or educational support). You may include additional areas in your response if appropriate.",
+          "source": "Hamilton-2025"
+        }
+      ],
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 3000,
+          "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "cover.fiscal_sponsor",
+      "category": "cover",
+      "canonical": "Will a fiscal sponsor be used for this grant, or is the applicant itself a 501(c)(3)?",
+      "answer_type": "boolean",
+      "kb_ref": "kb.eligibility",
+      "frequency": "high",
+      "notes": "Launchpad applies under Building 21 as fiscal sponsor; answer depends on framing chosen for this funder (PLAYBOOK Step 3).",
+      "variants": [
+        {
+          "text": "Will a Fiscal Sponsor be used for this grant?",
+          "source": "WPF-2026"
+        }
+      ]
+    },
+    {
+      "id": "cover.grant_period",
+      "category": "cover",
+      "canonical": "What are the anticipated start and end dates and duration of the requested grant period?",
+      "answer_type": "field",
+      "kb_ref": null,
+      "frequency": "high",
+      "notes": "Application-specific dates and months; not a KB answer.",
+      "variants": [
+        {
+          "text": "Anticipated Start Date for Project Funded by WPF",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Duration of Funding (months)",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Anticipated Project/ Program/ Campaign Start Date",
+          "source": "Hamilton-2025"
+        },
+        {
+          "text": "Anticipated Project/ Program/ Campaign End Date",
+          "source": "Hamilton-2025"
+        },
+        {
+          "text": "Applying For (Select One): Year-round (school-year 2024-2025 and summer 2025) or Summer 2025 only.",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "cover.multi_year",
+      "category": "cover",
+      "canonical": "Is this a multi-year funding request?",
+      "answer_type": "boolean",
+      "kb_ref": null,
+      "frequency": "medium",
+      "notes": "Often gated by a prior-relationship rule (e.g. Hamilton requires 3+ years funded before multi-year is allowed).",
+      "variants": [
+        {
+          "text": "Is this a multi-year funding request?",
+          "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.minority_owned",
+      "category": "eligibility",
+      "canonical": "Is the organization minority-owned and/or operated?",
+      "answer_type": "single_select",
+      "kb_ref": "kb.eligibility",
+      "frequency": "medium",
+      "notes": "Common in government/city RFPs as an MBE/WBE certification gate. Not a fit-scoring decision — the answer is a fact about the org.",
+      "variants": [
+        {
+          "text": "Is the organization minority-owned and/or operated?",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.debarment",
+      "category": "eligibility",
+      "canonical": "Has the applicant organization or its staff/directors ever been barred, suspended, or debarred from contracting with any government agency?",
+      "answer_type": "boolean",
+      "kb_ref": "kb.eligibility",
+      "frequency": "medium",
+      "notes": "Standard good-standing gate in government RFPs. Answer is a compliance fact.",
+      "variants": [
+        {
+          "text": "Has the applicant agency and its staff or director ever been barred from entering contracts with City, Federal, or State government agencies?",
+          "source": "JEVS-C2L"
         }
       ]
     }

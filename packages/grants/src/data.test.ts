@@ -17,10 +17,11 @@ describe('seed loader', () => {
   it('loads the question bank at the counts the documents claim', () => {
     const bank = loadBank();
     expect(bank.categories).toHaveLength(11);
-    expect(bank.questions).toHaveLength(82);
+    expect(bank.questions).toHaveLength(87);
     expect(bank.kb_entries).toHaveLength(29);
     const variants = bank.questions.reduce((n, q) => n + q.variants.length, 0);
-    expect(variants).toBe(211);
+    // 212 at bank v0.3.1; v0.4.0 added 35 recorded funder wordings across three new forms.
+    expect(variants).toBe(247);
   });
 
   it('loads the knowledge base with 29 answers, 4 of them unverified', () => {
@@ -40,8 +41,11 @@ describe('seed loader', () => {
     expect(listFormIds()).toEqual([
       'aug7_gsk',
       'aug7_truist',
+      'hamilton_loi_2025',
+      'jevs_c2l_2024',
       'sample_incoming',
       'sample_philly_innovation',
+      'wpf_workforce_2026',
     ]);
   });
 

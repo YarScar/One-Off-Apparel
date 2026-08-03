@@ -169,6 +169,34 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     note: 'Two different counts appear in the KB; the connector settles it.',
   },
   {
+    key: 'inc_client_work_booked',
+    claim: '$75,000 in client work booked in July 2026 alone (Barra Launchpad Inc overview, ~1/3 of the full-year target); ' +
+      'two clients with hiring intent in writing at $50-80K',
+    appears_in: ['kb.sustainability', 'kb.innovation'],
+    tool: 'get_finance_brief',
+    args: { period: 'ytd' },
+    conflict_kind: 'drift',
+    severity: 'medium',
+    note:
+      'Newest approved org overview (Barra, Jul 2026) introduces Inc. revenue and hiring-intent claims ' +
+      'the KB and its previous checks do not carry. No query_* tool returns Inc. client bookings directly — ' +
+      'get_finance_brief gives the closest revenue signal; if it cannot confirm, flag [DATA UNAVAILABLE] rather ' +
+      'than quoting the overview figure as current.',
+  },
+  {
+    key: 'program_size_reach',
+    claim: 'more than 200 young Philadelphians through programming to date; "about 145 served"',
+    appears_in: ['kb.capacity', 'kb.history', 'kb.metrics'],
+    tool: 'query_enrollment',
+    args: { query_type: 'total' },
+    conflict_kind: 'definitional',
+    severity: 'high',
+    note:
+      'The Barra Jul 2026 overview says 200+ "came through programming"; KB says ~145 "served"; the connector ' +
+      'holds 301 records. Three populations, three definitions — do NOT auto-resolve. Ask which population this ' +
+      'funder means and state it in the sentence.',
+  },
+  {
     key: 'phase_costs',
     claim: '$519K / $455K / $362K per phase; ~$6,000 per participant',
     appears_in: ['kb.budget_narrative', 'kb.financials'],

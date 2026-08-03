@@ -14,7 +14,7 @@ import { toolError } from '../errors.js';
 const NAME = 'grant_match_question';
 
 const DESCRIPTION =
-  'Match a funder application question to a canonical entry in the LaunchPad grant question bank (82 questions, 11 categories, 211 recorded funder wordings). Returns the matched question id, its knowledge base slot, the answer type, a confidence score, and which phrasing won the match. Deterministic — no model, no database, no network. Use this to find out whether a funder question has a stored answer before drafting one from scratch. A result with is_confident=false means the question has no reliable match and needs a person: do not route it to the returned kb_ref.';
+  'Match a funder application question to a canonical entry in the LaunchPad grant question bank (87 questions, 11 categories, 247 recorded funder wordings). Returns the matched question id, its knowledge base slot, the answer type, a confidence score, and which phrasing won the match. Deterministic — no model, no database, no network. Use this to find out whether a funder question has a stored answer before drafting one from scratch. A result with is_confident=false means the question has no reliable match and needs a person: do not route it to the returned kb_ref.';
 
 const inputSchema = {
   question: z

@@ -36,6 +36,7 @@ RUN DATABASE_URL="postgresql://placeholder" pnpm --filter @lp-ai/lib-db generate
 RUN pnpm --filter @lp-ai/lib-config build
 RUN pnpm --filter @lp-ai/lib-db build
 RUN pnpm --filter @lp-ai/lib-embedding build
+RUN pnpm --filter @lp-ai/lib-grants build
 RUN pnpm --filter @lp-ai/mcp-server build
 
 # ----- runner -----------------------------------------------------------------

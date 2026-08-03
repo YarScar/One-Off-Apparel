@@ -57,3 +57,7 @@ packages/db/generated/
 
 # Local Claude Code config (skills, settings) — not shared with the team
 .claude/
+
+# Raw grant source material (Drive exports). Large, and it holds funder
+# correspondence and unredacted student data — never commit it.
+packages/grants/data/
