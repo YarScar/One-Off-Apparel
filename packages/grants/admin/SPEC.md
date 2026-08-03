@@ -24,13 +24,25 @@ Five gates. Do not start a gate until the one before it passes. Each maps to a d
 
 | Gate | Work | Passes when | State |
 |---|---|---|---|
-| **G1** | Preparation. Clear the two seed integrity warnings. Land the three `ToolPermission` migrations. | The loader reports zero warnings. The three tools resolve in the ACL. | ✅ code complete; migration not yet applied |
+| **G1** | Preparation. Clear the two seed integrity warnings. Land the three `ToolPermission` migrations. | The loader reports zero warnings. The three tools resolve in the ACL. | ✅ **passed 2026-08-03**, locally. Refer to the note below |
 | **G2** | `grant_match_question`. | 13 matcher parity tests pass. **Sequence-ratio parity is proven.** Refer to section 5. | ✅ **passed exactly** |
 | **G3** | `grant_build_draft`, resize off. | 25 pipeline parity tests pass. A full form fixture returns a draft package and a figure work order. | not started |
 | **G4** | `grant_resize_answer`. | 7 resize parity tests pass, with no network. | not started |
 | **G5** | Rewrite `skill_grant_writing`. Author in the Playbook craft. Release and pilot. | A draft produced from the skill alone is judged at least as good as a prototype draft. | not started |
 
 **G2 is the risk gate.** Stop there and check the result before building anything above it. Refer to section 5.3.
+
+**How G1 passed, and what it does not say.** Both halves have evidence as of 2026-08-03. The loader
+reports zero warnings, asserted by `packages/grants/src/data.test.ts`. The ACL half was proven by
+driving a real call through `dist/serve-http.js` with a bearer token: a `leadership` caller
+succeeded, a `program_staff` caller was refused, and both appeared in `usage_logs`. The method is in
+`../CHANGELOG.md` under 2026-08-03.
+
+Two limits on the claim, neither of which the pass condition covers. **The evidence is local** —
+nothing here is verified against RDS, and that half of the migration work is still open and unowned.
+**And the condition is satisfied by three table rows, only one of which has a registered tool**, so
+G1 passing means the ACL path works on `grant_match_question`; `grant_build_draft` and
+`grant_resize_answer` are reserved rows awaiting G3 and G4.
 
 Two changes to G1 as originally written:
 
@@ -43,16 +55,18 @@ Two changes to G1 as originally written:
 
 ### 2.1 Seed data — moved as-is, file-based
 
-Landed under `packages/grants/seed/`. Counts verified 2026-07-27.
+Landed under `packages/grants/seed/`. Counts verified 2026-07-27, and the wording count re-verified
+2026-08-03 at bank v0.3.1, which added one FFTC wording under B6. Changing the bank obliges a
+regeneration of `src/__fixtures__/matcher-parity.json` — refer to `../CHANGELOG.md` under 2026-08-03.
 
 | File | Contents | Count |
 |---|---|---|
 | `questions.json` | Canonical questions | 82 |
 | `questions.json` | Categories | 11 |
 | `questions.json` | Declared KB slots | 29 |
-| `questions.json` | Recorded funder wordings (variants) | 211 |
+| `questions.json` | Recorded funder wordings (variants) | 212 |
 | `kb_launchpad.json` | Stored answers (4 are `verified:false`) | 29 |
-| `forms/*.json` | Incoming form fixtures | 4 |
+| `forms/*.json` | Incoming form fixtures | 7 |
 
 | Fixture | Questions | Questions with a stated limit |
 |---|---|---|
@@ -60,6 +74,9 @@ Landed under `packages/grants/seed/`. Counts verified 2026-07-27.
 | `aug7_gsk` | 15 | 0 |
 | `sample_philly_innovation` | 21 | 8 |
 | `sample_incoming` | 16 | 5 |
+| `jevs_c2l_2024` | 16 | 2 |
+| `wpf_workforce_2026` | 12 | 3 |
+| `hamilton_loi_2025` | 9 | 6 |
 
 The seed holds no funder corpus and no organization profile. `funders.json` and `org_profile.json` belong to the prospecting scope and are not in this package.
 
@@ -113,7 +130,7 @@ Five modules are in `packages/grants/src/`. They are not tools; the tools consum
 
 ### 3.1 `data.ts` — loader and integrity report
 
-**Load mechanism.** `fs.readFileSync` at runtime, lazy and memoised. A malformed seed file therefore fails inside a tool call and surfaces as a structured error envelope; it does not stop the server at boot. The alternative was `resolveJsonModule`, which is off across this repository and would force `tsc` and `eslint` to infer types for 82 questions and 211 variants on every run.
+**Load mechanism.** `fs.readFileSync` at runtime, lazy and memoised. A malformed seed file therefore fails inside a tool call and surfaces as a structured error envelope; it does not stop the server at boot. The alternative was `resolveJsonModule`, which is off across this repository and would force `tsc` and `eslint` to infer types for 87 questions and 247 variants on every run.
 
 **Seed path.** `SEED_DIR` resolves relative to the module. `dist/` mirrors `src/`, so one hop up reaches the package root from either location. Do not move the constant into a subdirectory without changing the hop count.
 

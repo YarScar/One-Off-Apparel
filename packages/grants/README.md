@@ -6,12 +6,13 @@ A working prototype proves the method and runs today. This package moves that me
 
 **Scope: grant writing only.** Funder eligibility and fit scoring belong to the Data and Prospecting team and are not in this package.
 
-**Status.** Release gates G1 and G2 are complete — see [`admin/SPEC.md`](./admin/SPEC.md) section 1. The seed data and seven modules are landed with 43 passing tests, and `grant_match_question` is registered in the MCP server. G2 was the parity risk gate and it passed exactly: 28,690 of 28,690 `difflib` ratios and all 337 recorded matcher results reproduce. `grant_build_draft` (G3) and `grant_resize_answer` (G4) are next. The package is a pnpm workspace member, so it takes part in the build.
+**Status.** Release gates G1 and G2 have both passed — see [`admin/SPEC.md`](./admin/SPEC.md) section 1. G1 passed on 2026-08-03, and the claim is local: nothing is verified against production. The seed data and seven modules are landed with 43 passing tests, and `grant_match_question` is registered in the MCP server. G2 was the parity risk gate and it passed exactly: 28,690 of 28,690 `difflib` ratios and all 337 recorded matcher results reproduce. `grant_build_draft` (G3) and `grant_resize_answer` (G4) are next. The package is a pnpm workspace member, so it takes part in the build.
 
 ## Start here
 
 | If you want | Read |
 |---|---|
+| The platform we build on, the tools we work with, and where a new fact goes | [`admin/ARCHITECTURE.md`](./admin/ARCHITECTURE.md) |
 | The pitch, the scope, the deliverables, the timeline | [`admin/PROPOSAL.md`](./admin/PROPOSAL.md) |
 | The architecture, the security and compliance model, the data rules | [`admin/TAD.md`](./admin/TAD.md) |
 | The build detail and the release gates | [`admin/SPEC.md`](./admin/SPEC.md) |
@@ -19,19 +20,28 @@ A working prototype proves the method and runs today. This package moves that me
 | Where the project stands, and the OpenProject work packages | [`admin/OPENPROJECT-TASKS.md`](./admin/OPENPROJECT-TASKS.md) |
 | What to pick up next, and the three open items | [`admin/NEXT-SESSION.md`](./admin/NEXT-SESSION.md) |
 | How we actually draft: the intake steps, the style rules, the non-negotiables | [`docs/PLAYBOOK.md`](./docs/PLAYBOOK.md) |
+| The documentation rules, the sources of truth, and the verified state of the system | [`CLAUDE.md`](./CLAUDE.md) |
+| What this workstream changed, and when | [`CHANGELOG.md`](./CHANGELOG.md) |
 
-Each document has one job. `PROPOSAL.md` is the only one written for readers outside engineering. Where `PROPOSAL.md` and `SPEC.md` touch on the same thing, `TAD.md` is the authority on architecture and data rules, and `PROPOSAL.md` is the authority on scope. `PLAYBOOK.md` is different in kind from the other four: they describe the build, it describes the craft. It is the source the grant writing skill is authored from — refer to `TAD.md` section 4.2 for why the guidance lives here rather than being fetched per draft.
+Each document has one job. `PROPOSAL.md` is the only one written for readers outside engineering.
+`ARCHITECTURE.md` holds no decisions of its own — it routes, and it loses to any of the four
+review documents where they touch. Where `PROPOSAL.md` and `SPEC.md` touch on the same thing, `TAD.md` is the authority on architecture and data rules, and `PROPOSAL.md` is the authority on scope. `PLAYBOOK.md` is different in kind from the other four: they describe the build, it describes the craft. It is the source the grant writing skill is authored from — refer to `TAD.md` section 4.2 for why the guidance lives here rather than being fetched per draft.
 
 ## Layout
 
 ```
 packages/grants/
   README.md            ← you are here: the index
+  CLAUDE.md            ← documentation rules, sources of truth, verified state
+  CHANGELOG.md         ← what this workstream changed, and when
   admin/               ← the review set (build documents)
     PROPOSAL.md            scope, deliverables, timeline, decisions
     TAD.md                 architecture, security, compliance, data governance
     SPEC.md                build detail and release gates G1–G5
+    ARCHITECTURE.md        the platform surface, the toolchain, the cadence
     HANDOFF.md             cover note: where to look, what to flag
+    NEXT-SESSION.md        what to pick up next, and the open items
+    OPENPROJECT-TASKS.md   the work package set on the board
   docs/
     PLAYBOOK.md        ← the drafting craft; the source the skill is authored from
   package.json         ← @lp-ai/lib-grants
@@ -45,11 +55,13 @@ packages/grants/
     figures.ts             the 15-check figure verification work order
     seq-ratio.ts           difflib.SequenceMatcher.ratio() port (G2)
     matcher.ts             funder question → question bank entry (G2)
+  scripts/
+    regenerate-matcher-parity.py   regeneration harness for the matcher parity fixture
   seed/                ← staged seed data (file-based; DB models deferred)
-    questions.json         the question bank (82 questions / 11 categories / 29 answer slots / 211 wordings)
+    questions.json         the question bank (87 questions / 11 categories / 29 answer slots / 247 wordings)
     QUESTIONS-SCHEMA.md    the schema and the growth rules for questions.json
     kb_launchpad.json      the knowledge base — 29 approved answers
-    forms/                 form fixtures (two real funder forms + two generic samples)
+    forms/                 form fixtures (five real funder forms + two generic samples)
 ```
 
 ## Where each file came from

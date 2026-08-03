@@ -4,8 +4,9 @@
 |---|---|
 | Written | 2026-07-31, end of session |
 | Revised | 2026-07-31, following session — items 1 and 2 done |
+| Revised | 2026-08-03 — item 3's blockers cleared. Phase A closed and G1 passed. Refer to "What changed on 2026-08-03". |
 | Purpose | Carry the plan forward so none of it is re-derived next time. |
-| Status | Item 1 done. Item 2 done, with the measurement it asked for. Item 3 still open. |
+| Status | Items 1 and 2 done. **Item 3's blockers are gone**; its remaining question is a decision, not a task. |
 
 The previous revision listed three items. Two are closed. What remains is item 3, which was always a decision rather than a task.
 
@@ -18,14 +19,45 @@ Checked rather than assumed, at the end of the 2026-07-31 follow-up session.
 | | |
 |---|---|
 | `packages/grants` tests | **43 of 43 pass** in about 8 seconds. No database, no network. |
-| Release gates | G1 code complete but unverified. **G2 passed exactly.** G3, G4, G5 not started. |
+| Release gates | **G1 passed 2026-08-03, locally** — refer to `CHANGELOG.md`. **G2 passed exactly.** G3, G4, G5 not started. |
 | Tools registered | 1 of 3 — `grant_match_question`, wired into `make-server.ts`. |
 | OpenProject board | **Live.** 40 work packages, #49 to #88, Aug 03 to Sep 16. |
 | Committed to git | **All of it.** Seven commits on `writing/dev`. Working tree clean. |
 | Pushed / PR opened | **No.** Refer to "Open the PR" below. |
 | Linter | **Runs.** `packages/grants` is clean. Repo-wide baseline measured — 415. |
 | `pnpm -r typecheck` | Passes across all fourteen packages. |
-| Local database | Still not available. Refer to item 3. |
+| Local database | **Available since 2026-08-03.** Postgres 16.14 via `pnpm db:up`, 13 migrations applied. |
+
+---
+
+## What changed on 2026-08-03
+
+This section supersedes the three stale claims below it. They are left in place because the reasoning
+around them is still worth reading; the state they describe is not current.
+
+| Was | Now |
+|---|---|
+| Local database unavailable — no Docker daemon, no `DATABASE_URL` | Both resolved. Postgres 16.14 with `vector 0.8.6` and `pg_trgm 1.6`, 13 migrations applied, `DATABASE_URL` present in `.env` |
+| "G1 code complete but unverified" | **G1 passed.** Both halves have evidence — refer to `../CHANGELOG.md` |
+| Order of work, item 3 blocked A1 | A1 to A6 are all closed on the board except A3's production half |
+
+**Use `pnpm db:migrate`, not `db:push`.** `db push` writes no migration SQL, so the
+`tool_permissions` rows never land and every tool call fails closed. This corrects the setup path
+quoted in item 3 below, which names `db:push` from the root `CLAUDE.md`.
+
+**Item 3's remaining question stands unchanged**, and it was always the interesting half: not "local
+or remote" but *what data a local database must contain*. The answer looks like "both" — a local
+Postgres for the build and the tests, plus read access to real data for the figure checks and for E3's
+similarity tuning, which cannot be done against seed data at all. Questions 1, 2, 4, and 5 in "To
+bring to the discussion" are still open. Question 3 is now answerable by running the seed.
+
+**Two things the closed items did not cover**, both still open:
+
+1. **A3's production half.** The grant `tool_permissions` rows are unverified on RDS, and the apply has
+   no named owner. This is question 4 below, and it is now the only thing standing between the local
+   gate and a production one.
+2. **The lint rollout package.** A2 closed at 415 problems measured; the rollout package the figure was
+   measured for is still not open on the board.
 
 ---
 
@@ -155,8 +187,17 @@ Worth doing before the discussion, not after.
 
 ## Order of work next session
 
-1. Push `writing/dev` and open the PR. Read what CI says about the database-gated tests.
-2. Item 3, the discussion. Then A1 becomes a real task rather than a blocked one.
-3. Close A2 and open the lint rollout work package with the 415 figure.
+Rewritten 2026-08-03. Items 2 and 3 of the previous list are done; item 1 is not.
 
-Do not start Phase D. D1 follows A6, and A6 cannot pass until item 3 is settled.
+1. **Push `writing/dev` and open the PR.** Still not done, and still deliberately so — pushing is
+   outward-facing. Note what CI can and cannot tell you: it builds with `db push`, so the
+   `tool_permissions` rows never land there, and its integration suite runs over stdio, which never
+   sets a caller. **A green check says nothing about the ACL.** Refer to `ARCHITECTURE.md` §5.2.
+2. **B6, the matcher quality review.** Follows A1, which is closed, so this is unblocked build work —
+   the two questions that score below the 0.42 threshold.
+3. **Find an owner for A3's production half.** It is the last thing holding G1 to a local claim.
+4. **Open the lint rollout package** with the 415 figure and the build-order caveat. A2 is closed; the
+   package it pointed at is not open.
+
+**Phase D is now unblocked** — A6 has passed, and D1 follows it. Do not read that as a green light to
+start D1 today: it is a 40-hour package, and B6 sharpens the matcher it consumes.

@@ -35,7 +35,7 @@ The first pass was one long document that mixed the pitch, the architecture, and
 
 ## Status
 
-Deliverable 1 — the question bank and knowledge base — is built and checked: 82 questions, 11 categories, 29 approved answers, 211 recorded funder wordings, 4 form fixtures. The knowledge base is a prototype build, sufficient to proceed, and it expands when the Data team finalises.
+Deliverable 1 — the question bank and knowledge base — is built and checked: 87 questions, 11 categories, 29 approved answers, 247 recorded funder wordings, 7 form fixtures. The knowledge base is a prototype build, sufficient to proceed, and it expands when the Data team finalises.
 
 A working prototype proves the whole method and runs today. Its test suite is the quality bar: 45 tests cover this path. We rewrite in TypeScript rather than move the Python, for toolchain consistency — `TAD.md` section 1.3.
 
@@ -65,6 +65,25 @@ The 13 tests this document offered as the G2 bar were not sufficient on their ow
 4. **The Playbook asks for things these documents do not sanction, and we deliberately have not resolved them.** It opens by having Claude *create* a Grant Applications record and closes by *updating* it — a write path, against control 6 and the `readOnlyHint` on every planned tool. It also carries two rules stronger than anything in `TAD.md` section 3 (never name an entity not traceable to a confirmed current source; ask the fiscal-sponsorship framing every time), and it reconciles the wage claim as $550K stale versus $300K current where `TAD.md` section 3.2 documents $350,268 versus $362,361.82. **Decision: build the pipeline first, then assess.** Watering either document down to match the other before we can see a real draft package would be guessing.
 
 5. **Two ordinary grant questions do not match confidently, and that is the prototype's behaviour, not a port defect.** "How will you measure whether the program succeeded?" and "Upload your IRS letter of determination." both score below the 0.42 threshold in the Python original and in ours. They route to human review, which is the safe outcome, but it suggests the bank wants variants for them. A matching quality review is worth scheduling separately from parity.
+
+   **Reviewed 2026-08-03 under board B6 (#62). Half closed.** The review confirmed this flag was right
+   that it is not a port defect, and turned up three things the flag did not anticipate.
+
+   - **Neither question was mis-routing.** Both already matched the correct canonical entry, with the
+     widest margin over the runner-up of any sub-threshold case. Only the confidence flag was wrong.
+   - **The IRS question is fixed** by a real FFTC wording that was never recorded — `Attach IRS
+     letter.` — which lifts it from 0.351 to 0.43. Bank v0.3.1.
+   - **The success-measures question cannot be fixed by adding variants**, so this flag stays open for
+     it. The shortfall is one unstemmed inflection: the same sentence scores 0.352 with `succeeded` and
+     **0.644 with `success`**. Six real sourced wordings were trialled and none moved it.
+   - **Both strings are the prototype's own smoke-test samples** — `matcher.py` lines 160–161, inside
+     `if __name__ == "__main__"` — and appear in no funder form. The guess that "the bank wants variants
+     for them" was therefore half wrong: the real wordings behind both questions were already recorded.
+     Adding these two would mean inventing a funder source.
+
+   What remains is a decision, not a task: accept the safe human-review outcome, or add stemming and
+   move the parity baseline off the filed-application prototype. `TAD.md` should record whichever.
+   The measurement is on #62 and in `../CHANGELOG.md`.
 
 ### Not verified, and why
 

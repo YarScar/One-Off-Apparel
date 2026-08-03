@@ -290,7 +290,7 @@ Evidence:
 | Property | Position |
 |---|---|
 | Availability | The layer adds no new service. It inherits the MCP server's availability. |
-| Performance | The path is arithmetic over 82 questions and 211 wordings, loaded once and memoised. Measured 2026-07-29: 6.0 ms to match one question against the full bank (293 candidates, each scored with a `difflib`-equivalent block search), and 102 ms for the whole 17-question Truist form. There is no network call left in the layer to dominate that. |
+| Performance | The path is arithmetic over 87 questions and 247 wordings, loaded once and memoised. Measured at bank v0.3.1 (2026-07-29): 6.0 ms to match one question against the full bank, and 102 ms for the whole 17-question Truist form. There is no network call left in the layer to dominate that. |
 | Cost | No Claude call, no embedding cost, no new infrastructure. Refer to section 5, decision 6. |
 | Failure behaviour | A malformed seed file, a denied figure check, and a failed resize each surface as a structured error or an explicit gap in the draft. None produces a silent wrong answer. |
 | Testability | The whole layer is testable with no network and no mocking, since decision 6 removed the only outbound call. 45 tests were the stated bar; G1 and G2 alone landed 43, because parity is asserted against fixtures generated from the prototype rather than against hand-written expectations. Refer to `SPEC.md` section 5. |

@@ -57,7 +57,7 @@ Six deliverables. Each one has a result that you can check for yourself.
 
 Deliverables 2, 3, and 4 each carry a test bar. The prototype has an automatic test suite, so we already know the bar: 45 tests cover this path. We do not call a deliverable complete until its tests pass. `SPEC.md` holds the test detail.
 
-**Deliverable 1 is already built and checked.** It holds 82 questions, 11 categories, 29 approved answers, and 211 recorded funder wordings. The knowledge base is a prototype build. It is sufficient to go forward now, and it will be expanded once the Data team finalises its work.
+**Deliverable 1 is already built and checked.** It holds 87 questions, 11 categories, 29 approved answers, and 247 recorded funder wordings. The knowledge base is a prototype build. It is sufficient to go forward now, and it will be expanded once the Data team finalises its work.
 
 ## 4 How it works
 

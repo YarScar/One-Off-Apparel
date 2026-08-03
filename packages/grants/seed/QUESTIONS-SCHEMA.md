@@ -58,7 +58,28 @@ Keep `canonical` phrasings funder-neutral (no funder name, no specific limit). L
 
 ## Current coverage
 
-**v0.3.0** — 11 categories · 82 canonical questions · 29 KB answer slots · 211 recorded funder wordings, synthesized from 19 sources. `meta.version` in `questions.json` is authoritative; if this section and that field disagree, this section is stale.
+**v0.4.0** — 11 categories · 87 canonical questions · 29 KB answer slots · 247 recorded funder wordings, synthesized from 22 sources. `meta.version` in `questions.json` is authoritative; if this section and that field disagree, this section is stale.
+
+v0.4.0 added the first three fixtures transcribed from the Google Drive Grants archive export held
+in `packages/grants/data/` (the archive itself is not committed — `README.md` rule 6, `TAD.md` §2.5):
+
+- **`forms/jevs_c2l_2024.json`** — JEVS Human Services C2L-PHL youth provider RFP (filed 2024-07-15). 16 questions, 2 with word limits (250 / 500).
+- **`forms/wpf_workforce_2026.json`** — William Penn Foundation Workforce Training Supports RFP (drafting, due 2026-07-30). 12 questions, 3 with character limits (700 / 120 / 250).
+- **`forms/hamilton_loi_2025.json`** — Hamilton Family Charitable Trust LOI (filed 2025-05-09). 9 questions, 6 with character limits.
+
+35 new funder wordings were appended to existing canonicals, and **five new canonical questions**
+were added under growth rule 1, each with real sourced wordings:
+
+- `cover.fiscal_sponsor` (boolean → `kb.eligibility`) — "Will a fiscal sponsor be used?" Recurring for a fiscally sponsored applicant; answers the Step-3 framing decision.
+- `cover.grant_period` (field → `null`) — start/end dates and duration in months. Application specific.
+- `cover.multi_year` (boolean → `null`) — is this a multi-year request; often gated by a prior-relationship rule.
+- `eligibility.minority_owned` (single_select → `kb.eligibility`) — MBE/WBE gate common in government RFPs.
+- `eligibility.debarment` (boolean → `kb.eligibility`) — barred/suspended/debarred from government contracting.
+
+One variant was deliberately placed to avoid a matcher tie: the WPF "Project description" wording
+and its 250-character cap live on `program.description` (not `cover.project_summary`), because
+"Project Description." otherwise ties at 1.0 between the two and bank order would flip a recorded
+match. **Changing the bank obliges you to regenerate `src/__fixtures__/matcher-parity.json`** — `matcher.test.ts` asserts the fixture's `bank_version` equals `meta.version`, so the suite fails until you do. Run `python3 scripts/regenerate-matcher-parity.py --prototype ~/Projects/Grants/pipeline src/__fixtures__/matcher-parity.json` after copying the updated bank to the prototype; see `../CHANGELOG.md` under 2026-08-03 for the full procedure.
 
 v0.1 covered the four generic common-application sources (NNG, FFTC, NewAlliance, Instrumentl). v0.2 added the Philadelphia/regional, corporate, federal, and PA-state forms (CGA, Seybert, Barra, Patricia Kind, Lindback, BofA, Comcast, Truist, SF-424, ED 34 CFR 75.210, GEPA-427, YouthBuild, DCED, PAsmart, Philadelphia Works).
 
