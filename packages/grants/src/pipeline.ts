@@ -37,7 +37,7 @@
  * pinned by a test in `pipeline.test.ts`:
  *
  * 1. **`derive_from_reference`** — a field wanting a short structured value whose knowledge-base slot
- *    holds narrative. Every one of the 42 non-narrative questions in the v0.4.0 bank routes to a
+ *    holds narrative. 35 of the 43 non-narrative questions in the v0.4.1 bank route to a
  *    narrative slot, the shortest being 30 words: Truist's 30-*character* "name of your solution"
  *    field points at the 199-word `kb.program_desc`. The prototype returns that prose as the answer.
  *    This hands it back as source material to derive "Launchpad" from.
@@ -65,6 +65,7 @@ import {
   type KnowledgeBase,
   type QuestionBank,
 } from './schemas.js';
+import { addWarnings } from './warnings.js';
 
 /**
  * Who does the next step on one question.
@@ -144,11 +145,6 @@ export interface AnswerPlan {
   /** The text carries a currency, percentage, or multi-digit figure that must be verified live. */
   readonly carries_figures?: boolean;
 }
-
-const UNVERIFIED_SUFFIX = '  ⚠ Figures unverified — confirm with staff before submitting.';
-const FIGURES_SUFFIX =
-  '  ⚠ Carries figures — verify every one against live data via the figure work order before ' +
-  'publishing. The stored figures drift.';
 
 /**
  * Resolve one matched question to an answer plan.
@@ -355,21 +351,6 @@ function describeAnswerType(type: AnswerType): string {
     case 'narrative':
       return 'narrative';
   }
-}
-
-/**
- * Append the two data-honesty warnings an action line may need.
- *
- * Both can apply at once and both are appended, because they say different things: `verified:false`
- * means the text was never grounded in a filed application, while `carries_figures` means the text
- * states numbers that have since moved. A `verified:true` answer full of drifting figures is the
- * common case and the dangerous one.
- */
-function addWarnings(action: string, verified: boolean, carriesFigures: boolean): string {
-  let out = action;
-  if (!verified) out += UNVERIFIED_SUFFIX;
-  if (carriesFigures) out += FIGURES_SUFFIX;
-  return out;
 }
 
 export interface DraftSummary {

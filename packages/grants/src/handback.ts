@@ -102,14 +102,19 @@ export interface Handback {
 }
 
 /**
- * Names `grant_build_draft` and not `grant_resize_answer`, deliberately: only the former is
- * registered today. Pointing a caller at a tool that is not in `tools/list` yet produces a failed
- * call and a model that improvises around it. Add `grant_resize_answer` here when G4 registers it.
+ * Names `grant_resize_answer` as of G4, which registered it. Until then this named
+ * `grant_build_draft`, because pointing a caller at a tool absent from `tools/list` produces a failed
+ * call and a model that improvises around it — the check is registration, not intent.
+ *
+ * `grant_resize_answer` is the right target now that it exists: it takes one answer and one limit,
+ * which is the shape of the work a handback describes. `grant_build_draft` takes a whole form and has
+ * no parameter for a rewritten answer, so the old wording asked for something it could not accept.
  */
 const VERIFY =
-  'Re-measure the result before using it — pass the rewritten text back through grant_build_draft ' +
-  'as the answer for this question. A length claim is only true if the arithmetic says so; do not ' +
-  'count words or characters yourself.';
+  'Re-measure the result before using it — pass the rewritten text back to grant_resize_answer as ' +
+  '`rewrite`, with the same `text` and `limit`. A length claim is only true if the arithmetic says ' +
+  'so; do not count words or characters yourself. That call also checks every figure in your rewrite ' +
+  'against the source and rejects one the source does not state.';
 
 export interface BuildHandbackInput {
   readonly task: HandbackTask;

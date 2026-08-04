@@ -34,6 +34,13 @@ export * from './matcher.js';
 // this repository, and this layer does not add one — see `handback.ts` and `admin/TAD.md` §6.
 export * from './handback.js';
 
+// The two data-honesty warnings an action line may carry. Shared so `pipeline.ts` and `resize.ts`
+// cannot drift on the wording.
+export * from './warnings.js';
+
+// One answer, one limit: measure, hand back, then check the rewrite for length AND figure fidelity.
+export * from './resize.js';
+
 // Form → match → KB retrieve → limit check → Markdown. Returns the figure work order; never calls a
 // connector.
 export * from './pipeline.js';

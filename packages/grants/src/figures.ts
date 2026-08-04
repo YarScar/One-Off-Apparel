@@ -269,6 +269,44 @@ export function containsNumericClaim(text: string): boolean {
   return NUMERIC_CLAIM.test(text);
 }
 
+/**
+ * A whole numeric value, for extraction. Deliberately NOT {@link NUMERIC_CLAIM}.
+ *
+ * The two patterns answer different questions and need different precision. `NUMERIC_CLAIM` asks "are
+ * there figures in here at all" — a coarse trigger for the live-verification warning, where matching
+ * part of a number is as good as matching all of it. This asks "which values", where matching part of
+ * a number is a defect: `\b\d{2,}\b` does not span a thousands comma, so `8,000` yields `000`, and a
+ * rewrite that moved it to `9,000` would compare equal and pass. Comma-grouped counts are the most
+ * common figure shape in grant prose — `8,000 students`, `1,200 hours` — so that miss would cover most
+ * of what a resize could get wrong.
+ *
+ * Branch order is load-bearing: currency first (it may carry both a comma and a decimal), then
+ * comma-grouped, then percentage, then any remaining bare number. A single-digit bare number is
+ * included, unlike in `NUMERIC_CLAIM` — "2 campuses" becoming "5 campuses" is a fact change, and the
+ * only place a lone digit is noise is when it was never a claim to begin with.
+ */
+const NUMERIC_VALUE = /\$\s?\d[\d,]*(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?\s?%|\d+(?:\.\d+)?/g;
+
+/**
+ * Every numeric value in a text, normalised for comparison.
+ *
+ * Added at G4 for `resize.ts`, which compares a rewrite's figures against its source to catch an
+ * invented one. Normalisation strips `$`, `%`, commas, and inner whitespace, so `$1,200`, `1,200`, and
+ * `1200` all compare equal. That is deliberate: the check exists to catch a figure that was not in the
+ * source at all, not to police formatting, and rule 2 of the resize guardrail lets a rewrite reformat
+ * what it keeps.
+ *
+ * **What it does not catch.** A magnitude suffix is not part of the token, so `$1.34M` normalises to
+ * `1.34` — a rewrite restating it as `$1.34B` reads as the same value. Catching that needs unit
+ * awareness rather than a wider pattern, and the figure work order in this same module is what covers
+ * a wrong magnitude: every figure has to be confirmed against a live `query_*` call before publishing
+ * regardless of what this check said. Recorded here so the gap is known rather than assumed away.
+ */
+export function extractNumericClaims(text: string): string[] {
+  const matches = text.match(NUMERIC_VALUE) ?? [];
+  return matches.map((m) => m.replace(/[$%,\s]/g, ''));
+}
+
 export interface FigureWorkOrder {
   readonly policy: string;
   readonly kb_snapshot_date: string;

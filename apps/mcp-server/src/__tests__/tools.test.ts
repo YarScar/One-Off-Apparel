@@ -19,7 +19,7 @@ describeLocal('MCP tool handlers (integration)', () => {
     await prisma.$disconnect();
   });
 
-  it('tools/list exposes all 22 tools', async () => {
+  it('tools/list exposes all 23 tools', async () => {
     const tools = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -29,6 +29,7 @@ describeLocal('MCP tool handlers (integration)', () => {
         'get_student_info',
         'grant_build_draft',
         'grant_match_question',
+        'grant_resize_answer',
         'query_attendance',
         'query_certifications',
         'query_competency',
@@ -168,6 +169,7 @@ describeLocal('MCP tool handlers (integration)', () => {
   // through the real server rather than through the library. `aug7_truist` is the richest fixture —
   // 17 questions, every one with a stated limit.
   it('grant_build_draft returns a draft package and a figure work order for a full form', async () => {
+    const registered = (await client.listTools()).map((t) => t.name);
     const result = (await client.callTool('grant_build_draft', {
       form_id: 'aug7_truist',
     })) as {
@@ -223,11 +225,83 @@ describeLocal('MCP tool handlers (integration)', () => {
       if (r.actor !== 'llm') continue;
       expect(r.handback?.source_text.length).toBeGreaterThan(0);
       expect(r.handback?.rules.join(' ')).toMatch(/NEVER invent|ONLY from the source material/);
-      // Never point the caller at a tool that is not registered yet.
-      expect(r.handback?.verify_with).not.toContain('grant_resize_answer');
+      // The re-measure step must name a REGISTERED tool. G4 registered grant_resize_answer, so this
+      // asserts against tools/list rather than against a hard-coded name — the property that matters
+      // is reachability, and it is the one that broke when the name was chosen by hand.
+      const target = r.handback?.verify_with ?? '';
+      expect(registered.some((n) => target.includes(n))).toBe(true);
+      expect(target).toContain('grant_resize_answer');
     }
 
     expect(result.markdown).toContain('not submittable as-is');
+  });
+
+  // grant_resize_answer, gate G4. Two calls, because the loop is the point: the tool measures and the
+  // caller rewrites. Driven through the real server so the zod schema and the runTool envelope are
+  // exercised, not just the library.
+  it('grant_resize_answer hands back on the first call and accepts a fitting rewrite on the second', async () => {
+    const source = 'one two three four five six';
+    const first = (await client.callTool('grant_resize_answer', {
+      text: source,
+      limit: { unit: 'words', max: 3 },
+      funder: 'ACME Fund',
+    })) as {
+      notes: string;
+      accepted: boolean;
+      text: string | null;
+      units_before: number;
+      handback?: { task: string; source_text: string; rules: string[]; verify_with: string };
+    };
+    expect(first.notes).toBe('rewrite_owed');
+    expect(first.accepted).toBe(false);
+    expect(first.text).toBeNull();
+    expect(first.units_before).toBe(6);
+    expect(first.handback?.task).toBe('resize');
+    expect(first.handback?.source_text).toBe(source);
+    expect(first.handback?.rules.join(' ')).toContain('NEVER invent');
+
+    const second = (await client.callTool('grant_resize_answer', {
+      text: source,
+      limit: { unit: 'words', max: 3 },
+      rewrite: 'one two three',
+    })) as { notes: string; accepted: boolean; text: string | null; units_after: number };
+    expect(second.notes).toBe('fits');
+    expect(second.accepted).toBe(true);
+    expect(second.text).toBe('one two three');
+    expect(second.units_after).toBe(3);
+  });
+
+  it('grant_resize_answer rejects a fitting rewrite that states a figure the source does not', async () => {
+    const result = (await client.callTool('grant_resize_answer', {
+      text: 'We served 145 young people across two campuses.',
+      limit: { unit: 'words', max: 5 },
+      rewrite: 'We served 180 young people.',
+    })) as {
+      notes: string;
+      accepted: boolean;
+      fits_after_resize: boolean;
+      text: string | null;
+      figure_check: { ok: boolean; invented: string[] };
+    };
+    // It fits. Length alone would pass it, which is why `accepted` is the field to branch on.
+    expect(result.fits_after_resize).toBe(true);
+    expect(result.notes).toBe('figures_altered');
+    expect(result.accepted).toBe(false);
+    expect(result.text).toBeNull();
+    expect(result.figure_check.invented).toContain('180');
+  });
+
+  // `limit` and `text` being present at all is the schema's job — the SDK rejects a missing one before
+  // the handler runs, so there is nothing for a tool test to assert there. What the schema cannot
+  // express is that `min(1)` accepts whitespace, and measuring whitespace reports "0 words, fits" for
+  // a field nobody filled in. That is the reachable error, so that is the one under test.
+  it('grant_resize_answer refuses whitespace as an answer', async () => {
+    const result = (await client.callTool('grant_resize_answer', {
+      text: '   ',
+      limit: { unit: 'words', max: 10 },
+    })) as { error?: { code: string; message: string } };
+    expect(result.error?.code).toBe('no_records');
+    expect(result.error?.message).toContain('Whitespace is not an answer');
   });
 
   it('grant_build_draft rejects an unknown form fixture', async () => {

@@ -59,10 +59,15 @@ describe('buildHandback', () => {
 
   it('names only a registered tool for the re-measure step', () => {
     const h = buildHandback({ task: 'resize', sourceText: 'x', limit, measurement, context });
-    // grant_resize_answer is not registered until G4. Pointing a caller at a tool absent from
-    // tools/list produces a failed call and a model that improvises around it.
-    expect(h.verify_with).toContain('grant_build_draft');
-    expect(h.verify_with).not.toContain('grant_resize_answer');
+    // The rule is registration, not intent: pointing a caller at a tool absent from tools/list
+    // produces a failed call and a model that improvises around it. Before G4 this named
+    // grant_build_draft for exactly that reason. G4 registered grant_resize_answer, which is the tool
+    // shaped like the work — one answer, one limit, and a `rewrite` parameter to check.
+    expect(h.verify_with).toContain('grant_resize_answer');
+    expect(h.verify_with).toContain('rewrite');
+    // grant_build_draft has no parameter that accepts a rewritten answer, so naming it here asked for
+    // something it could not do.
+    expect(h.verify_with).not.toContain('grant_build_draft');
   });
 
   it('prepends extra rules without displacing the standard guardrail', () => {
