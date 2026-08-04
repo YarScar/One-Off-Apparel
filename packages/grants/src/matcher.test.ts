@@ -266,3 +266,53 @@ describe('matchQuestion — prototype parity', () => {
     expect(r.is_confident).toBe(false);
   });
 });
+
+/**
+ * Board B6, the matcher quality review — 2026-08-04.
+ *
+ * B6's acceptance criteria measure **misses**: questions that fall below the threshold and route to
+ * staff review. The review found that the more damaging class is the opposite one, and that the
+ * criteria are blind to it. A miss is safe: the draft says "confirm this mapping". A **confident wrong
+ * match** is not, because it routes to a knowledge-base slot and the draft presents that slot's content
+ * as the answer.
+ *
+ * These cases pin the one instance that existed on the real form corpus. They are not parity cases —
+ * the fixtures cover parity — they are the falsifiable statement of the defect, so a bank edit that
+ * reintroduces it fails here rather than being noticed on a filed application.
+ */
+describe('matchQuestion — B6: a confident match must not be the wrong SHAPE of answer', () => {
+  const bank = loadBank();
+
+  // JEVS asks whether LaunchPad has any connection to JEVS — a conflict-of-interest disclosure. Before
+  // bank v0.4.1 no entry covered that, and it matched `attachments.board_list` at 0.459, CONFIDENTLY,
+  // on the shared words "Board of Directors". So a yes/no disclosure routed to `kb.docs` and the draft
+  // offered an attachment checklist as its answer. The nearest correct candidate, `organization.board`,
+  // scored 0.361 — below the floor. That is a bank COVERAGE gap surfacing as a wrong answer rather than
+  // as a gap, which is why adding variants could never have fixed it.
+  const JEVS = 'Does the organization have any connection with JEVS (including its Board of Directors)?';
+
+  it('routes a conflict-of-interest disclosure to a yes/no, not to a document upload', () => {
+    const m = matchQuestion(JEVS, bank);
+    expect(m.is_confident).toBe(true);
+    expect(m.matched_id).toBe('cover.funder_connection');
+    expect(m.answer_type).toBe('boolean');
+    // The load-bearing assertion. An attachment type sends this to `needs_attachment`, which is staff
+    // work on a question no person needs to do anything about but answer.
+    expect(m.answer_type).not.toBe('attachment');
+    expect(m.matched_id).not.toBe('attachments.board_list');
+  });
+
+  it('holds no stored answer for it, because the answer depends on the funder', () => {
+    // `kb_ref: null` is correct and deliberate: whether a connection exists is a fact about THIS
+    // application, not about LaunchPad. A kb_ref here would let a stored answer speak for every funder.
+    expect(matchQuestion(JEVS, bank).kb_ref).toBeNull();
+  });
+
+  it('did not steal the board-list question it used to be confused with', () => {
+    // The risk of adding a canonical mentioning "board": the real attachment request follows it home.
+    const m = matchQuestion("Attach a copy of your organization's current Board of Directors list.", bank);
+    expect(m.matched_id).toBe('attachments.board_list');
+    expect(m.answer_type).toBe('attachment');
+    expect(m.is_confident).toBe(true);
+  });
+});

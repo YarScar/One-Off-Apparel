@@ -19,7 +19,7 @@
  * **1. Autojunk fires on the real bank.** When the second sequence reaches 200 characters,
  * `SequenceMatcher` treats any character occurring more than `len(b) // 100 + 1` times as
  * "popular" and drops it from the index. Measured over the bank's 322 unique candidate token-strings
- * (87 canonical + 247 variants, deduplicated), six cross that threshold at bank v0.4.0:
+ * (88 canonical + 248 variants, deduplicated), six cross that threshold at bank v0.4.1:
  *
  * | Question id                    | Variant source  | Normalized length |
  * |--------------------------------|-----------------|-------------------|

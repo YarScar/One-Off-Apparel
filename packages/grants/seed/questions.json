@@ -1,8 +1,8 @@
 {
   "meta": {
     "name": "Canonical Grant Question Bank",
-    "version": "0.4.0",
-    "updated": "2026-08-03",
+    "version": "0.4.1",
+    "updated": "2026-08-04",
     "description": "Normalized, deduplicated grant application questions synthesized from real, publicly published funder forms. Each canonical question aggregates the real-world variants that map to it, so an incoming funder question can be matched to one canonical entry and routed to the Knowledge Base answer that satisfies it. v0.2 extends the bank with the Philadelphia/regional, corporate, federal, and PA-state forms captured in sources/philadelphia-regional-and-sector-forms.md, adding eligibility-gate, innovation, risk, capacity, and federal/state structured-field questions. v0.3 adds the two Aug-7 pilot forms (GSK STEM Access, Truist Foundation Inspire Awards) as variants; see sources/aug7-pilot-forms.md.",
     "sources": [
       {
@@ -2349,6 +2349,21 @@
         {
           "text": "Is this a multi-year funding request?",
           "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "cover.funder_connection",
+      "category": "cover",
+      "canonical": "Does your organization have any connection to the funder, including its board members or staff?",
+      "answer_type": "boolean",
+      "kb_ref": null,
+      "frequency": "low",
+      "notes": "Application specific: whether a connection exists depends on which funder is being applied to, so no stored answer can hold it. Added 2026-08-04 under board B6. Before this entry existed the JEVS wording matched attachments.board_list at 0.459 and CONFIDENTLY - a conflict-of-interest disclosure routed to kb.docs, so a draft offered an attachment checklist as the answer to a yes/no question. A confident wrong match is worse than a miss: a miss routes to staff review.",
+      "variants": [
+        {
+          "text": "Does the organization have any connection with JEVS (including its Board of Directors)?",
+          "source": "JEVS-C2L"
         }
       ]
     },

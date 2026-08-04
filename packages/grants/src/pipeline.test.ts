@@ -226,7 +226,7 @@ describe('the handback — outstanding text work goes to the calling model, not 
 // --------------------------------------------------------------------------- beyond the prototype
 
 describe('derive_from_reference — a short field gets the prose as source, not as the answer', () => {
-  // Why this branch exists: every one of the 42 non-narrative questions in the v0.4.0 bank routes to
+  // Why this branch exists: 35 of the 43 non-narrative questions in the v0.4.1 bank route to
   // a narrative KB slot, the shortest being 30 words. The prototype returns that prose as the answer.
   // Pasting 124 words of kb.eligibility into "Are you a 501(c)(3)? Yes/No" is wrong — but the model
   // can derive the answer from it, so it is handed over rather than withheld.

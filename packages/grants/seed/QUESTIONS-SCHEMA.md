@@ -58,7 +58,7 @@ Keep `canonical` phrasings funder-neutral (no funder name, no specific limit). L
 
 ## Current coverage
 
-**v0.4.0** — 11 categories · 87 canonical questions · 29 KB answer slots · 247 recorded funder wordings, synthesized from 22 sources. `meta.version` in `questions.json` is authoritative; if this section and that field disagree, this section is stale.
+**v0.4.1** — 11 categories · 88 canonical questions · 29 KB answer slots · 248 recorded funder wordings, synthesized from 22 sources. `meta.version` in `questions.json` is authoritative; if this section and that field disagree, this section is stale.
 
 v0.4.0 added the first three fixtures transcribed from the Google Drive Grants archive export held
 in `packages/grants/data/` (the archive itself is not committed — `README.md` rule 6, `TAD.md` §2.5):

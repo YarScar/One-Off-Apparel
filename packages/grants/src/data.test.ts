@@ -20,11 +20,12 @@ describe('seed loader', () => {
   it('loads the question bank at the counts the documents claim', () => {
     const bank = loadBank();
     expect(bank.categories).toHaveLength(11);
-    expect(bank.questions).toHaveLength(87);
+    expect(bank.questions).toHaveLength(88);
     expect(bank.kb_entries).toHaveLength(29);
     const variants = bank.questions.reduce((n, q) => n + q.variants.length, 0);
-    // 212 at bank v0.3.1; v0.4.0 added 35 recorded funder wordings across three new forms.
-    expect(variants).toBe(247);
+    // 212 at bank v0.3.1; v0.4.0 added 35 recorded funder wordings across three new forms;
+    // v0.4.1 added cover.funder_connection with one JEVS wording, under board B6.
+    expect(variants).toBe(248);
   });
 
   it('loads the knowledge base with 29 answers, 4 of them unverified', () => {

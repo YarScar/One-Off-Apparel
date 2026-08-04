@@ -117,7 +117,7 @@ interface PreparedQuestion {
  * Normalized candidates for a bank, computed once.
  *
  * `normalize()` plus the join is pure and the bank is immutable, so re-running it per incoming
- * question was pure waste — and not a rounding error: the v0.4.0 bank has 334 candidate strings, and
+ * question was pure waste — and not a rounding error: the v0.4.1 bank has 336 candidate strings, and
  * `grant_match_question` accepts up to 200 questions per call. At ~8.6 ms per question that is ~1.7 s
  * of synchronous CPU in a single-threaded HTTP server, blocking every other request and `/health`
  * for the duration. Keyed weakly so a caller passing an ad-hoc bank cannot leak it.

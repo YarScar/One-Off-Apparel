@@ -1,6 +1,6 @@
 {
   "note": "Generated from pipeline/matcher.py match_question(). Do not hand-edit.",
-  "bank_version": "0.4.0",
+  "bank_version": "0.4.1",
   "cases": [
     {
       "incoming": "What is your organization's legal name?",
@@ -5256,13 +5256,13 @@
       "incoming": "Does the organization have any connection with JEVS (including its Board of Directors)?",
       "expected": {
         "incoming": "Does the organization have any connection with JEVS (including its Board of Directors)?",
-        "matched_id": "attachments.board_list",
-        "canonical": "Attach your current board of directors list.",
-        "category": "attachments",
-        "kb_ref": "kb.docs",
-        "answer_type": "attachment",
-        "confidence": 0.459,
-        "matched_via": "FFTC",
+        "matched_id": "cover.funder_connection",
+        "canonical": "Does your organization have any connection to the funder, including its board members or staff?",
+        "category": "cover",
+        "kb_ref": null,
+        "answer_type": "boolean",
+        "confidence": 1.0,
+        "matched_via": "JEVS-C2L",
         "is_confident": true
       }
     },
@@ -5277,6 +5277,20 @@
         "answer_type": "field",
         "confidence": 1.0,
         "matched_via": "JEVS-C2L",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Does your organization have any connection to the funder, including its board members or staff?",
+      "expected": {
+        "incoming": "Does your organization have any connection to the funder, including its board members or staff?",
+        "matched_id": "cover.funder_connection",
+        "canonical": "Does your organization have any connection to the funder, including its board members or staff?",
+        "category": "cover",
+        "kb_ref": null,
+        "answer_type": "boolean",
+        "confidence": 1.0,
+        "matched_via": "canonical",
         "is_confident": true
       }
     }
