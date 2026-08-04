@@ -19,7 +19,7 @@ describeLocal('MCP tool handlers (integration)', () => {
     await prisma.$disconnect();
   });
 
-  it('tools/list exposes all 21 tools', async () => {
+  it('tools/list exposes all 22 tools', async () => {
     const tools = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -27,6 +27,7 @@ describeLocal('MCP tool handlers (integration)', () => {
         'get_entity_brief',
         'get_finance_brief',
         'get_student_info',
+        'grant_build_draft',
         'grant_match_question',
         'query_attendance',
         'query_certifications',
@@ -161,5 +162,85 @@ describeLocal('MCP tool handlers (integration)', () => {
     expect(Array.isArray(result.certifications)).toBe(true);
     expect(Array.isArray(result.phase_progression)).toBe(true);
     expect(result.sources_active).toContain('google_sheets');
+  });
+
+  // The G3 gate condition: a full form fixture returns a draft package and a figure work order,
+  // through the real server rather than through the library. `aug7_truist` is the richest fixture —
+  // 17 questions, every one with a stated limit.
+  it('grant_build_draft returns a draft package and a figure work order for a full form', async () => {
+    const result = (await client.callTool('grant_build_draft', {
+      form_id: 'aug7_truist',
+    })) as {
+      form: { funder: string };
+      summary: {
+        total: number;
+        by_status: Record<string, number>;
+        by_actor: { none: number; llm: number; staff: number };
+      };
+      results: Array<{
+        incoming: string;
+        status: string;
+        actor: string;
+        action: string;
+        handback?: { task: string; source_text: string; rules: string[]; verify_with: string };
+      }>;
+      kb_refs_used: string[];
+      figure_work_order: {
+        policy: string;
+        items: Array<{ key: string; tool: string; args: Record<string, string> }>;
+        definitional_conflicts: string[];
+      };
+      your_tasks: Array<{ status: string; count: number; questions: number[]; next_step: string }>;
+      staff_actions: Array<{ status: string; count: number; questions: number[]; next_step: string }>;
+      markdown: string;
+    };
+
+    expect(result.form.funder).toContain('Truist');
+    expect(result.summary.total).toBe(17);
+    expect(result.results).toHaveLength(17);
+    for (const r of result.results) expect(r.action.length).toBeGreaterThan(0);
+
+    // The work order is the deliverable that keeps figures honest: it must name calls to make.
+    expect(result.figure_work_order.items.length).toBeGreaterThan(0);
+    expect(result.kb_refs_used.length).toBeGreaterThan(0);
+    for (const item of result.figure_work_order.items) {
+      expect(item.tool).toMatch(/^(query_|get_|search_)/);
+    }
+    // This form draws on kb.metrics, whose "145 served" is a definitional conflict, not drift.
+    expect(result.figure_work_order.definitional_conflicts.length).toBeGreaterThan(0);
+
+    // Outstanding work is split by who does it, and the model's share arrives ready to do: the
+    // handback carries the source text and the guardrail, so no second tool call is needed to start.
+    expect(result.your_tasks.length).toBeGreaterThan(0);
+    expect(result.staff_actions.length).toBeGreaterThan(0);
+    expect(result.summary.by_actor.llm).toBeGreaterThan(0);
+    expect(result.summary.by_actor.staff).toBeGreaterThan(0);
+    expect(
+      result.summary.by_actor.none + result.summary.by_actor.llm + result.summary.by_actor.staff,
+    ).toBe(17);
+
+    for (const r of result.results) {
+      if (r.actor !== 'llm') continue;
+      expect(r.handback?.source_text.length).toBeGreaterThan(0);
+      expect(r.handback?.rules.join(' ')).toMatch(/NEVER invent|ONLY from the source material/);
+      // Never point the caller at a tool that is not registered yet.
+      expect(r.handback?.verify_with).not.toContain('grant_resize_answer');
+    }
+
+    expect(result.markdown).toContain('not submittable as-is');
+  });
+
+  it('grant_build_draft rejects an unknown form fixture', async () => {
+    const result = (await client.callTool('grant_build_draft', {
+      form_id: 'no_such_form',
+    })) as { error?: { code: string } };
+    expect(result.error?.code).toBe('entity_not_found');
+  });
+
+  it('grant_build_draft requires a funder alongside inline questions', async () => {
+    const result = (await client.callTool('grant_build_draft', {
+      questions: [{ text: 'What is your mission?' }],
+    })) as { error?: { code: string } };
+    expect(result.error?.code).toBe('no_records');
   });
 });

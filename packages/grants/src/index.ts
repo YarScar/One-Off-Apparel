@@ -29,3 +29,11 @@ export * from './seq-ratio.js';
 
 // Funder question → question bank entry.
 export * from './matcher.js';
+
+// What the layer gives back to the CALLING model when text needs shaping. No model client lives in
+// this repository, and this layer does not add one — see `handback.ts` and `admin/TAD.md` §6.
+export * from './handback.js';
+
+// Form → match → KB retrieve → limit check → Markdown. Returns the figure work order; never calls a
+// connector.
+export * from './pipeline.js';
