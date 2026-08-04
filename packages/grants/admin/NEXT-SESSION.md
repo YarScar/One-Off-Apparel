@@ -30,8 +30,8 @@ Checked rather than assumed, at the end of the 2026-08-04 D3/G4 session.
 | Release gates | **G1 passed 2026-08-03, locally** — refer to `CHANGELOG.md`. **G2 passed exactly.** **G3 and G4 both passed 2026-08-04**, each on a restated condition (20 cases and 12 cases). **G5 not started.** |
 | Tools registered | **3 of 3** — `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, all wired into `make-server.ts`. |
 | OpenProject board | **Live.** 40 work packages, #49 to #88, Aug 03 to Sep 16. D1 (#71), D2 (#72) and D3 (#73) all closed. |
-| Committed to git | Ten commits on `writing/dev`. D1 is committed (`3a98a7f`); **the D3/G4 change set is in the working tree, uncommitted.** |
-| Pushed / PR opened | **No.** Refer to "Open the PR" below. |
+| Committed to git | **Everything.** 19 commits on `writing/dev`; the D3/G4 work is `1f3a2fb`, `19ca6e9`, `715862e`. Working tree clean apart from two files unrelated to this workstream — see "Open the PR". |
+| Pushed / PR opened | **Pushed 2026-08-04**, in sync with `origin/writing/dev`, 19 ahead of `origin/master`. **PR not opened.** Refer to "Open the PR" below. |
 | Linter | **Runs.** `packages/grants` is clean. Repo-wide baseline measured — 415. |
 | `pnpm -r typecheck` | Passes across all fourteen packages. |
 | Local database | **Available since 2026-08-03.** Postgres 16.14 via `pnpm db:up`, 13 migrations applied. |
@@ -282,7 +282,11 @@ So the likely answer is **both**: a local Postgres for the build and the tests, 
 
 Not done, deliberately — pushing is outward-facing and was left for a decision.
 
-**Ten commits sit on `writing/dev`, three of them unpushed, plus the uncommitted D3/G4 change set** (measured 2026-08-04: `writing/dev` is 3 ahead of `origin/writing/dev` and 16 ahead of `origin/master`). Opening a PR to `master` runs CI against a pgvector service container, which means the database-gated tests that skip locally will actually execute. That is still the first real signal on the tool code, and it does not depend on item 3 being settled.
+**Pushed 2026-08-04. `writing/dev` is in sync with `origin/writing/dev` and 19 ahead of `origin/master`. The PR itself is still not opened** — that is the outward-facing step and it is a separate decision.
+
+Opening a PR to `master` runs CI against a pgvector service container, which means the database-gated tests that skip locally will actually execute. That is still the first real signal on the tool code, and it does not depend on item 3 being settled. **What a green check will NOT tell you:** CI builds with `db push`, so the `tool_permissions` rows never land there, and its integration suite runs over stdio, which never sets a caller. The ACL is untouched by it — `ARCHITECTURE.md` §5.2.
+
+**Two files in the working tree are not this workstream's** and were deliberately left out of every commit: a `.gitignore` edit adding `.opencode` (which also drops the trailing newline), and an untracked `EchoesVault/` directory. `EchoesVault/` is neither committed nor ignored, so it will keep showing up in `git status` and is one careless `git add -A` away from being committed. Worth a decision by whoever owns it.
 
 Worth doing before the discussion, not after.
 
@@ -290,20 +294,18 @@ Worth doing before the discussion, not after.
 
 ## Order of work next session
 
-Rewritten 2026-08-04 after D3/G4. **Nothing on this list is blocked by missing code.** The first two
-items are a commit and a push; the rest are one build package, one review, and three ownership gaps.
+Rewritten 2026-08-04 after D3/G4. **Nothing on this list is blocked by missing code.** The first three
+items are done; what is left is one outward-facing step, two build packages, and three ownership gaps.
+Struck-through items record what was done, so the next session does not redo them.
 
-1. **Commit the D3/G4 change set.** Green and uncommitted: 3 new source files (`resize.ts`,
-   `warnings.ts`, `resize.test.ts`), 1 new tool (`grant-resize-answer.ts`), and the documentation
-   reconciled to them. Nothing else should be built on an uncommitted tree.
-2. **Push `writing/dev` and open the PR.** Still not done, and still deliberately so — pushing is
-   outward-facing. Note what CI can and cannot tell you: it builds with `db push`, so the
-   `tool_permissions` rows never land there, and its integration suite runs over stdio, which never
-   sets a caller. **A green check says nothing about the ACL.** Refer to `ARCHITECTURE.md` §5.2.
-3. **B6, the matcher quality review.** Unblocked, data-free, and it sharpens the matcher that both
-   `grant_build_draft` and the drafting skill consume. It also holds the bank-typing question carved out
-   of `grant-miy` — Truist's "Who does your solution serve" is typed `demographic` and reads as
-   narrative.
+1. ~~**Commit the D3/G4 change set.**~~ Done 2026-08-04 — `1f3a2fb` (the tool), `19ca6e9` (the B6
+   bank fix), `715862e` (the documentation).
+2. **Open the PR to `master`.** `writing/dev` is pushed and in sync; the PR is not opened, and that is
+   the only outward-facing step left. Note what CI can and cannot tell you — refer to "Open the PR".
+3. ~~**B6, the matcher quality review.**~~ Run 2026-08-04. Read the finding before trusting the old
+   framing: B6 measured misses, and misses are the safe failure. One confident wrong match fixed
+   (bank v0.4.1), three recorded on `bd` `grant-h32`, and `grant-miy`'s count corrected 42 → 35. It
+   stays open on the stemming decision, which is a `TAD.md` decision and already fully measured.
 4. **D4, the reframe seam.** 4h, and the smallest thing left in Phase D. Port it, do not wire it —
    `SPEC.md` §8 and `TAD.md` decision 7. A test must assert it is unreachable from any registered tool.
 5. **D5 / G5, rewrite `skill_grant_writing`.** The last gate, and the one with no parity fixture to
