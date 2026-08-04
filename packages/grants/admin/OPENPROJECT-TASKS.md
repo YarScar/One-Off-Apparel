@@ -205,6 +205,14 @@ Add variants per the growth rules in `seed/QUESTIONS-SCHEMA.md`. Then regenerate
 **Acceptance:** both questions match confidently. All existing parity tests still pass against the regenerated fixtures.
 **Owner:** Demitri. **Estimate:** 6h. **Follows:** A1.
 
+**REVIEW RUN 2026-08-04. Stays open on a decision, not on work.** Three things, and the first is that this package was measuring the wrong thing.
+
+1. **The premise is half stale, and the acceptance criteria are unreachable as written.** The IRS question matches confidently at 0.430 — fixed in bank v0.3.1 by a real FFTC wording. The success-measures question **cannot** be fixed by adding variants: the shortfall is one unstemmed inflection (0.352 with `succeeded`, 0.644 with `success`), six real sourced wordings were trialled and none moved it, and both of this package's strings are the prototype's own smoke-test samples appearing in **no funder form** — so adding them would mean inventing a funder source, which `../CLAUDE.md` §1 forbids. What is left is a `TAD.md` decision: accept the safe staff-review outcome, or adopt stemming and move the G2 parity baseline off the prototype that produced LaunchPad's filed applications. **Recommend accepting.**
+
+2. **The criteria measure misses, and misses are the safe failure.** Across all 106 questions in the seven form fixtures, **105 of 106 match confidently**; the single miss is the intended control. Recall is not the problem. The damaging class is a **confident wrong match** — it routes to a knowledge-base slot and the draft presents that slot's content as the answer, where a miss says "confirm this mapping" and a person looks. Four were found by scanning each confident match's `answer_type` against the funder's wording and the stated limit.
+
+3. **One fixed, three handed on, and one other package's number corrected.** JEVS's conflict-of-interest question matched `attachments.board_list` at 0.459 *confidently*, on the shared words "Board of Directors" — a yes/no disclosure routed to `kb.docs`. Nothing in the bank covered conflict of interest, so no variant could have fixed it; added `cover.funder_connection` (boolean, `kb_ref: null`), bank v0.4.0 → **v0.4.1**, 87 → 88 questions. Both fixtures regenerated with a control pass first: matcher 377 → 378 cases with **exactly one existing case changed**, and difflib 58,926 → 59,616 pairs. Three more confident wrong matches are on `bd` `grant-h32`, all `aug7_truist` bank-typing defects including the `demographic` question B-phase carved out for here. And `grant-miy`'s "42 non-narrative questions route to a narrative KB slot" is **35** — eight have `kb_ref: null` and correctly route to `per_application`.
+
 ### B7 — Escalate the wage-figure conflict
 Assessment 4. Take the conflict to Chip and Iman. Ask for one number, with the population it counts and the date it was measured.
 **Acceptance:** one sourced figure is recorded. `docs/PLAYBOOK.md` and `TAD.md` section 3.2 are corrected in the same change.
@@ -265,13 +273,13 @@ Resize stays off for this gate. Emit the deterministic overflow report and the t
 - It says `render_markdown` emits "human-action flags". It emits **actor-scoped** flags: every outcome names `none`, `llm`, or `staff`, and `llm` outcomes carry a `handback` with the source text, the limit, the measurement, and the guardrail rules. The knowledge base assists the calling model rather than gating it, so shortening an answer and deriving a short value are the model's work, not a person's.
 - `handback.ts` landed alongside `pipeline.ts` and is **shared with D3**, which makes that package materially smaller.
 
-The acceptance condition is only half met: half 2 passes, half 1 is 20 of 25 cases. That is a gate decision, carried on D2. Refer to `../CHANGELOG.md` under 2026-08-04.
+The acceptance condition was only half met on close: half 2 passed, half 1 was 20 of 25 cases. That was a gate decision, carried on D2 and **settled 2026-08-04** — the condition is restated as 20 and the 5 resizer cases moved onto D3. Refer to `../CHANGELOG.md` under 2026-08-04.
 
 ### D2 — Milestone: G3 passed
-**Pass condition:** 25 pipeline parity tests pass, and a full form fixture returns a draft package. `PROPOSAL.md` section 7 calls this the main benefit.
+**Pass condition:** ~~25~~ **20** pipeline parity tests pass, and a full form fixture returns a draft package. `PROPOSAL.md` section 7 calls this the main benefit.
 **Follows:** D1.
 
-**ON HOLD 2026-08-04, pending a decision rather than work.** D1 is closed and the second half of the pass condition holds, proven through the spawned server. The first half is 20 of 25: the 5 remaining cases inject a `ClaudeResizer`, which `SPEC.md` §2.2 records as not porting at all, so they cannot pass before D3. Either restate the condition as 20 and move the 5 onto D3 — whose bar becomes 12 rather than 7 — or hold this milestone until D3 lands. The functionality is not waiting on either choice; only the milestone is.
+**PASSED 2026-08-04.** It was on hold pending a decision rather than work, and the decision went to restating the condition: **20 cases, with the 5 that inject a `ClaudeResizer` moved onto D3**, whose bar became 12 rather than 7. The alternative was holding this milestone until D3 landed. The restatement was chosen because the shortfall was never about D1's deliverable — `grant_build_draft` was complete — and a gate reporting a delivered tool as failed on a condition naming code that `SPEC.md` §2.2 says cannot exist measures the condition rather than the tool. The 5 cases are not dropped; they are the first half of D3's bar, written in `src/resize.test.ts`. Both halves now hold, half 2 proven through the spawned server.
 
 ### D3 — Build grant_resize_answer (G4)
 No SDK. No network. No client. The tool returns `{ source_text, limit, measurement, instructions }`. The calling Claude rewrites and calls back to re-measure.
@@ -281,8 +289,16 @@ What ports: `_SYSTEM_PROMPT` verbatim, including the guardrail against inventing
 What does not port: `ClaudeResizer`, `make_resizer`, `MAX_ATTEMPTS`, and the retry-with-feedback loop.
 
 `MAX_COMPRESSION_RATIO` is 4. Above that the verdict is `compression_infeasible`. `TAD.md` section 3.6 holds the case.
-**Acceptance:** 7 resize parity tests pass with no network.
+**Acceptance:** ~~7~~ **12** parity tests pass with no network.
 **Owner:** Demitri. **Estimate:** 20h. **Follows:** D2.
+
+**CLOSED 2026-08-04**, well under the estimate, because `handback.ts` already emitted the payload — it landed at D1 shared with this package by design. `packages/grants/src/resize.ts` and `warnings.ts`, plus `apps/mcp-server/src/tools/grant-resize-answer.ts`. **Tool surface 22 → 23**, and no migration was needed: migration `20260729000000` had reserved the `tool_permissions` row.
+
+Three things to know that the description above does not say:
+
+- **The bar is 12, not 7, and both halves of that number were restated.** Half 1 is the 5 cases that moved off D2. Half 2 is `test_resize.py`, and **6 of its 7 cases test the code that does not port** — five `ClaudeResizerTests` and one `MakeResizerTests`. Four port; three have no analogue at all and are recorded per case in `SPEC.md` §1 rather than stubbed. So 9 parity cases, plus 3 figure-fidelity cases the prototype has no counterpart for.
+- **One addition beyond the prototype: figure fidelity.** The tool compares the numeric values in a rewrite against its source and rejects one the source does not state, however well the rewrite fits. The prototype re-measures length only, so a rewrite that moved a dollar figure by a digit came back marked `fits` — and rule 1 of the ported guardrail calls that output unusable. Callers branch on `accepted`, not `fits_after_resize`. Measured against the real knowledge base: 29 of 29 slots that state a figure have a tampered digit caught, zero false positives on an identity rewrite or a sentence-level trim.
+- **`handback.verify_with` now names this tool.** It named `grant_build_draft` until now because that was the only registered target, and the old wording asked callers to pass a rewritten answer back through a tool with no parameter that accepts one.
 
 ### D4 — Port the reframe seam, unconnected
 `SPEC.md` section 8 and `TAD.md` decision 7. The prototype has a reframe hook that re-emphasises an answer for a specific funder. Port the seam. Do not wire it. Connecting it now would add an untested Claude call to the path.

@@ -2,7 +2,7 @@
 
 ## Tool Availability
 
-The server currently exposes **22 tools** — 16 data tools, `grant_match_question`, `grant_build_draft`, and 4 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+The server currently exposes **23 tools** — 16 data tools, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 4 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
 
 **Active tools (16):**
 - `get_student_info` — Sheets student roster + Drive student info doc
@@ -22,19 +22,19 @@ The server currently exposes **22 tools** — 16 data tools, `grant_match_questi
 - `get_entity_brief` — student profile + phase progression + certifications + recent mentions; **also surfaces donor profile + giving history + pipeline + grants** when the named person matches a donor
 - `get_finance_brief` — Aplos fund balances, chart-of-accounts summary, and recent Aplos transactions
 
-**Grant writing tools (2):** deterministic, and they read seed files in `packages/grants/seed/` rather than the database.
+**Grant writing tools (3):** deterministic, and they read seed files in `packages/grants/seed/` rather than the database. No model, no network, no database in any of them.
 - `grant_match_question` — funder question → canonical entry in the question bank
 - `grant_build_draft` — captured funder form → reviewable draft package + figure verification work order
+- `grant_resize_answer` — one stored answer + one stated limit → the measurement, the rewrite rules, and a check on the rewrite the caller sends back
 
 **Still pending:**
 - Slack connector for `search_conversations`
-- `grant_resize_answer` — has a reserved `tool_permissions` row; lands at gate G4
 
 Composite tools (`get_entity_brief`, `get_finance_brief`) MUST gracefully omit sections whose underlying data source is not yet active, rather than erroring. Each section in the response should be optional and the tool should annotate which sources contributed.
 
 ## Overview
 
-The MCP server exposes 22 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
+The MCP server exposes 23 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
 
 Every tool call is logged to the `usage_logs` Postgres table (tool name, timestamp, duration, caller identity, token usage).
 
@@ -661,7 +661,7 @@ Per-student competency data (scores) or the rubric structure (skills + opportuni
 
 ### `grant_match_question`
 
-Match a funder application question to a canonical entry in the LaunchPad grant question bank (87 questions, 11 categories, 247 recorded funder wordings). Deterministic — no model, no database, no network; it reads seed files in `packages/grants/seed/`.
+Match a funder application question to a canonical entry in the LaunchPad grant question bank (88 questions, 11 categories, 248 recorded funder wordings). Deterministic — no model, no database, no network; it reads seed files in `packages/grants/seed/`.
 
 **Inputs:** `question` (one string) or `questions` (array, max 200); optional `threshold` (defaults to 0.42, the value used for LaunchPad's filed applications).
 
@@ -692,6 +692,31 @@ Resolve a captured funder form into a reviewable draft package: match each quest
 - **The knowledge base is an assist, not a gate.** It exists so you do not rewrite answers LaunchPad has already written and approved. Where a stored answer does not drop straight into a field, you shape it from the `handback` — the tool never calls a model to do that for you, and there is no Anthropic client anywhere in this repository.
 - **It makes no connector call.** `figure_work_order` names the `query_*` calls *you* must run to verify every figure. This is a security boundary, not an oversight — `runTool`'s permission check keys on the inbound tool name, so a grant tool reading the database internally would bypass the ACL on `query_finances` and `query_donors`. See `packages/grants/src/figures.ts`.
 - **Nothing it returns is submittable.** A person always reviews and always submits.
+
+---
+
+### `grant_resize_answer`
+
+Fit one stored answer to one funder's stated limit. Deterministic, and it reads seed files only. **You do the rewriting — this tool measures.** There is no model client anywhere in this repository, and an MCP tool is invoked *by* Claude, so the loop is: call it, rewrite, call it again.
+
+**Inputs:** `text` (the SOURCE answer, and on the second call still the source, not your rewrite), `limit` (`{ unit, max }`); optional `rewrite`, `attempt`, `funder`, `framing`, `kb_ref`, `answers`.
+
+**Returns:** `notes` (the verdict), `accepted`, `text` (the accepted rewrite, or `null`), `handback`, `measurement`, `source_measurement`, `figure_check`, `units_before` / `units_after`, `fits_after_resize`, `answer_full`, `answer_truncated_preview`, `trace`, `action`, plus `kb_ref`, `verified`, and `carries_figures`.
+
+| `notes` | Meaning |
+|---|---|
+| `fits` | Nothing owed. Either the source already fits, or your rewrite fits and altered no figure. |
+| `rewrite_owed` | Over the limit. `handback` carries the source, the limit, the measurement, and the rules. |
+| `compression_infeasible` | Over by more than 4x. Still handed back, but facts will have to be dropped and the rewrite must say which. |
+| `still_over_limit` | Your rewrite is still over. `handback` carries the overflow feedback. |
+| `figures_altered` | **Rejected.** Your rewrite states a figure the source does not. |
+
+**Two contracts worth knowing before you call it:**
+
+- **Branch on `accepted`, not on `fits_after_resize`.** They differ in exactly the dangerous case: a rewrite that fits the limit but moved a figure. `fits_after_resize` is length only. A rewrite stating a figure the source does not is rejected however well it fits, because the first guardrail rule calls that output unusable — dropping a figure is allowed, inventing or changing one is not. See `figure_check.invented`.
+- **Passing `kb_ref` makes the answer more honest, not just more convenient.** With it, the tool reads that slot's own grounding flag rather than taking your word for it, so it can carry the "not grounded in a filed application" warning through the resize. Without it, `verified` is `null` — which is not a clean bill of health.
+
+An accepted rewrite is still a draft. The stored figures are a frozen snapshot, so verify each one against live data via `grant_build_draft`'s figure work order before publishing, and a person reviews and submits.
 
 ---
 

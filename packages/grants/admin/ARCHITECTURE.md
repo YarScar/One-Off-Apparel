@@ -141,7 +141,7 @@ pnpm --filter @lp-ai/lib-grants lint        # clean today; keep it that way
 
 pnpm db:up && pnpm db:migrate               # local schema, including the tool_permissions rows
 pnpm --filter @lp-ai/mcp-server build       # prerequisite for `pnpm test`, not optional
-pnpm test                                   # full suite: 183 tests, 12 files
+pnpm test                                   # full suite: 207 tests, 13 files
 ```
 
 ---
@@ -156,10 +156,10 @@ corrections that matter to a reader coming from an older document in this folder
 | Claim | State |
 |---|---|
 | Local development | **Works.** Postgres 16.14, `vector 0.8.6`, `pg_trgm 1.6`, 13 migrations applied. |
-| Full suite | 183 tests across 12 files, all passing, zero skipped — including the suite that spawns the real MCP server over stdio. |
+| Full suite | 207 tests across 13 files, all passing, zero skipped — including the suite that spawns the real MCP server over stdio. |
 | Tool surface | 22 registered. Every one has a `tool_permissions` row, so nothing fails closed today. |
 | This package | 141 tests, 9 modules, `grant_match_question` and `grant_build_draft` registered — 2 tools of 3. |
-| Gates | **G1 passed 2026-08-03, locally.** **G2 passed exactly.** **G3 code complete 2026-08-04, gate NOT passed** — see `../CHANGELOG.md`. G4, G5 not started. |
+| Gates | **G1 passed 2026-08-03, locally.** **G2 passed exactly.** **G3 and G4 both passed 2026-08-04**, each on a restated condition — see `../CHANGELOG.md` and `SPEC.md` §1. G5 not started. |
 
 **`NEXT-SESSION.md` is stale on one point.** It records the local database as unavailable and item 3
 as the open discussion. The local environment now works and the path is `pnpm db:migrate`. Item 3's

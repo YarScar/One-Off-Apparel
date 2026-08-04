@@ -35,7 +35,7 @@ The first pass was one long document that mixed the pitch, the architecture, and
 
 ## Status
 
-Deliverable 1 — the question bank and knowledge base — is built and checked: 87 questions, 11 categories, 29 approved answers, 247 recorded funder wordings, 7 form fixtures. The knowledge base is a prototype build, sufficient to proceed, and it expands when the Data team finalises.
+Deliverable 1 — the question bank and knowledge base — is built and checked: 88 questions, 11 categories, 29 approved answers, 248 recorded funder wordings, 7 form fixtures. The knowledge base is a prototype build, sufficient to proceed, and it expands when the Data team finalises.
 
 A working prototype proves the whole method and runs today. Its test suite is the quality bar: 45 tests cover this path. We rewrite in TypeScript rather than move the Python, for toolchain consistency — `TAD.md` section 1.3.
 
@@ -48,8 +48,8 @@ Figures below revised 2026-08-04.
 | | |
 |---|---|
 | Modules | 9 (added `handback.ts` and `pipeline.ts` at G3) |
-| Tests | 141 in this package, 183 across the repo. No network; this package needs no database |
-| Tools registered | 2 of 3 — `grant_match_question`, `grant_build_draft`. `grant_resize_answer` awaits G4 |
+| Tests | 162 in this package, 207 across the repo. No network; this package needs no database |
+| Tools registered | 3 of 3 — `grant_match_question`, `grant_build_draft`, `grant_resize_answer` |
 | Type check | clean across all fourteen packages |
 | Lint | clean on `packages/grants`; repo-wide baseline 415, tracked separately |
 
@@ -86,7 +86,25 @@ The 13 tests this document offered as the G2 bar were not sufficient on their ow
 
    What remains is a decision, not a task: accept the safe human-review outcome, or add stemming and
    move the parity baseline off the filed-application prototype. `TAD.md` should record whichever.
-   The measurement is on #62 and in `../CHANGELOG.md`.
+   **Recommend accepting** — the question appears on no real form, so stemming would move the G2 parity
+   baseline for a case that has never occurred. The measurement is on #62 and in `../CHANGELOG.md`.
+
+   **Reviewed again 2026-08-04, and this flag had the risk model backwards.** It measures misses. Across
+   all 106 questions in the seven form fixtures, **105 of 106 match confidently**, and the one miss is
+   the intended control. Recall is not the problem. The damaging class is a **confident wrong match**: a
+   miss routes to staff review and says so, while a confident wrong match routes to a knowledge-base slot
+   and the draft presents that slot's content as the answer. Four were found by scanning each confident
+   match's `answer_type` against what the funder's wording asks for.
+
+   - **One fixed** (bank v0.4.1). JEVS's conflict-of-interest question matched `attachments.board_list`
+     at 0.459, confidently, on "Board of Directors" — so a yes/no disclosure routed to `kb.docs`. No
+     entry covered conflict of interest at all, which is why variants could never have fixed it. Added
+     `cover.funder_connection`. Both parity fixtures regenerated, control pass first; exactly one existing
+     matcher case changed and it was the defect.
+   - **Three recorded** on `bd` `grant-h32`, all on `aug7_truist`, all bank-typing rather than KB gaps —
+     including the Truist `demographic` question `grant-miy` carved out for this review.
+   - **`grant-miy`'s count corrected 42 → 35.** Eight non-narrative entries have `kb_ref: null` and route
+     to `per_application`, which is right, not a gap.
 
 ### Not verified, and why
 
@@ -96,7 +114,7 @@ What is genuinely unverified today, and it is narrower:
 
 - **Everything is local.** Whether the grant `tool_permissions` rows exist on RDS is unknown, and the apply has no named owner. Board A3 (#52). Also unknown for production: whether `student_postsecondary` and `aws_resource_jobs` exist there.
 - **`grant_build_draft`'s ACL path has never been driven.** Its permission row exists and was confirmed by query, so it will resolve, but nothing has repeated the bearer-token method for it. **A green test run is no evidence here** — `tool-helpers.ts` reaches `canCallTool()` only when `currentCaller` is set, and only `serve-http.ts` sets it, so not even the integration suite that spawns the real server touches the ACL branch.
-- **The G3 gate's parity half.** 20 of 25 cases; the 5 remaining test a resizer that cannot exist before G4. A decision, not missing work — board D2 (#72), on hold.
+- **The G3 gate's parity half — settled 2026-08-04.** Restated as 20 cases; the 5 that tested a resizer moved onto G4, whose bar became 12. Both gates then passed. Board D2 (#72).
 
 ## The three decisions
 

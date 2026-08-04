@@ -6,7 +6,9 @@ A working prototype proves the method and runs today. This package moves that me
 
 **Scope: grant writing only.** Funder eligibility and fit scoring belong to the Data and Prospecting team and are not in this package.
 
-**Status.** Release gates G1 and G2 have both passed, and **G3 is built with its gate still open** — see [`admin/SPEC.md`](./admin/SPEC.md) section 1. G1 passed on 2026-08-03, and the claim is local: nothing is verified against production. The seed data and nine modules are landed with 141 passing tests, and both `grant_match_question` and `grant_build_draft` are registered in the MCP server. G2 was the parity risk gate and it passed exactly: 58,926 of 58,926 `difflib` ratios and all 377 recorded matcher results reproduce. G3's tool is complete and its "full form fixture returns a draft package and a figure work order" half is proven through the real server, but its parity half stands at 20 of 25 cases: the other 5 inject a resizer that cannot exist until `grant_resize_answer` (G4), so closing G3 is a gate decision rather than more code. The package is a pnpm workspace member, so it takes part in the build.
+**Status.** Release gates **G1 through G4 have all passed; G5 is not started** — see [`admin/SPEC.md`](./admin/SPEC.md) section 1. G1 passed on 2026-08-03, and the claim is local: nothing is verified against production. The seed data and eleven modules are landed with **162 passing tests**, and all three tools — `grant_match_question`, `grant_build_draft`, `grant_resize_answer` — are registered in the MCP server. G2 was the parity risk gate and it passed exactly, and both fixtures have been regenerated since against bank v0.4.1: **59,616 of 59,616 `difflib` ratios and all 378 recorded matcher results reproduce**.
+
+**G3 and G4 each passed on a restated condition, and the restatement is worth understanding before reading either as a pass.** Eight of the prototype's 45 parity cases test code that does not port at all — `ClaudeResizer`, `make_resizer`, `MAX_ATTEMPTS`, `DEFAULT_MODEL` — because an MCP tool is invoked *by* Claude and this layer has no model client. Counting them as a bar measured the condition rather than the tool. G3 was restated 25 → 20 and the 5 resizer cases moved onto G4, whose bar became 12. The 3 cases with no analogue anywhere are named per case in `admin/SPEC.md` section 1 rather than written as stand-ins. The package is a pnpm workspace member, so it takes part in the build.
 
 ## Start here
 
@@ -58,10 +60,14 @@ packages/grants/
     matcher.ts             funder question → question bank entry (G2)
     handback.ts            what the layer gives back to the CALLING model to shape (G3, shared with G4)
     pipeline.ts            form → match → retrieve → limit check → Markdown (G3)
+    warnings.ts            the two data-honesty warning suffixes, shared by pipeline and resize (G4)
+    resize.ts              one answer vs one limit: measure, hand back, check length AND figures (G4)
   scripts/
-    regenerate-matcher-parity.py   regeneration harness for the matcher parity fixture
+    regenerate-matcher-parity.py    regeneration harness for the matcher parity fixture
+    regenerate-seq-ratio-parity.py  regeneration harness for the difflib parity fixture
+    dump-parity-strings.ts          feeds this package's normalize() to the harness above
   seed/                ← staged seed data (file-based; DB models deferred)
-    questions.json         the question bank (87 questions / 11 categories / 29 answer slots / 247 wordings)
+    questions.json         the question bank (88 questions / 11 categories / 29 answer slots / 248 wordings)
     QUESTIONS-SCHEMA.md    the schema and the growth rules for questions.json
     kb_launchpad.json      the knowledge base — 29 approved answers
     forms/                 form fixtures (five real funder forms + two generic samples)

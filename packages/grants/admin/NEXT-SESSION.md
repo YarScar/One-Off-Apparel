@@ -6,31 +6,86 @@
 | Revised | 2026-07-31, following session — items 1 and 2 done |
 | Revised | 2026-08-03 — item 3's blockers cleared. Phase A closed and G1 passed. Refer to "What changed on 2026-08-03". |
 | Revised | 2026-08-04 — **D1 built and closed.** Refer to "What changed on 2026-08-04". |
+| Revised | 2026-08-04, later — **D2 settled and D3 built. G3 and G4 both passed.** Refer to "What changed at D3/G4". |
 | Purpose | Carry the plan forward so none of it is re-derived next time. |
 | Status | Items 1 and 2 done. **Item 3's blockers are gone**; its remaining question is a decision, not a task. D1 is closed and **two new decisions are open** — the G3 gate count and the knowledge-base content gap. |
 
 The previous revision listed three items. Two are closed. What remains is item 3, which was always a
-decision rather than a task — and it has since been joined by two more, both from D1. **Everything now
-blocking this workstream is a decision, not a task.** That is the single most useful thing to know
-starting a session here.
+decision rather than a task. **Everything blocking this workstream is a decision, not a task.** That is
+the single most useful thing to know starting a session here.
+
+Of the two decisions D1 opened, **the G3 gate count is settled** (2026-08-04 — restated as 20, the 5
+resizer cases moved onto G4, both gates then passed). **The knowledge-base content gap is not** — it is
+`bd` issue `grant-miy`, assigned to Sean, and it is content work no code can close.
 
 ---
 
 ## State now
 
-Checked rather than assumed, at the end of the 2026-07-31 follow-up session.
+Checked rather than assumed, at the end of the 2026-08-04 D3/G4 session.
 
 | | |
 |---|---|
-| `packages/grants` tests | **141 pass**, 183 across the whole repo in about 8 seconds. No database, no network for this package. |
-| Release gates | **G1 passed 2026-08-03, locally** — refer to `CHANGELOG.md`. **G2 passed exactly.** **G3 built 2026-08-04, gate NOT passed** — 20 of 25 parity cases; the 5 remaining need G4. G4, G5 not started. |
-| Tools registered | 2 of 3 — `grant_match_question` and `grant_build_draft`, wired into `make-server.ts`. |
-| OpenProject board | **Live.** 40 work packages, #49 to #88, Aug 03 to Sep 16. D1 (#71) closed; D2 (#72) on hold pending a decision. |
-| Committed to git | **Not the D1 work.** Seven commits on `writing/dev` through 2026-08-03; the D1 change set is in the working tree, uncommitted. |
+| `packages/grants` tests | **162 pass**, 207 across the whole repo in about 8 seconds. No database, no network for this package. |
+| Release gates | **G1 passed 2026-08-03, locally** — refer to `CHANGELOG.md`. **G2 passed exactly.** **G3 and G4 both passed 2026-08-04**, each on a restated condition (20 cases and 12 cases). **G5 not started.** |
+| Tools registered | **3 of 3** — `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, all wired into `make-server.ts`. |
+| OpenProject board | **Live.** 40 work packages, #49 to #88, Aug 03 to Sep 16. D1 (#71), D2 (#72) and D3 (#73) all closed. |
+| Committed to git | Ten commits on `writing/dev`. D1 is committed (`3a98a7f`); **the D3/G4 change set is in the working tree, uncommitted.** |
 | Pushed / PR opened | **No.** Refer to "Open the PR" below. |
 | Linter | **Runs.** `packages/grants` is clean. Repo-wide baseline measured — 415. |
 | `pnpm -r typecheck` | Passes across all fourteen packages. |
 | Local database | **Available since 2026-08-03.** Postgres 16.14 via `pnpm db:up`, 13 migrations applied. |
+
+---
+
+## What changed at D3/G4 (2026-08-04, later session)
+
+**D2 is settled, D3 is built, and G3 and G4 have both passed.** All three grant tools are registered
+— tool surface 22 → 23, no migration needed, because `20260729000000` had reserved the
+`grant_resize_answer` permission row. Suite 183 → **207 across 13 files**. Detail in `../CHANGELOG.md`.
+
+**The G3 gate count went the recommended way: restate as 20, move the 5 onto G4.** G4's bar became 12.
+That closed the milestone on evidence that already existed rather than holding a delivered tool open
+against a condition naming code `SPEC.md` §2.2 says cannot exist.
+
+**Then the same problem turned up in G4's own bar, and this is the thing to know before reading "G4
+passed".** G4's stated bar was "7 resize parity tests pass". Read against `tests/test_resize.py`, **6
+of those 7 cases test the code that does not port** — five `ClaudeResizerTests` and one
+`MakeResizerTests`. Four port. Three have no analogue anywhere: `MAX_ATTEMPTS` (the loop is the
+caller's, so there is no ceiling to give up at), `DEFAULT_MODEL` (no model), and `make_resizer` (no
+backends). Those three are recorded per case in `SPEC.md` §1 rather than stubbed. So the 12 is 5 moved
+from G3 + 4 portable + 3 figure-fidelity cases the prototype has no counterpart for.
+
+`SPEC.md` §4 now carries a `Portable` column making the same point once across all three test files:
+**37 of the prototype's 45 parity cases can be re-expressed, and the 8 that cannot are named.** If a
+future gate's bar is quoted from that table, quote the second column.
+
+### The one thing D3 added beyond the port
+
+`resize.ts` checks **figure fidelity**, which the prototype does not. It compares the numeric values in
+a rewrite against its source and rejects one the source does not state, however well the rewrite fits.
+The prototype re-measures length only and takes the model's word on the rest, so a rewrite that trimmed
+forty words and moved a dollar figure by a digit came back marked `fits` — and rule 1 of the guardrail
+it ports calls exactly that output unusable. A rule nothing checks is a suggestion.
+
+Two consequences worth carrying forward:
+
+1. **Callers branch on `accepted`, not `fits_after_resize`.** The two differ precisely in the dangerous
+   case. The tool description says so; so does `docs/mcp-server-spec.md`.
+2. **The extraction pattern is separate from `containsNumericClaim`, and it has to be.** `\b\d{2,}\b`
+   does not span a thousands comma, so `8,000` tokenised as `000` and a rewrite moving it to `9,000`
+   compared equal. Comma-grouped counts are most of what grant prose states. Measured after the fix:
+   29 of 29 slots that state a figure have a tampered digit caught, with no false positive on an
+   identity rewrite or on a genuine sentence-level trim. **Known gap:** a magnitude suffix is not part
+   of the token, so `$1.34M` normalises to `1.34` and `$1.34B` reads as the same value. Recorded in
+   `figures.ts`; the figure work order is what covers it.
+
+### What D3 did NOT do
+
+- **The ACL path is still unproven**, now for two tools rather than one. Both permission rows were
+  confirmed by query, so both will resolve. Nothing has driven a bearer-token call through either the
+  way G1 did for `grant_match_question`. A green suite says nothing here.
+- **D4 (the reframe seam) is not started.** It is a 4h package and deliberately unwired.
 
 ---
 
@@ -227,7 +282,7 @@ So the likely answer is **both**: a local Postgres for the build and the tests, 
 
 Not done, deliberately — pushing is outward-facing and was left for a decision.
 
-Seven commits sit unpushed on `writing/dev`. Opening a PR to `master` runs CI against a pgvector service container, which means the database-gated tests that skip locally will actually execute. That is still the first real signal on the tool code, and it does not depend on item 3 being settled.
+**Ten commits sit on `writing/dev`, three of them unpushed, plus the uncommitted D3/G4 change set** (measured 2026-08-04: `writing/dev` is 3 ahead of `origin/writing/dev` and 16 ahead of `origin/master`). Opening a PR to `master` runs CI against a pgvector service container, which means the database-gated tests that skip locally will actually execute. That is still the first real signal on the tool code, and it does not depend on item 3 being settled.
 
 Worth doing before the discussion, not after.
 
@@ -235,29 +290,35 @@ Worth doing before the discussion, not after.
 
 ## Order of work next session
 
-Rewritten 2026-08-04. D1 is closed. **Nothing on this list is blocked by missing code** — the first
-three items are commits and decisions.
+Rewritten 2026-08-04 after D3/G4. **Nothing on this list is blocked by missing code.** The first two
+items are a commit and a push; the rest are one build package, one review, and three ownership gaps.
 
-1. **Commit the D1 change set.** It is green and uncommitted: 5 new files (`pipeline.ts`,
-   `handback.ts`, their tests, `grant-build-draft.ts`) and 14 modified, most of them documentation
-   reconciled to the change. Nothing else should be built on top of an uncommitted tree.
+1. **Commit the D3/G4 change set.** Green and uncommitted: 3 new source files (`resize.ts`,
+   `warnings.ts`, `resize.test.ts`), 1 new tool (`grant-resize-answer.ts`), and the documentation
+   reconciled to them. Nothing else should be built on an uncommitted tree.
 2. **Push `writing/dev` and open the PR.** Still not done, and still deliberately so — pushing is
    outward-facing. Note what CI can and cannot tell you: it builds with `db push`, so the
    `tool_permissions` rows never land there, and its integration suite runs over stdio, which never
    sets a caller. **A green check says nothing about the ACL.** Refer to `ARCHITECTURE.md` §5.2.
-3. **Settle the G3 gate count** — D2 (#72), on hold. One decision, five minutes, and it either closes
-   the milestone or moves 5 cases onto G4. It is the only thing standing between "the tool works" and
-   "the gate passed".
-4. **D3 / G4, `grant_resize_answer`.** Now the cheapest build work on the board, because `handback.ts`
-   already emits its payload. Read the note on #73 before starting.
-5. **B6, the matcher quality review.** Unblocked, and it sharpens the matcher `grant_build_draft`
-   consumes — so it improves a tool that now exists rather than one that does not.
-6. **Find an owner for A3's production half.** Still the last thing holding G1 to a local claim, and
-   `grant_build_draft`'s own ACL path is now unproven for the same reason.
-7. **Open the lint rollout package** with the 415 figure and the build-order caveat. A2 is closed; the
-   package it pointed at is not open.
+3. **B6, the matcher quality review.** Unblocked, data-free, and it sharpens the matcher that both
+   `grant_build_draft` and the drafting skill consume. It also holds the bank-typing question carved out
+   of `grant-miy` — Truist's "Who does your solution serve" is typed `demographic` and reads as
+   narrative.
+4. **D4, the reframe seam.** 4h, and the smallest thing left in Phase D. Port it, do not wire it —
+   `SPEC.md` §8 and `TAD.md` decision 7. A test must assert it is unreachable from any registered tool.
+5. **D5 / G5, rewrite `skill_grant_writing`.** The last gate, and the one with no parity fixture to
+   check itself against. Half of it depends on Phase C, because the drafting craft is authored into the
+   skill rather than read per draft (`TAD.md` §4.2). Do not read its estimate as soft the way D1's and
+   D3's turned out to be.
+6. **Prove one ACL path end to end.** Repeat G1's bearer-token method on `grant_build_draft` or
+   `grant_resize_answer`. It is cheap, it is local, and it converts "the row exists" into "the tool
+   resolves" for the two tools where that is still an inference.
+7. **Find an owner for A3's production half.** Still the last thing holding G1 to a local claim.
+8. **Open the lint rollout package** with the 415 figure and the build-order caveat, and **add the CI
+   lint step** (`bd` `grant-b5c`) — nothing enforces the config that is already turned on.
 
-**Phase D is in progress** (#70). D1 closed at roughly a quarter of its 40-hour estimate, largely
-because `count_units` and `truncate_preview` had already landed in `limits.ts` at G2 and because the
-figure work order was already built. Do not read the remaining estimates as equally soft — D5 (G5) is
-drafting-quality work with no parity fixture to check itself against.
+**Phase D is close to done** (#70). D1 and D3 both closed at roughly a quarter of their 40h and 20h
+estimates, for the same reason twice: work assumed to be in the package had already landed a gate
+earlier. D1 got `count_units`, `truncate_preview`, and the figure work order for free; D3 got
+`handback.ts`. **That pattern does not extend to D5** — G5 is drafting-quality work judged by a person,
+with nothing already built underneath it.

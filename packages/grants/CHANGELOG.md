@@ -25,6 +25,176 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-04 (later)
+
+### Fixed — a confident WRONG match on the JEVS form, and bank v0.4.0 → v0.4.1 (board B6 / #62)
+
+The B6 matcher quality review. **The review's main result is that B6 was measuring the wrong thing.**
+
+B6's acceptance criteria measure **misses** — questions falling below the 0.42 threshold. Scanned across
+all 106 questions in the seven form fixtures, **105 of 106 match confidently**, and the single miss is
+the intended control (`What is your organization's policy on merchandise returns?`, 0.373 — a question
+the bank should not answer, correctly routed to review). So the real form corpus has **zero genuine
+misses** and the matcher's recall is not the problem.
+
+The damaging class is the opposite one, and the criteria are blind to it. **A miss is the safe failure:**
+the draft says "confirm this mapping" and a person looks. **A confident wrong match is not**, because it
+routes to a knowledge-base slot and the draft presents that slot's content as the answer. Scanning each
+confident match's `answer_type` against what the funder's wording asks for and against the stated limit
+found four.
+
+**The one fixed here.** `Does the organization have any connection with JEVS (including its Board of
+Directors)?` matched `attachments.board_list` at **0.459, confidently**, on the shared words "Board of
+Directors". A conflict-of-interest disclosure routed to `kb.docs`, so a draft offered an attachment
+checklist as the answer to a yes/no question. No bank entry covered conflict of interest at all, and the
+nearest correct candidate — `organization.board` — scored 0.361, below the floor. **That is a bank
+coverage gap surfacing as a wrong answer rather than as a gap**, which is exactly why adding variants,
+what B6 asks for, could never have found it.
+
+Added `cover.funder_connection` (`boolean`, `kb_ref: null`, frequency `low`) under growth rule 1, with
+the JEVS wording as its first variant. `kb_ref: null` is deliberate — whether a connection exists is a
+fact about one application, not about LaunchPad, so no stored answer can hold it. Bank **87 → 88
+questions, 247 → 248 variants, v0.4.0 → v0.4.1**.
+
+**Both fixtures regenerated, control pass first in both cases**, per the harnesses in `scripts/`:
+
+| Fixture | Control | Result |
+|---|---|---|
+| `matcher-parity.json` | 0 regression differences | 377 → **378 cases**. Exactly **one** existing case changed, and it is the defect. Nothing else moved. |
+| `seq-ratio-parity.json` | 58,926 overlapping pairs, 0 regression differences, 690 pairs not yet covered | **59,616 pairs** over 353 strings, all reproducing exactly |
+
+`seq-ratio.test.ts` is what caught the second fixture: the bank edit added candidate strings with no
+recorded CPython ratio, and the suite **failed** on that state rather than staying green. That guard was
+added on 2026-08-03 for precisely this case and this is the first time it has fired in anger.
+
+Three regression cases added to `src/matcher.test.ts`, pinning the answer shape, the null `kb_ref`, and
+that the real board-list attachment request did not follow the new canonical home.
+
+**Three more confident wrong matches are recorded on `bd` `grant-h32`, not fixed here.** All on
+`aug7_truist`, all matching at confidence 1.000 because all are recorded variants: the `demographic`
+"Who does your solution serve…" question against a 200-word cap (the one `grant-miy` carved out for this
+review — now diagnosed), and two `number`-typed budget questions against 150-word caps. None can be
+fixed by retyping, because `answer_type` belongs to the **entry** and both entries involved are correctly
+typed for their own canonical. Each needs a new canonical, which is a bank-design decision with a
+`kb_ref` choice in it — recorded rather than guessed.
+
+**Corrected — `grant-miy`'s count is 35, not 42.** Recounted at v0.4.1: of 43 non-narrative bank
+questions, **35 route to a narrative KB slot** and **8 have `kb_ref: null`**. The 8 route to no slot at
+all, so the pipeline returns `per_application` — the correct outcome, not a content gap. `grant-miy`'s
+per-type breakdown counts all non-narrative entries and describes them all as routing to a narrative
+slot. Excluding `attachment`, which its own criteria exclude, the KB content gap is **27 questions, not
+34**. Full detail as a comment on that issue.
+
+**Still open on B6, and it is a decision rather than work.** `How will you measure whether the program
+succeeded?` remains at 0.352 and **cannot be fixed by adding variants** — measured 2026-08-03, the
+shortfall is one unstemmed inflection (0.352 with `succeeded`, 0.644 with `success`), six real sourced
+wordings were trialled, and none moved it. Both of B6's strings are the prototype's own smoke-test
+samples (`matcher.py` lines 160–161) and appear in no funder form, so adding them would mean inventing a
+funder source. The choice is accept the safe staff-review outcome, or adopt stemming and move the G2
+parity baseline off the prototype that produced LaunchPad's filed applications. **Recommend accepting**
+— the question has never occurred on a real form.
+
+### Added — `grant_resize_answer`, the resize seam (board D3 / #73, gate G4)
+
+`packages/grants/src/resize.ts`, `packages/grants/src/warnings.ts`, and
+`apps/mcp-server/src/tools/grant-resize-answer.ts`. The port of the prototype's `resize.py`, and the
+one module where the re-expression changes the architecture rather than the language: the resize loop
+turns inside out.
+
+```
+prototype:  build_answer → resizer(text, limit, ctx) → ResizeResult   [in-process, networked]
+now:        caller → grant_resize_answer(text, limit)          → handback
+            caller rewrites
+            caller → grant_resize_answer(text, limit, rewrite)  → verdict
+```
+
+`MAX_ATTEMPTS`, `make_resizer`, `DEFAULT_MODEL`, `ClaudeResizer`, and the retry loop do not port —
+`admin/TAD.md` §5 decision 6 settled that on 2026-07-29. What ports is everything around that call:
+the `_SYSTEM_PROMPT` guardrail (landed at G3 as `RESIZE_RULES`), `_build_user_prompt`'s context
+assembly (landed at G3 as `buildHandback`), the unit re-measurement, the overflow feedback wording, and
+the `ResizeResult` field set. `ResizeResult.model` is retained and is always `null`, exactly as the
+prototype documented it for a non-LLM resizer.
+
+**Tool surface: 22 → 23.** `readOnlyHint: true` like its siblings. Its `tool_permissions` row already
+existed — migration `20260729000000_add_grant_tool_permissions` reserved it for `leadership` and
+`admin` under category `grants` — so **no new migration was needed**. Confirmed by query on the local
+database: `grant_resize_answer | {leadership,admin} | grants`. Every registered tool now has a
+permission row, and the count of rows with no registered tool drops 7 → 6, all `future` placeholders.
+
+**Added beyond the prototype: figure fidelity, and it is the reason to prefer this tool over a bare
+re-measure.** `ResizeResult.figure_check` compares the numeric values in a rewrite against those in its
+source and rejects one the source does not state, however well the rewrite fits. The prototype
+re-measures length only, so a rewrite that trimmed forty words and moved a dollar figure by a digit came
+back marked `fits` — and rule 1 of the guardrail calls exactly that output unusable. A rule nothing
+checks is a suggestion. Dropping a figure stays allowed; rule 2 licenses it. **Callers must branch on
+`accepted`, not on `fits_after_resize`** — the tool's own description says so, because the two differ
+precisely in the dangerous case.
+
+Measured against the real knowledge base: a tampered digit is detected in **all 29 slots that state a
+figure**, with **no false positive** on either an identity rewrite or a genuine sentence-level trim.
+This needed a second extraction pattern rather than reuse of `containsNumericClaim` — `\b\d{2,}\b` does
+not span a thousands comma, so `8,000` tokenised as `000` and a rewrite moving it to `9,000` compared
+equal. Comma-grouped counts are most of what grant prose states, so that miss would have covered most
+of what a resize can get wrong. **Known gap, recorded in `figures.ts` rather than assumed away:** a
+magnitude suffix is not part of the token, so `$1.34M` normalises to `1.34` and a restatement as
+`$1.34B` reads as the same value. Catching that needs unit awareness, and the figure work order covers
+it — every figure needs live `query_*` confirmation before publishing regardless.
+
+### Changed — `handback.verify_with` now names `grant_resize_answer`
+
+`packages/grants/src/handback.ts`. It named `grant_build_draft` deliberately until now, because
+pointing a caller at a tool absent from `tools/list` produces a failed call and a model that improvises
+around it. Two tests pinned the old behaviour on purpose and both flipped:
+`packages/grants/src/handback.test.ts` and `apps/mcp-server/src/__tests__/tools.test.ts`. The latter now
+asserts against the live `tools/list` result rather than a hard-coded name, since reachability is the
+property that matters and hard-coding is what broke it.
+
+**This also fixes an instruction that could not be followed.** The old wording told a caller to pass
+rewritten text back through `grant_build_draft` "as the answer for this question" — and
+`grant_build_draft` takes a whole form, with no parameter that accepts a rewritten answer. It was
+asking for something the named tool could not do.
+
+### Changed — the two data-honesty warnings moved to `warnings.ts`
+
+Extracted from `pipeline.ts` so `resize.ts` appends the same strings rather than restating them. The
+prototype's `test_resized_answer_keeps_unverified_warning` exists because a shortened answer that
+quietly loses its "not grounded in a filed application" marker reads to a reviewer as more trustworthy
+than the text it came from; two modules building that marker from two string literals is how it goes
+missing from one of them. `resize.ts` reads the `verified` flag **from the knowledge-base slot** rather
+than from the caller, so a caller cannot assert grounding an answer never earned. `verified: null`
+(no slot named) appends nothing and is not a clean bill of health.
+
+### Verified — gates G3 and G4 both passed, both on restated conditions
+
+**G3's condition is restated as 20 pipeline parity cases and the 5 resizer cases move onto G4.** The
+alternative was holding G3 open until G4 landed. Decided 2026-08-04. The shortfall was never about G3's
+deliverable — `grant_build_draft` was complete — and a gate that reports a delivered tool as failed on
+a condition naming code that cannot exist measures the condition rather than the tool. The five cases
+are not dropped; they are the first half of G4's bar, in `src/resize.test.ts`.
+
+**G4's bar is restated as 12 rather than 7**, and the second half of that number is the same finding as
+G3's applied to `test_resize.py`: **6 of its 7 cases test the code `admin/SPEC.md` §2.2 says does not
+port** — five `ClaudeResizerTests` and one `MakeResizerTests`. Four port, three have no analogue at all
+(`MAX_ATTEMPTS`, `DEFAULT_MODEL`, `make_resizer`), and those three are recorded per case in `SPEC.md`
+§1 rather than written as stand-ins that would pass without testing anything. So 5 + 4 = 9 parity
+cases, plus 3 figure-fidelity cases the prototype cannot have a counterpart for. `SPEC.md` §4 gains a
+`Portable` column making the same point across all three test files: 37 of the prototype's 45 cases can
+be re-expressed, and the 8 that cannot are named.
+
+**Suite: 183 → 207 tests across 13 files, all passing, zero skipped.** `packages/grants` alone is
+141 → **162**, in 8 files. 18 new in `src/resize.test.ts`, 3 in `src/matcher.test.ts` for the B6 fix
+above, and 3 new integration cases driving the tool
+through the spawned server. `pnpm -r typecheck` passes across all fourteen packages and
+`packages/grants` lints clean.
+
+**What this does not say.** `grant_resize_answer`'s ACL path is unproven, exactly as
+`grant_build_draft`'s is. Its permission row was confirmed by query, so it will resolve; nothing has
+driven a real bearer-token call through it the way G1 did for `grant_match_question`. A green test run
+is not evidence about permissions — `tool-helpers.ts` only calls `canCallTool()` when a caller is set,
+and only `serve-http.ts` sets one.
+
+---
+
 ## 2026-08-04
 
 ### Added — `grant_build_draft`, the form-to-draft pipeline (board D1 / #71)
