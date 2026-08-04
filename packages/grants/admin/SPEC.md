@@ -3,8 +3,8 @@
 | Field | Value |
 |---|---|
 | Audience | The developer who does the build |
-| Date | 2026-07-28, revised 2026-07-29 |
-| Status | **G1 and G2 complete.** Seven modules, 79 tests, one tool registered (`grant_match_question`). G3 not started. |
+| Date | 2026-07-28, revised 2026-07-29, revised 2026-08-04 |
+| Status | **G1 and G2 passed.** Nine modules, 141 tests, two tools registered (`grant_match_question`, `grant_build_draft`). **G3 is built and its gate has NOT passed** — 20 of the 25 pipeline parity cases are covered and 5 cannot be, for the reason in the G3 note below. |
 | Companion documents | `PROPOSAL.md` (scope), `TAD.md` (architecture, security, governance) |
 
 **What this document is.** The build detail and the release gates. It maps each prototype module to its target tool, names the functions to port, and holds the parity test tables.
@@ -26,7 +26,7 @@ Five gates. Do not start a gate until the one before it passes. Each maps to a d
 |---|---|---|---|
 | **G1** | Preparation. Clear the two seed integrity warnings. Land the three `ToolPermission` migrations. | The loader reports zero warnings. The three tools resolve in the ACL. | ✅ **passed 2026-08-03**, locally. Refer to the note below |
 | **G2** | `grant_match_question`. | 13 matcher parity tests pass. **Sequence-ratio parity is proven.** Refer to section 5. | ✅ **passed exactly** |
-| **G3** | `grant_build_draft`, resize off. | 25 pipeline parity tests pass. A full form fixture returns a draft package and a figure work order. | not started |
+| **G3** | `grant_build_draft`, resize off. | 25 pipeline parity tests pass. A full form fixture returns a draft package and a figure work order. | 🟡 **built 2026-08-04, gate NOT passed.** Half 2 holds; half 1 is 20 of 25. Refer to the note below |
 | **G4** | `grant_resize_answer`. | 7 resize parity tests pass, with no network. | not started |
 | **G5** | Rewrite `skill_grant_writing`. Author in the Playbook craft. Release and pilot. | A draft produced from the skill alone is judged at least as good as a prototype draft. | not started |
 
@@ -40,9 +40,37 @@ succeeded, a `program_staff` caller was refused, and both appeared in `usage_log
 
 Two limits on the claim, neither of which the pass condition covers. **The evidence is local** —
 nothing here is verified against RDS, and that half of the migration work is still open and unowned.
-**And the condition is satisfied by three table rows, only one of which has a registered tool**, so
-G1 passing means the ACL path works on `grant_match_question`; `grant_build_draft` and
-`grant_resize_answer` are reserved rows awaiting G3 and G4.
+**And the condition is satisfied by three table rows, only one of which had a registered tool** when
+G1 passed, so G1 passing means the ACL path was proven on `grant_match_question` alone.
+`grant_build_draft` became a registered tool on 2026-08-04 and now covers a second row;
+`grant_resize_answer` is still a reserved row, awaiting G4. **Neither new tool's ACL path has been
+driven end to end** — the G1 method would have to be repeated per tool, and nothing has.
+
+**Why G3 is built but not passed.** The second half of its condition holds and is proven through the
+real server: `grant_build_draft` with `form_id: 'aug7_truist'` returns a 17-question draft package
+and a scoped figure work order, asserted in `apps/mcp-server/src/__tests__/tools.test.ts`.
+
+The first half — "25 pipeline parity tests pass" — is **20 of 25**, and the shortfall is structural
+rather than unfinished work:
+
+| Prototype class | Cases | Where they are |
+|---|---|---|
+| `CountUnitsTests` | 5 | `src/limits.test.ts` — `count_units` ported into `limits.ts` at G2, not into the pipeline |
+| `TruncatePreviewTests` | 3 | `src/limits.test.ts` — same |
+| `BuildAnswerTests` | 9 | `src/pipeline.test.ts`, one for one |
+| `ResizeHookTests` | 6 | 1 in `src/pipeline.test.ts` (`resizer absent` ≡ resize off); **5 unportable at G3** |
+| `RunTests` | 2 | `src/pipeline.test.ts`, one for one |
+
+The five deferred cases inject a `ClaudeResizer` into `build_answer`. Section 2.2 of this document
+already records that `ClaudeResizer` **does not port at all** — an MCP tool is invoked *by* Claude, so
+there is no in-process resizer to inject, and `grant_resize_answer` returns instructions instead.
+Those five cases therefore cannot pass before G4 exists, and writing stand-ins that pass without it
+would make this gate report coverage it does not have.
+
+**This needs a decision, not more code** — it is the same class of problem as G1's "three table rows,
+one registered tool". Either restate G3's condition as 20 cases and move the 5 onto G4 (making G4's
+bar 12 rather than 7), or hold G3 open until G4 lands. Recorded on board D1 (#71) and D2 (#72);
+`grant_build_draft` is otherwise complete.
 
 Two changes to G1 as originally written:
 
@@ -61,10 +89,10 @@ regeneration of `src/__fixtures__/matcher-parity.json` — refer to `../CHANGELO
 
 | File | Contents | Count |
 |---|---|---|
-| `questions.json` | Canonical questions | 82 |
+| `questions.json` | Canonical questions | 87 |
 | `questions.json` | Categories | 11 |
 | `questions.json` | Declared KB slots | 29 |
-| `questions.json` | Recorded funder wordings (variants) | 212 |
+| `questions.json` | Recorded funder wordings (variants) | 247 |
 | `kb_launchpad.json` | Stored answers (4 are `verified:false`) | 29 |
 | `forms/*.json` | Incoming form fixtures | 7 |
 

@@ -260,9 +260,18 @@ Resize stays off for this gate. Emit the deterministic overflow report and the t
 **Acceptance:** 25 pipeline parity tests pass. A full form fixture returns a draft package and a figure work order. `readOnlyHint: true`.
 **Owner:** Demitri. **Estimate:** 40h. **Follows:** A6.
 
+**CLOSED 2026-08-04**, at well under the estimate — `count_units` and `truncate_preview` had already landed in `limits.ts` at G2, and the figure work order was already built. Two corrections to the description above:
+
+- It says `render_markdown` emits "human-action flags". It emits **actor-scoped** flags: every outcome names `none`, `llm`, or `staff`, and `llm` outcomes carry a `handback` with the source text, the limit, the measurement, and the guardrail rules. The knowledge base assists the calling model rather than gating it, so shortening an answer and deriving a short value are the model's work, not a person's.
+- `handback.ts` landed alongside `pipeline.ts` and is **shared with D3**, which makes that package materially smaller.
+
+The acceptance condition is only half met: half 2 passes, half 1 is 20 of 25 cases. That is a gate decision, carried on D2. Refer to `../CHANGELOG.md` under 2026-08-04.
+
 ### D2 — Milestone: G3 passed
 **Pass condition:** 25 pipeline parity tests pass, and a full form fixture returns a draft package. `PROPOSAL.md` section 7 calls this the main benefit.
 **Follows:** D1.
+
+**ON HOLD 2026-08-04, pending a decision rather than work.** D1 is closed and the second half of the pass condition holds, proven through the spawned server. The first half is 20 of 25: the 5 remaining cases inject a `ClaudeResizer`, which `SPEC.md` §2.2 records as not porting at all, so they cannot pass before D3. Either restate the condition as 20 and move the 5 onto D3 — whose bar becomes 12 rather than 7 — or hold this milestone until D3 lands. The functionality is not waiting on either choice; only the milestone is.
 
 ### D3 — Build grant_resize_answer (G4)
 No SDK. No network. No client. The tool returns `{ source_text, limit, measurement, instructions }`. The calling Claude rewrites and calls back to re-measure.

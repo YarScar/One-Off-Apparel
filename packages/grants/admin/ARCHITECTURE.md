@@ -141,7 +141,7 @@ pnpm --filter @lp-ai/lib-grants lint        # clean today; keep it that way
 
 pnpm db:up && pnpm db:migrate               # local schema, including the tool_permissions rows
 pnpm --filter @lp-ai/mcp-server build       # prerequisite for `pnpm test`, not optional
-pnpm test                                   # full suite: 131 tests, 10 files
+pnpm test                                   # full suite: 183 tests, 12 files
 ```
 
 ---
@@ -156,10 +156,10 @@ corrections that matter to a reader coming from an older document in this folder
 | Claim | State |
 |---|---|
 | Local development | **Works.** Postgres 16.14, `vector 0.8.6`, `pg_trgm 1.6`, 13 migrations applied. |
-| Full suite | 131 tests across 10 files, all passing, zero skipped — including the suite that spawns the real MCP server over stdio. |
-| Tool surface | 21 registered. Every one has a `tool_permissions` row, so nothing fails closed today. |
-| This package | 92 tests, 7 modules, `grant_match_question` registered — 1 tool of 3. |
-| Gates | **G1 passed 2026-08-03, locally.** **G2 passed exactly.** G3, G4, G5 not started. |
+| Full suite | 183 tests across 12 files, all passing, zero skipped — including the suite that spawns the real MCP server over stdio. |
+| Tool surface | 22 registered. Every one has a `tool_permissions` row, so nothing fails closed today. |
+| This package | 141 tests, 9 modules, `grant_match_question` and `grant_build_draft` registered — 2 tools of 3. |
+| Gates | **G1 passed 2026-08-03, locally.** **G2 passed exactly.** **G3 code complete 2026-08-04, gate NOT passed** — see `../CHANGELOG.md`. G4, G5 not started. |
 
 **`NEXT-SESSION.md` is stale on one point.** It records the local database as unavailable and item 3
 as the open discussion. The local environment now works and the path is `pnpm db:migrate`. Item 3's
@@ -200,7 +200,7 @@ This is platform work with the same shape as the runbook fix, and it is not a gr
 
 ### 6.1 Cadence
 
-Gates, not sprints. `SPEC.md` §5 owns the gate conditions; G3 is next. A gate passes on evidence that
+Gates, not sprints. `SPEC.md` §5 owns the gate conditions; G3 is built but unpassed and G4 is next. A gate passes on evidence that
 can be re-run, which is why G2's bar became a pair of generated parity fixtures rather than
 hand-written expectations. Treat "code complete" as a claim awaiting a gate, never as a pass —
 `../CLAUDE.md` §3 says this about `SPEC.md`'s own markings.

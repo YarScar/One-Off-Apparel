@@ -5,10 +5,14 @@
 | Written | 2026-07-31, end of session |
 | Revised | 2026-07-31, following session — items 1 and 2 done |
 | Revised | 2026-08-03 — item 3's blockers cleared. Phase A closed and G1 passed. Refer to "What changed on 2026-08-03". |
+| Revised | 2026-08-04 — **D1 built and closed.** Refer to "What changed on 2026-08-04". |
 | Purpose | Carry the plan forward so none of it is re-derived next time. |
-| Status | Items 1 and 2 done. **Item 3's blockers are gone**; its remaining question is a decision, not a task. |
+| Status | Items 1 and 2 done. **Item 3's blockers are gone**; its remaining question is a decision, not a task. D1 is closed and **two new decisions are open** — the G3 gate count and the knowledge-base content gap. |
 
-The previous revision listed three items. Two are closed. What remains is item 3, which was always a decision rather than a task.
+The previous revision listed three items. Two are closed. What remains is item 3, which was always a
+decision rather than a task — and it has since been joined by two more, both from D1. **Everything now
+blocking this workstream is a decision, not a task.** That is the single most useful thing to know
+starting a session here.
 
 ---
 
@@ -18,15 +22,59 @@ Checked rather than assumed, at the end of the 2026-07-31 follow-up session.
 
 | | |
 |---|---|
-| `packages/grants` tests | **43 of 43 pass** in about 8 seconds. No database, no network. |
-| Release gates | **G1 passed 2026-08-03, locally** — refer to `CHANGELOG.md`. **G2 passed exactly.** G3, G4, G5 not started. |
-| Tools registered | 1 of 3 — `grant_match_question`, wired into `make-server.ts`. |
-| OpenProject board | **Live.** 40 work packages, #49 to #88, Aug 03 to Sep 16. |
-| Committed to git | **All of it.** Seven commits on `writing/dev`. Working tree clean. |
+| `packages/grants` tests | **141 pass**, 183 across the whole repo in about 8 seconds. No database, no network for this package. |
+| Release gates | **G1 passed 2026-08-03, locally** — refer to `CHANGELOG.md`. **G2 passed exactly.** **G3 built 2026-08-04, gate NOT passed** — 20 of 25 parity cases; the 5 remaining need G4. G4, G5 not started. |
+| Tools registered | 2 of 3 — `grant_match_question` and `grant_build_draft`, wired into `make-server.ts`. |
+| OpenProject board | **Live.** 40 work packages, #49 to #88, Aug 03 to Sep 16. D1 (#71) closed; D2 (#72) on hold pending a decision. |
+| Committed to git | **Not the D1 work.** Seven commits on `writing/dev` through 2026-08-03; the D1 change set is in the working tree, uncommitted. |
 | Pushed / PR opened | **No.** Refer to "Open the PR" below. |
 | Linter | **Runs.** `packages/grants` is clean. Repo-wide baseline measured — 415. |
 | `pnpm -r typecheck` | Passes across all fourteen packages. |
 | Local database | **Available since 2026-08-03.** Postgres 16.14 via `pnpm db:up`, 13 migrations applied. |
+
+---
+
+## What changed on 2026-08-04
+
+**D1 is built and closed (#71). The G3 gate is not passed, and cannot be by writing more code.**
+
+`grant_build_draft` is registered — tool surface 21 → 22 — and needed no migration, because
+`20260729000000` had already reserved its permission row. `packages/grants/src/pipeline.ts` and
+`handback.ts` landed with it. Suite 131 → **183 across 12 files**. Detail in `../CHANGELOG.md`.
+
+**A scope correction happened mid-build, and it is the thing to understand before touching this code.**
+The first cut treated every unfinished question as human work — an over-limit answer and a short field
+holding narrative both came back marked for a person, with the text withheld. That inverts the layer's
+purpose. The knowledge base exists so the **calling model** does not regenerate answers LaunchPad has
+already approved; it assists, it does not gate. Shortening an answer and pulling a value out of prose
+are the calling model's job. Only a fact or a decision the layer does not hold needs a person.
+
+So outcomes now name an `actor` — `none`, `llm`, or `staff` — and `llm` outcomes carry a `handback`
+with the source text, the limit, the measurement, and the guardrail rules. On `aug7_truist` that moved
+the reading from "9 of 17 need a person" to "8 done, 8 the model finishes now, 1 needs staff".
+
+**There is no model client and none is coming.** No SDK, no API key, no network anywhere in this
+layer — `TAD.md` §6 decision 6 settled that on 2026-07-29. These are tools inside an MCP server,
+invoked *by* Claude; a tool that opened its own client would be solving the wrong problem.
+
+### Two decisions opened by D1
+
+1. **The G3 gate count.** Its first half is "25 pipeline parity tests pass" and the real number is 20.
+   The 5 missing cases inject a `ClaudeResizer`, which `SPEC.md` §2.2 says does not port at all, so
+   they cannot pass before G4. Either restate G3 as 20 and move the 5 onto G4 — G4's bar becomes 12,
+   not 7 — or hold G3 open until G4 lands. On D2 (#72), now **On hold**. Recommend the former.
+2. **The knowledge base cannot answer 42 of the 87 bank questions.** Every non-narrative question
+   routes to a narrative KB slot; there are zero short structured values in `kb_launchpad.json`. That
+   is roughly 40% of a typical form. `bd` issue `grant-miy`, and on Phase B (#56) — it is content work,
+   not something the pipeline can fix.
+
+### One thing D1 made cheaper
+
+`handback.ts` is shared with **D3/G4 by design**, so `grant_resize_answer` is now close to a thin
+wrapper: accept `{ text, limit, context? }`, measure, return `buildHandback({ task: 'resize', ... })`.
+Do not write a second guardrail. Note that `handback.ts`'s `verify_with` names only
+`grant_build_draft` today, deliberately — `handback.test.ts` pins that, and the assertion changes when
+D3 registers.
 
 ---
 
@@ -187,17 +235,29 @@ Worth doing before the discussion, not after.
 
 ## Order of work next session
 
-Rewritten 2026-08-03. Items 2 and 3 of the previous list are done; item 1 is not.
+Rewritten 2026-08-04. D1 is closed. **Nothing on this list is blocked by missing code** — the first
+three items are commits and decisions.
 
-1. **Push `writing/dev` and open the PR.** Still not done, and still deliberately so — pushing is
+1. **Commit the D1 change set.** It is green and uncommitted: 5 new files (`pipeline.ts`,
+   `handback.ts`, their tests, `grant-build-draft.ts`) and 14 modified, most of them documentation
+   reconciled to the change. Nothing else should be built on top of an uncommitted tree.
+2. **Push `writing/dev` and open the PR.** Still not done, and still deliberately so — pushing is
    outward-facing. Note what CI can and cannot tell you: it builds with `db push`, so the
    `tool_permissions` rows never land there, and its integration suite runs over stdio, which never
    sets a caller. **A green check says nothing about the ACL.** Refer to `ARCHITECTURE.md` §5.2.
-2. **B6, the matcher quality review.** Follows A1, which is closed, so this is unblocked build work —
-   the two questions that score below the 0.42 threshold.
-3. **Find an owner for A3's production half.** It is the last thing holding G1 to a local claim.
-4. **Open the lint rollout package** with the 415 figure and the build-order caveat. A2 is closed; the
+3. **Settle the G3 gate count** — D2 (#72), on hold. One decision, five minutes, and it either closes
+   the milestone or moves 5 cases onto G4. It is the only thing standing between "the tool works" and
+   "the gate passed".
+4. **D3 / G4, `grant_resize_answer`.** Now the cheapest build work on the board, because `handback.ts`
+   already emits its payload. Read the note on #73 before starting.
+5. **B6, the matcher quality review.** Unblocked, and it sharpens the matcher `grant_build_draft`
+   consumes — so it improves a tool that now exists rather than one that does not.
+6. **Find an owner for A3's production half.** Still the last thing holding G1 to a local claim, and
+   `grant_build_draft`'s own ACL path is now unproven for the same reason.
+7. **Open the lint rollout package** with the 415 figure and the build-order caveat. A2 is closed; the
    package it pointed at is not open.
 
-**Phase D is now unblocked** — A6 has passed, and D1 follows it. Do not read that as a green light to
-start D1 today: it is a 40-hour package, and B6 sharpens the matcher it consumes.
+**Phase D is in progress** (#70). D1 closed at roughly a quarter of its 40-hour estimate, largely
+because `count_units` and `truncate_preview` had already landed in `limits.ts` at G2 and because the
+figure work order was already built. Do not read the remaining estimates as equally soft — D5 (G5) is
+drafting-quality work with no parity fixture to check itself against.

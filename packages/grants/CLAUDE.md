@@ -78,31 +78,34 @@ Do not restate these; link to them. Duplication is how the set drifts.
 
 ---
 
-## 3 Where we are — verified 2026-08-03
+## 3 Where we are — verified 2026-08-04
 
 Re-verify before trusting this section; it is a snapshot, not a contract. Every claim here was
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **131 tests across 10
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **183 tests across 12
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
-over stdio. (82 across 8 before 2026-08-03, when the code review added suites for `limits.ts` and
-`py.ts`, which had none; 118 before the mutation audit later that day added the integrity-checker and
-skip-bound cases.)
+over stdio. (131 across 10 before 2026-08-04, when G3 added `pipeline.test.ts`, `handback.test.ts`,
+and three `grant_build_draft` integration cases; 82 across 8 before 2026-08-03, when the code review
+added suites for `limits.ts` and `py.ts`, which had none.)
 
 Use `pnpm db:migrate`, never `db:push`, for local setup. `db push` writes no migration SQL, so the
 `tool_permissions` rows never land and every tool call fails closed. This is not a preference — it is
 the difference between a working environment and a silently broken one.
 
-**MCP server: 21 tools registered** — 16 data, `grant_match_question`, 4 `skill_*`. Every one has a
-`tool_permissions` row, so nothing currently fails closed. Of the 29 rows, 8 have no registered tool:
-6 `future` placeholders and `grant_build_draft` / `grant_resize_answer`, reserved for G3 and G4.
+**MCP server: 22 tools registered** — 16 data, `grant_match_question`, `grant_build_draft`, 4
+`skill_*`. Every one has a `tool_permissions` row, so nothing currently fails closed. Of the 29 rows,
+7 have no registered tool: 6 `future` placeholders and `grant_resize_answer`, reserved for G4.
 
 **Connectors** (root `CLAUDE.md` holds the detail): `google-sheets`, `aplos`, and `notion` are live.
 `google-drive` and `slack` are skeletons that return `status: "noop"` — Drive has credentials and no
 implementation; Slack awaits `SLACK_BOT_TOKEN`.
 
-**Grant writing layer:** **G1 and G2 have both passed.** G3 is the frontier and has not started.
+**Grant writing layer:** **G1 and G2 have both passed. G3 is built and its gate has not passed.**
+`grant_build_draft` is registered and complete; 20 of G3's 25 pipeline parity cases are covered and
+the other 5 test a resizer that cannot exist before G4. That shortfall is a gate decision, not
+outstanding code — `admin/SPEC.md` §1 holds the table and the two options. G4 and G5 not started.
 
 - **G1 half 1 proven** — `packages/grants/src/data.test.ts` passes 23/23. It asserts the seed
   integrity report is empty, so a defect cannot regress silently, *and* exercises each of the seven
@@ -113,15 +116,19 @@ implementation; Slack awaits `SLACK_BOT_TOKEN`.
   caller was refused with `permission_denied`, and both calls landed in `usage_logs` with the caller
   email. See `CHANGELOG.md` under 2026-08-03 for the method and the table.
 - **Read "G1 passed" narrowly.** The pass condition is satisfied by three *table rows*, only one of
-  which has a registered tool, so it does not mean three working tools. It means the ACL path is
-  proven, on `grant_match_question`. And it is proven **locally only** — nothing is verified against
-  RDS; board A3 (#52) is still open for that.
+  which had a registered tool when it passed, so it does not mean three working tools. It means the
+  ACL path is proven, on `grant_match_question`. And it is proven **locally only** — nothing is
+  verified against RDS; board A3 (#52) is still open for that.
+- **`grant_build_draft`'s ACL path is unproven.** Its `tool_permissions` row exists and was confirmed
+  by query on 2026-08-04 (`leadership`, `admin`), so it will resolve, but nothing has driven a real
+  bearer-token call through it the way G1 did for `grant_match_question`. Repeating that method per
+  tool is the only thing that would settle it.
 - The ACL branch is unreachable from the test suite. `tool-helpers.ts` only calls `canCallTool()`
   when `currentCaller` is set, and only `serve-http.ts` sets it. **A green test run is not evidence
   about permissions** — not even the integration suite that spawns the real server over stdio.
 - Do **not** treat `SPEC.md`'s own "✅ code complete" marking as evidence. That marking is precisely
   what the gate existed to test, and the gate is what settled it.
-- G3, G4, G5 not started.
+- **G3 built 2026-08-04, gate not passed** — 20 of 25 parity cases; the other 5 need G4. G4, G5 not started.
 
 **Known schema drift.** `prisma migrate diff` is not empty even on a correctly migrated database:
 `id` columns on `student_employment`, `student_postsecondary`, and `aws_resource_jobs` show native
@@ -146,7 +153,7 @@ unrecorded. Tracked build work lives in `bd` — `bd ready --json` — not here.
 | 2 | **Eight dead links, five missing targets** | Found by the §6 link check on 2026-08-03. Targets: `docs/architecture.md` (from `CLAUDE.md`); `HOW-SKILLS-WORK.md` (from `README.md` and `docs/setup/README.md`); `docs/reference/connector-capability-matrix.md` and `docs/reference/new-developer-playbook.md` (each from both `README.md` and `docs/setup/README.md`); `docs/embedding-pipeline.md` (from `docs/data-sources/google-drive-connector.md`). `docs/reference/` contains only `v0-migrations/`. Each needs a decision: write it, or remove the pointer. Do not leave them dangling. |
 | 3 | **`docs/setup/` is unaudited against reality** | 25 phase-numbered files, most last revised 2026-06-24 or earlier, describing AWS build-out. Numbering skips 16, 19, 20. Nothing has confirmed these still match the deployed infrastructure. Treat as historical until audited. |
 | 4 | **Connector status claims spread across files** | Live/skeleton status appears in the root `CLAUDE.md`, `docs/data-sources/*`, and `docs/runbooks/local-dev.md`. A connector changing status requires all three. Candidate for collapsing into one owner. |
-| 5 | **Grant layer absent from `docs/`** | The layer has a tool, a package, and a permissions category, but `docs/mcp-server-spec.md` has no `grant_match_question` entry and no `docs/data-sources/` or user-guide coverage exists. All grant documentation currently lives in `packages/grants/`, aimed at the build rather than at consumers — `admin/ARCHITECTURE.md` included, which orients a developer and does not serve a staff user. |
+| 5 | **Grant layer under-documented in `docs/`** | Partly retired 2026-08-04: `docs/mcp-server-spec.md` now carries entries for `grant_match_question` and `grant_build_draft`. Still missing: any `docs/data-sources/` or user-guide coverage. All other grant documentation lives in `packages/grants/`, aimed at the build rather than at consumers — `admin/ARCHITECTURE.md` included, which orients a developer and does not serve a staff user. |
 | 6 | **No doc-drift check in CI** | Every inconsistency in this file was found by hand. The cheap subset is mechanical: dead relative links, and the tool count against `grep -c "NAME = '"`. |
 
 ---

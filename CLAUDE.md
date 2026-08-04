@@ -120,7 +120,7 @@ packages/grants      → zod; deterministic grant-writing logic + seed (question
 - `prisma.config.ts` (repo root) — Prisma config pointing at the schema and migrations
 - `packages/db/src/entity-resolution.ts` — fuzzy name matching across all data sources; called by `get_student_info` and `search_by_person`
 - `packages/db/src/sync-runs.ts` — `runSync()` wrapper used by every connector
-- `apps/mcp-server/src/make-server.ts` — registers all tools (21: 16 data + `grant_match_question` + 4 skill); edit here to add/remove tools
+- `apps/mcp-server/src/make-server.ts` — registers all tools (22: 16 data + `grant_match_question` + `grant_build_draft` + 4 skill); edit here to add/remove tools
 - `apps/mcp-server/src/tool-helpers.ts` — `runTool()` wrapper (error capture + usage logging), `parseStr()`, `parseNum()`
 - `apps/mcp-server/src/errors.ts` — `toolError()` and `notImplemented()` for structured error envelopes
 - `apps/mcp-server/src/usage-log.ts` — writes every tool call to `usage_logs` table; surfaced in HQ `/tools`

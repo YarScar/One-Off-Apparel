@@ -41,14 +41,17 @@ A working prototype proves the whole method and runs today. Its test suite is th
 
 ## Progress since this note was written (2026-07-29)
 
-We started building before approval, on the understanding that these documents stay open and get corrected as the work turns things up. **Gates G1 and G2 are complete. G2 was the risk gate, and it passed on the best of its three outcomes.**
+We started building before approval, on the understanding that these documents stay open and get corrected as the work turns things up. **Gates G1 and G2 have passed. G2 was the risk gate, and it passed on the best of its three outcomes. G3 is built and its gate is still open** — refer to `SPEC.md` §1.
+
+Figures below revised 2026-08-04.
 
 | | |
 |---|---|
-| Modules | 7 (added `seq-ratio.ts` and `matcher.ts`) |
-| Tests | 43 passing, no network, no database |
-| Tools registered | 1 of 3 — `grant_match_question` |
-| Type check | clean on `packages/grants` |
+| Modules | 9 (added `handback.ts` and `pipeline.ts` at G3) |
+| Tests | 141 in this package, 183 across the repo. No network; this package needs no database |
+| Tools registered | 2 of 3 — `grant_match_question`, `grant_build_draft`. `grant_resize_answer` awaits G4 |
+| Type check | clean across all fourteen packages |
+| Lint | clean on `packages/grants`; repo-wide baseline 415, tracked separately |
 
 **The sequence-ratio parity risk is closed.** `SPEC.md` section 5 called this the one real technical risk, because a divergence would change every match score. Result: 28,690 of 28,690 recorded `difflib` ratios reproduce exactly, and all 337 recorded `match_question` results reproduce field for field, including the winning variant source and the rounded confidence. All 69 questions across the four form fixtures produce byte-identical output from the TypeScript build and the Python original. Equality is asserted with `!==`, not a tolerance.
 
@@ -87,7 +90,13 @@ The 13 tests this document offered as the G2 bar were not sufficient on their ow
 
 ### Not verified, and why
 
-The permission migration is written but **not applied, and the tools have not been invoked through the server.** There is no `.env` in this checkout and no Docker daemon running, so Postgres is unavailable, `prisma generate` cannot run, and every database-gated test skips. The tool code type-checks clean; its ACL path, its usage-log entry, and the HQ `/admin` Grants section are unproven until someone runs it against a live local database. `pnpm lint` is also broken repository-wide for an unrelated reason — `@eslint/js` is not installed.
+**Rewritten 2026-08-04.** Everything this section previously listed was fixed on 2026-08-03 and the old text is gone — it claimed there was no `.env`, no Docker daemon, an unapplied permission migration, and a repository-wide `pnpm lint` break from a missing `@eslint/js`. None of that is true now: the local database runs, the migrations are applied, `grant_match_question` was driven through the server with real bearer tokens, and lint runs. Refer to `../CLAUDE.md` §3 for the current snapshot, which is the owner of this claim.
+
+What is genuinely unverified today, and it is narrower:
+
+- **Everything is local.** Whether the grant `tool_permissions` rows exist on RDS is unknown, and the apply has no named owner. Board A3 (#52). Also unknown for production: whether `student_postsecondary` and `aws_resource_jobs` exist there.
+- **`grant_build_draft`'s ACL path has never been driven.** Its permission row exists and was confirmed by query, so it will resolve, but nothing has repeated the bearer-token method for it. **A green test run is no evidence here** — `tool-helpers.ts` reaches `canCallTool()` only when `currentCaller` is set, and only `serve-http.ts` sets it, so not even the integration suite that spawns the real server touches the ACL branch.
+- **The G3 gate's parity half.** 20 of 25 cases; the 5 remaining test a resizer that cannot exist before G4. A decision, not missing work — board D2 (#72), on hold.
 
 ## The three decisions
 

@@ -6,7 +6,7 @@ A working prototype proves the method and runs today. This package moves that me
 
 **Scope: grant writing only.** Funder eligibility and fit scoring belong to the Data and Prospecting team and are not in this package.
 
-**Status.** Release gates G1 and G2 have both passed — see [`admin/SPEC.md`](./admin/SPEC.md) section 1. G1 passed on 2026-08-03, and the claim is local: nothing is verified against production. The seed data and seven modules are landed with 79 passing tests, and `grant_match_question` is registered in the MCP server. G2 was the parity risk gate and it passed exactly: 58,926 of 58,926 `difflib` ratios and all 377 recorded matcher results reproduce. `grant_build_draft` (G3) and `grant_resize_answer` (G4) are next. The package is a pnpm workspace member, so it takes part in the build.
+**Status.** Release gates G1 and G2 have both passed, and **G3 is built with its gate still open** — see [`admin/SPEC.md`](./admin/SPEC.md) section 1. G1 passed on 2026-08-03, and the claim is local: nothing is verified against production. The seed data and nine modules are landed with 141 passing tests, and both `grant_match_question` and `grant_build_draft` are registered in the MCP server. G2 was the parity risk gate and it passed exactly: 58,926 of 58,926 `difflib` ratios and all 377 recorded matcher results reproduce. G3's tool is complete and its "full form fixture returns a draft package and a figure work order" half is proven through the real server, but its parity half stands at 20 of 25 cases: the other 5 inject a resizer that cannot exist until `grant_resize_answer` (G4), so closing G3 is a gate decision rather than more code. The package is a pnpm workspace member, so it takes part in the build.
 
 ## Start here
 
@@ -20,6 +20,7 @@ A working prototype proves the method and runs today. This package moves that me
 | Where the project stands, and the OpenProject work packages | [`admin/OPENPROJECT-TASKS.md`](./admin/OPENPROJECT-TASKS.md) |
 | What to pick up next, and the three open items | [`admin/NEXT-SESSION.md`](./admin/NEXT-SESSION.md) |
 | How we actually draft: the intake steps, the style rules, the non-negotiables | [`docs/PLAYBOOK.md`](./docs/PLAYBOOK.md) |
+| The skill authored from the playbook, and the two scripts that drive this package from the command line | [`.claude/skills/grant-writing/`](../../.claude/skills/grant-writing/SKILL.md) |
 | The documentation rules, the sources of truth, and the verified state of the system | [`CLAUDE.md`](./CLAUDE.md) |
 | What this workstream changed, and when | [`CHANGELOG.md`](./CHANGELOG.md) |
 
@@ -55,6 +56,8 @@ packages/grants/
     figures.ts             the 15-check figure verification work order
     seq-ratio.ts           difflib.SequenceMatcher.ratio() port (G2)
     matcher.ts             funder question → question bank entry (G2)
+    handback.ts            what the layer gives back to the CALLING model to shape (G3, shared with G4)
+    pipeline.ts            form → match → retrieve → limit check → Markdown (G3)
   scripts/
     regenerate-matcher-parity.py   regeneration harness for the matcher parity fixture
   seed/                ← staged seed data (file-based; DB models deferred)

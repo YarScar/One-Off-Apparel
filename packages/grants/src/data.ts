@@ -3,7 +3,7 @@
  *
  * Seed JSON is read at runtime with `fs.readFileSync`, not imported as a module. `resolveJsonModule`
  * is off across this repo (only `apps/hq` enables it); turning it on would force the seed into
- * `src/` and make every `tsc`/`eslint` run structurally infer types for 82 questions with 211
+ * `src/` and make every `tsc`/`eslint` run structurally infer types for 87 questions with 247
  * nested variants.
  *
  * Loads are lazy and memoised per file, so a malformed seed fails inside a tool call — surfacing as

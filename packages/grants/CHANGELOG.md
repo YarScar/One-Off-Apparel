@@ -25,7 +25,288 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-04
+
+### Added — `grant_build_draft`, the form-to-draft pipeline (board D1 / #71)
+
+`packages/grants/src/pipeline.ts` and `apps/mcp-server/src/tools/grant-build-draft.ts`. The port of
+the prototype's `pipeline.py` — `build_answer`, `run`, `render_markdown` — completing the path
+**form → match → knowledge-base retrieve → limit check → Markdown**. `count_units` and
+`truncate_preview`, the other two functions `admin/SPEC.md` §2.2 assigns to this tool, had already
+landed in `limits.ts` at G2 and were not re-ported.
+
+**Tool surface: 21 → 22.** `grant_build_draft` carries `readOnlyHint: true` like its siblings. Its
+`tool_permissions` row already existed — migration `20260729000000_add_grant_tool_permissions`
+reserved it for `leadership` and `admin` — so **no new migration was needed** and the tool is
+reachable on any database that has run `pnpm db:migrate`. Confirmed by query on the local database.
+
+It takes either an inline captured form (`funder` + `questions[]`, each with an optional `limit`) or
+`form_id` for one of the 7 stored fixtures. It returns per-question answer plans, the outstanding work
+split into `your_tasks` and `staff_actions`, the rendered Markdown draft, and the figure work order.
+
+**It makes no connector call, by design.** It returns the `query_*` calls a caller must run and the
+caller runs them. `figures.ts` holds the reason: `runTool`'s permission check keys on the *inbound*
+tool name, so a grant tool reading the database internally would be authorised as itself rather than
+as `query_finances`, laundering finance and donor data past the role ACL. Do not "optimise" this.
+
+**Resize is off, per the gate** — meaning this tool does not rewrite anything. It hands the work back.
+See the next entry.
+
+#### Added — `handback.ts`, the contract for work this layer gives back to the calling model
+
+The mechanism that makes the layer an *assist* rather than a gate. The knowledge base exists so a
+model does not regenerate answers LaunchPad has already written and approved; when a stored answer
+does not drop straight into a funder's field, the material goes back to the calling model with the
+limit, the measurement, and the rules, and the model does the shaping.
+
+`RESIZE_RULES` is the prototype's `resize.py::_SYSTEM_PROMPT`, carried over as `admin/SPEC.md` §2.2
+requires — including the load-bearing clause, "NEVER invent, add, infer, or embellish any fact,
+figure, statistic, name, date, program detail, or outcome." `buildHandback`'s context assembly is its
+`_build_user_prompt`: funder, emphasis to preserve, and what the stored answer answers.
+
+**Shared on purpose.** `grant_resize_answer` (G4) emits the same payload. A model given a stricter
+guardrail by one tool than by the other produces inconsistent drafts, so the payload is built once
+here. That also makes G4 a small tool rather than a second implementation.
+
+**No model client, and none is coming.** `TAD.md` §6 decision 6 already recorded why: an MCP tool is
+invoked *by* Claude, so a tool that opened its own client would solve the wrong problem.
+`@anthropic-ai/sdk` is in no `package.json` in this repository, and `ANTHROPIC_API_KEY` is declared in
+`packages/config/src/schema.ts` but never read. Everything here stays unit-testable with no mocking
+and no key.
+
+`verify_with` deliberately names `grant_build_draft` and **not** `grant_resize_answer`, because only
+the former is registered. Pointing a caller at a tool absent from `tools/list` produces a failed call
+and a model that improvises around it. `handback.test.ts` asserts that; add the reference at G4.
+
+#### Four branches that go beyond the prototype
+
+Each exists because the prototype is demonstrably wrong on the real seed, and each is pinned by a
+test in `src/pipeline.test.ts`:
+
+| Branch | Actor | Why |
+|---|---|---|
+| `derive_from_reference` | `llm` | A field wanting a short structured value whose KB slot holds narrative. The prototype returns the prose as the answer; this hands it back as source material to derive the value from. |
+| `needs_attachment` | `staff` | Split out of the above — an upload is the one outstanding task the calling model cannot do. A document is not text it can write. |
+| `compression_infeasible` | `llm` | Over the limit by more than `MAX_COMPRESSION_RATIO` (4x). Still handed back, but carrying the warning that facts must be dropped and that the reply must name which. The prototype reports a 46x overrun identically to a 1.2x one. |
+| `carries_figures` | — | Set from `containsNumericClaim`, independently of the KB's `verified` flag. |
+
+The last matters most. `figures.ts` already recorded that `verified` is the wrong axis for
+staleness — it fires on `kb.docs`, which holds no figures, and stays silent on `kb.metrics`, whose
+wage figure drifts about $1,500 every four days. A `verified: true` answer full of moving figures is
+both the common case and the dangerous one, so the two warnings are independent and both can apply.
+
+#### Changed — outcomes name an actor, replacing a single "needs a human" flag
+
+**This corrected a scope error made earlier the same day.** The first cut of this module treated every
+unfinished question as human work: an over-limit answer, and a short field holding narrative, both
+came back marked for a person with the text withheld from the answer slot. That inverts what the layer
+is for. Shortening an answer and pulling a value out of prose are exactly what the calling model is
+there to do; only a fact or a decision the layer does not hold needs a person.
+
+So `AnswerPlan.needs_human: boolean` became `AnswerPlan.actor: 'none' | 'llm' | 'staff'`, with
+`STATUS_ACTOR` exported as the single mapping and `summary.by_actor` counting all three. The tool
+splits its outstanding-work summary the same way: `your_tasks` (with the handback attached, ready to
+do) and `staff_actions`.
+
+The difference is not cosmetic. On the `aug7_truist` fixture the old shape reported **9 of 17
+questions needing a person**; the same form now reports **8 done, 8 the calling model can finish
+immediately, and 1 genuinely needing staff** — the requested amount. A model reading the old output
+would have stalled a draft that was ready to finish.
+
+`renderMarkdown` follows: the header reads "N awaiting a rewrite · N awaiting staff", and source text
+for owed work renders in a collapsed block labelled by task rather than as a blockquote that reads as
+the answer.
+
+### Found — the knowledge base cannot answer 42 of the 87 bank questions
+
+Measured while building `reference_only`, and the reason that branch fires on 43 of the 106 questions
+across the seven form fixtures rather than on a handful.
+
+**Every non-narrative question in the v0.4.0 bank routes to a narrative KB slot.** All 42 of them:
+
+| `answer_type` | Questions | Shortest slot it routes to |
+|---|---|---|
+| `field` | 15 | `kb.profile.state_pa`, 30 words |
+| `single_select` | 8 | `kb.eligibility`, 124 words |
+| `attachment` | 8 | `kb.docs`, 41 words |
+| `boolean` | 5 | `kb.financials`, 116 words |
+| `number` | 4 | `kb.metrics`, 184 words |
+| `demographic` | 2 | `kb.profile.demographics`, 55 words |
+
+The knowledge base holds 29 narrative answers and **zero short structured values**. So the sharpest
+case is not a rounding error: Truist's `cover.project_title`, a 30-character "name of your solution"
+field, routes to the 199-word `kb.program_desc`. The correct answer is "Launchpad".
+
+This is a **content gap, not a code defect**, and `grant_build_draft` cannot close it — the honest
+behaviour is to flag the field and hand the prose over as background, which is what it does. Closing
+it means either adding short structured slots to `kb_launchpad.json` or accepting that ~40% of a
+typical form is filled in by hand. **Not yet on the board**; it belongs with the Phase B content work.
+
+One case inside that number is a bank-typing question rather than a content gap: Truist's "Who does
+your solution serve, and in what ways will the solution impact their lives?" is typed `demographic`
+and reads as narrative. The pipeline is not the right place to second-guess the bank's typing, so it
+flags it like the rest.
+
+### Verified — the G3 gate's second half, through the real server
+
+`grant_build_draft` with `form_id: 'aug7_truist'` returns a 17-question draft package and a figure
+work order scoped to the KB slots that draft used, asserted in
+`apps/mcp-server/src/__tests__/tools.test.ts` against the spawned server rather than the library.
+Full suite: **183 tests across 12 files**, up from 131 — 41 new in `src/pipeline.test.ts`, 8 in
+`src/handback.test.ts`, and 3 new integration cases. `packages/grants` lints clean.
+
+### Not verified — the G3 gate's first half, and why more code will not fix it
+
+**G3 has not passed, and `admin/SPEC.md`'s own gate table now says so.** Its first half is "25
+pipeline parity tests pass" and the real number is **20 of 25**:
+
+| Prototype class | Cases | Where they are |
+|---|---|---|
+| `CountUnitsTests` | 5 | `src/limits.test.ts` — ported into `limits.ts` at G2 |
+| `TruncatePreviewTests` | 3 | `src/limits.test.ts` — same |
+| `BuildAnswerTests` | 9 | `src/pipeline.test.ts`, one for one |
+| `ResizeHookTests` | 6 | 1 here (`resizer absent` ≡ resize off); **5 unportable at G3** |
+| `RunTests` | 2 | `src/pipeline.test.ts`, one for one |
+
+The five deferred cases inject a `ClaudeResizer` into `build_answer`. `admin/SPEC.md` §2.2 already
+records that `ClaudeResizer` **does not port at all** — an MCP tool is invoked *by* Claude, so there
+is no in-process resizer to inject, and `grant_resize_answer` returns instructions for the caller
+instead. Those cases cannot pass before G4 exists, and writing stand-ins that pass without it would
+make the gate report coverage it does not have.
+
+**This is a gate decision, in the same class as G1's "three table rows, one registered tool".** Either
+restate G3 as 20 cases and move the 5 onto G4 — making G4's bar 12 rather than 7 — or hold G3 open
+until G4 lands. Recorded on board D1 (#71) and the D2 milestone (#72). Nothing about
+`grant_build_draft` itself is outstanding.
+
+### Not verified — `grant_build_draft`'s ACL path
+
+Its `tool_permissions` row exists and was confirmed by query, so it will resolve. But nothing has
+driven a real bearer-token call through it the way 2026-08-03 did for `grant_match_question`, and a
+green test run is not evidence about permissions: `tool-helpers.ts` reaches `canCallTool()` only when
+`currentCaller` is set, and only `serve-http.ts` sets it. Repeating the G1 method per tool is the only
+thing that would settle it.
+
+### Fixed — stale seed counts in `admin/SPEC.md` and `src/data.ts`
+
+Both said the bank held 82 questions and 211–212 variants. It has held **87 questions and 247
+variants** since v0.4.0 — `jq` over `seed/questions.json` settles it, and the `grant_match_question`
+tool description already carried the correct figures. Found by grepping for the claims this change
+falsified, per [`CLAUDE.md`](CLAUDE.md) §1.
+
+---
+
 ## 2026-08-03
+
+### Added — a `grant-writing` Claude Code skill that drives the deterministic layer, and a matcher defect it exposed
+
+`README.md` describes `docs/PLAYBOOK.md` as "the source the grant writing skill is authored from"
+while no such skill existed. It does now: `.claude/skills/grant-writing/`, with `SKILL.md` (the
+workflow), `references/style.md` (voice, banned words, the two non-negotiables, the self-edit
+checklist), `references/figures.md` (how to act on the 17 figure checks), and two scripts that drive
+`@lp-ai/lib-grants` from the command line:
+
+- `scripts/prep.mjs <form-id-or-path>` — refuses to run on a non-empty integrity report, then reports
+  per question the matched bank entry and confidence, the KB slot, the `measure()` verdict against the
+  funder's limit, a `GAPS` block, and the scoped figure work order. Reads only; makes no connector call.
+- `scripts/count.mjs <drafts.json>` — `measureAll()` over drafted answers, plus em-dash and
+  banned-jargon checks. Exits non-zero on any failure, so "within limits" cannot be asserted by eye.
+
+This is distinct from the `skill_grant_writing` MCP tool, which returns a prompt and does not touch
+the matcher, `limits.ts`, or `figures.ts`.
+
+### Added — gap-fill: a researched-candidate path for questions the bank cannot answer
+
+Previously a gap stalled the draft. `SKILL.md` said "write from live data or ask", so a form like the
+NBA Foundation's — 9 low-confidence, 1 `no_kb_answer`, 1 `kb_unverified` out of 13 — produced a package
+with holes. The skill now researches and drafts a candidate instead, via `references/gap-fill.md` and
+two new scripts:
+
+- `scripts/gapfill.mjs <form> --out candidates.json` classifies every gap (`unmatched`,
+  `no_kb_answer`, `kb_unverified`, `low_confidence`) and emits a record per gap carrying the source
+  ladder to work. `--validate` then enforces: non-empty answer, **at least one source**,
+  `verified:false`, within limit, no em dash, no banned jargon.
+- `scripts/corpus_search.py "<terms>"` searches prior filed applications in the grant corpus for how a
+  question was already answered. This is the highest-yield rung and the most often skipped — the NBA
+  Spring 2026 filing left "five most recent funders" blank while the Nov 2025 filing answers it.
+
+**The verified boundary is preserved deliberately.** Candidates are `verified:false` and nothing writes
+to `seed/kb_launchpad.json`; promotion is a human edit. `verified:true` there means grounded in filed
+material, and an automated promotion path would turn every researched guess into apparent confirmed
+fact one cycle later. Dollar amounts, the three framing choices, unconfirmed entity names, and
+definitional figure conflicts still go to a person regardless of what research turns up.
+
+### Added — `grant-writing-standalone`, a portable skill with no platform dependency
+
+`.claude/skills/grant-writing-standalone/` carries the craft with none of the infrastructure: no
+`@lp-ai/lib-grants`, no MCP tools, no knowledge base, no corpus. It builds a reusable fact base from
+whatever the user supplies (`references/fact-base.md`), drafts against the funder's transcribed
+questions, and verifies lengths with `scripts/check.py` — Python stdlib only, so the folder can be
+copied into any Claude instance. Organization-agnostic, so it is usable outside Launchpad.
+
+Verified decoupled: `grep -rn "lp-ai\|packages/grants\|query_\|Launchpad"` over that folder returns
+nothing. Its counter uses Python `split()`, which is the same semantics `py.ts` ports for the platform,
+so counts agree with `limits.ts` rather than merely approximating it.
+
+**Defect found, not fixed — `matchQuestion()` mis-routes an unseen funder's need statement to the
+mailing-address slot.** "Explain the issue that your program is seeking to address." returns
+`cover.address` ("What is your organization's mailing address and contact information?", `kb_ref:
+kb.profile.identity`) at confidence 0.353. The correct target is `need.problem_statement`, which
+shares both `issue` and `address`. The verb "address" collides with the noun, and `cover.address`'s
+shorter canonical wins on the weighted Jaccard. Reproduce:
+
+```bash
+node -e "const {matchQuestion}=await import('./packages/grants/dist/index.js');
+console.log(matchQuestion('Explain the issue that your program is seeking to address.'))"
+```
+
+`DEFAULT_THRESHOLD` (0.42) marks it `is_confident: false`, so the gate holds and a drafter is warned.
+The routing is still wrong, and a top-1 match presented without its confidence would answer a
+statement of need with an address.
+
+**Match quality collapses on a funder absent from the bank.** Against the NBA Foundation Spring 2026
+form (13 questions, transcribed from `Prospects and Proposals/NBA Foundation/Spring 2026/`), 11 of 13
+questions came back below threshold; against `hamilton_loi_2025`, a variant source in the bank, all 9
+matched at 1.00. The bank's 247 wordings come from 24 forms and NBA is not one of them. Treat
+`prep.mjs` output for a new funder as a triage list, not a routing decision.
+
+### Security — plaintext funder-portal passwords across the grants corpus, redacted locally; rotation still required
+
+**Scope is far wider than the two NBA documents first spotted.** A sweep of every `.docx`/`.xlsx` in
+the corpus found **92 plaintext password occurrences across 73 files**, covering roughly 50 distinct
+funder portals. The grant response template itself carries a "User Name / Password" row, so every
+document copied from it inherited the field and staff filled it in.
+
+Aggravating factors:
+
+- **Heavy reuse.** `Building21!` appears across at least 12 unrelated funder portals. `A!BXRMYaBZr57Ty`
+  is shared by the NBA Foundation and Nordstrom portals; `Samantha2008!` by NBA Foundation and the
+  Philadelphia Foundation. One password compromises many portals.
+- **A name-and-year password** (`Samantha2008!`) on funder portals suggests a personal password reused
+  from outside work. Rotation needs to extend to wherever else it was used.
+- Accounts span `melanie@b-21.org`, `Dannyelle@launchpadphilly.org`, `giving@launchpadphilly.org`,
+  `tom@b-21.org`, and funder-issued portal identities.
+
+**What was done.** All 92 occurrences were replaced with `[REDACTED PASSWORD]` in the two local copies
+— the extracted tree at `/tmp/opencode/grants-zip/Grants/` and the archive at
+`packages/grants/data/Grants-20260803T150803Z-1-001.zip`, which was unpacked, redacted, and repacked.
+A re-scan of both reports zero remaining occurrences. Usernames were deliberately left in place: they
+identify which account a document belongs to and are not secrets.
+
+**What was not done, and matters more.** `packages/grants/data/` is gitignored and was never committed,
+so there is no git history to purge — confirmed via `git log --all -- packages/grants/data/`. But the
+**authoritative copies live in staff Google Drive and were not touched.** Redaction is not
+containment:
+
+1. **Rotate every password listed in the corpus**, treating all as compromised. Prioritize the reused
+   ones and `Samantha2008!` wherever else it was used.
+2. Purge or redact the Drive originals, including revision history and any Gmail attachments.
+3. **Remove the "Password" row from `Grant Response Template (MAKE A COPY).docx` and
+   `Grant Report Template (MAKE A COPY).docx`**, or every future copy reproduces this.
+4. Move portal logins to a shared password manager and reference them by entry name.
+
+`README.md` §6 bars sensitive data from this repository; the archive under `packages/grants/data/` is
+how this corpus reached it.
 
 ### Fixed — mutation audit of the test suite: the integrity checker had no test that could fail, and the skip bound's soundness was argued but not asserted
 
