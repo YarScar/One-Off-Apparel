@@ -22,11 +22,22 @@ export function registerGetFinanceBrief(server: McpServer): void {
       const raw = input as Record<string, unknown>;
       const period = parseStr(raw, 'period') ?? 'ytd';
 
+      // aplos:funds is snapshotted daily, so an unbounded "latest 50" mixes two
+      // snapshot dates and truncates the newest one. Pin to the newest period.
+      const latestFundPeriod = await prisma.financeSnapshot.findFirst({
+        where: { tabName: 'aplos:funds' },
+        orderBy: { period: 'desc' },
+        select: { period: true },
+      });
+
       const [aplosFunds, aplosAccounts, recentTransactions, sheetFundBalances, recentGifts] = await Promise.all([
         prisma.financeSnapshot.findMany({
-          where: { tabName: 'aplos:funds' },
-          orderBy: { period: 'desc' },
-          take: 50,
+          where: {
+            tabName: 'aplos:funds',
+            ...(latestFundPeriod?.period ? { period: latestFundPeriod.period } : {}),
+          },
+          orderBy: { sourceId: 'asc' },
+          take: 200,
         }),
         prisma.financeSnapshot.findMany({
           where: { tabName: 'aplos:accounts' },
@@ -37,8 +48,15 @@ export function registerGetFinanceBrief(server: McpServer): void {
           orderBy: { period: 'desc' },
           take: 20,
         }),
+        // The dashboard sync writes this tab as 'Combined Funds'; 'fund_balances'
+        // is the seed's name. Match either, case-insensitively.
         prisma.financeSnapshot.findMany({
-          where: { tabName: 'fund_balances' },
+          where: {
+            OR: [
+              { tabName: { equals: 'Combined Funds', mode: 'insensitive' } },
+              { tabName: { equals: 'fund_balances', mode: 'insensitive' } },
+            ],
+          },
           orderBy: { period: 'desc' },
           take: 50,
         }),
