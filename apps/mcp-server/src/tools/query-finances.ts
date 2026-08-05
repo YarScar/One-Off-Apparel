@@ -59,12 +59,19 @@ const inputSchema = {
 
 /**
  * Each query_type maps to the tab_name(s) a connector actually writes into
- * finance_snapshots. Names are matched case-insensitively, because the sheet
- * syncs and the seed disagree on casing: sync-development-crm writes
- * `development:grants tracker` while the seed and earlier revisions of this map
- * used Title Case. A case-sensitive exact match silently returned zero rows for
- * every development and phase_dashboard tab. Keep the legacy aliases so seeded
- * databases and older snapshots stay reachable.
+ * finance_snapshots. The sheet syncs and the seed disagree on casing:
+ * sync-development-crm writes `development:grants tracker` while earlier
+ * revisions of this map used Title Case, and Postgres string equality is case
+ * sensitive, so every development and phase_dashboard tab silently returned
+ * zero rows. Every name below is copied from the connector that writes it;
+ * seed-only names (`ytd`, `fund_balances`) are kept alongside so seeded
+ * databases stay reachable.
+ *
+ * Matching is exact rather than case-insensitive on purpose. Prisma compiles
+ * `mode: 'insensitive'` to `ILIKE` and passes the value through unescaped, so
+ * the `%` in `q3_2026_actuals:global %` becomes a wildcard and the tab claims
+ * rows from any neighbour sharing that prefix. `finance-tab-map.test.ts` locks
+ * the casing instead.
  */
 const QUERY_TYPE_TO_TABS: Record<string, string[]> = {
   prior_month: ['Prior Month Budget vs Actual'],
@@ -73,6 +80,9 @@ const QUERY_TYPE_TO_TABS: Record<string, string[]> = {
   monthly: ['Monthly'],
   fund_balances: ['Combined Funds', 'fund_balances'],
   annual: ['Annual'],
+  // docs/mcp-server-spec.md documents this as "Prior month + YTD combined".
+  // Rows carry their own tab_name, so the caller can tell the two apart.
+  budget_actuals: ['Prior Month Budget vs Actual', 'YTD Budget vs Actual'],
   phase_budget_dashboard: ['phase_dashboard:2025 actuals'],
   phase_budget_monthly_liftoff: ['phase_dashboard:monthly liftoff only'],
   phase_budget_monthly_hs: ['phase_dashboard:monthly hs only'],
@@ -100,16 +110,50 @@ const QUERY_TYPE_TO_TAB_PREFIX: Record<string, string> = {
   pex_transactions: 'pex:FY',
 };
 
-/** query_types kept in the enum for compatibility that no connector writes a tab for. */
-const UNBACKED_QUERY_TYPES: Record<string, string> = {
-  budget_actuals: 'No connector writes a "budget_actuals" tab. Use query_type "ytd" for year-to-date budget vs actual, or "prior_month" for the prior month.',
-};
+/**
+ * query_types kept in the enum that no connector writes a tab for. Empty today —
+ * every query_type resolves to a real tab. When a source goes away, list the
+ * query_type here with the alternative to use, so the tool says so instead of
+ * returning an empty result set that reads as "the organization has no data".
+ */
+const UNBACKED_QUERY_TYPES: Record<string, string> = {};
 
 /** Exported for the map-consistency test in __tests__. */
 export const FINANCE_TAB_MAP = { QUERY_TYPE_TO_TABS, QUERY_TYPE_TO_TAB_PREFIX, UNBACKED_QUERY_TYPES };
 
 /** Hard ceiling on rows pulled before `contains` filtering, to bound memory. */
 const SCAN_CAP = 5000;
+
+/**
+ * Escape LIKE metacharacters. Prisma compiles `mode: 'insensitive'` to `ILIKE`
+ * and passes the value through verbatim, so an unescaped `%` matches every tab
+ * in the table. Postgres uses backslash as the default LIKE escape character.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/**
+ * Resolve a query_type (or a caller's `tab_name` override) to a tab_name filter.
+ * Exported so `finance-tab-map.test.ts` can prove the match is exact and not a
+ * LIKE pattern that bleeds into neighbouring tabs.
+ */
+export function buildTabNameWhere(
+  queryType: string,
+  tabOverride?: string,
+): Prisma.FinanceSnapshotWhereInput {
+  // The override is caller-supplied, so it stays case-insensitive for
+  // convenience but gets escaped first.
+  if (tabOverride) return { tabName: { equals: escapeLike(tabOverride), mode: 'insensitive' } };
+
+  const mappedTabs = QUERY_TYPE_TO_TABS[queryType];
+  if (mappedTabs) return { tabName: { in: mappedTabs } };
+
+  const mappedPrefix = QUERY_TYPE_TO_TAB_PREFIX[queryType];
+  if (mappedPrefix) return { tabName: { startsWith: mappedPrefix } };
+
+  return { tabName: queryType };
+}
 
 export function registerQueryFinances(server: McpServer): void {
   server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
@@ -126,18 +170,7 @@ export function registerQueryFinances(server: McpServer): void {
         return toolError('no_records', unbacked);
       }
 
-      const where: Prisma.FinanceSnapshotWhereInput = {};
-      const mappedTabs = QUERY_TYPE_TO_TABS[queryType];
-      const mappedPrefix = QUERY_TYPE_TO_TAB_PREFIX[queryType];
-      if (tabOverride) {
-        where.tabName = { equals: tabOverride, mode: 'insensitive' };
-      } else if (mappedTabs) {
-        where.OR = mappedTabs.map((tab) => ({ tabName: { equals: tab, mode: 'insensitive' as const } }));
-      } else if (mappedPrefix) {
-        where.tabName = { startsWith: mappedPrefix, mode: 'insensitive' };
-      } else {
-        where.tabName = { equals: queryType, mode: 'insensitive' };
-      }
+      const where: Prisma.FinanceSnapshotWhereInput = buildTabNameWhere(queryType, tabOverride);
       if (periodFilter) where.period = periodFilter;
 
       const totalMatching = await prisma.financeSnapshot.count({ where });

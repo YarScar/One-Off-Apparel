@@ -26,7 +26,7 @@ case, and Postgres string equality is case sensitive.
 | `phase_budget_monthly_liftoff` | `phase_dashboard:Monthly LiftOff Only` | `phase_dashboard:monthly liftoff only` |
 | `phase_budget_monthly_hs` | `phase_dashboard:Monthly HS Only` | `phase_dashboard:monthly hs only` |
 | `fund_balances` | `fund_balances` | `Combined Funds` (`fund_balances` is the seed's name) |
-| `budget_actuals` | no mapping at all, fell through to `tabName = 'budget_actuals'` | nothing writes this tab |
+| `budget_actuals` | no mapping at all, fell through to `tabName = 'budget_actuals'` | `Prior Month Budget vs Actual` + `YTD Budget vs Actual` |
 
 Sources: `connectors/google-sheets/src/sync-development-crm.ts`,
 `sync-phase-budget-dashboard.ts`, `sync-dashboard.ts`.
@@ -34,10 +34,27 @@ Sources: `connectors/google-sheets/src/sync-development-crm.ts`,
 The map appears to have been written against `packages/db/src/seed.ts`, which uses
 its own short names (`ytd`, `fund_balances`), rather than against the connectors.
 
-Fix: correct the names, match case-insensitively, keep the seed names as aliases,
-and return a `no_records` error explaining the alternatives for `budget_actuals`
-rather than an empty list. `apps/mcp-server/src/__tests__/finance-tab-map.test.ts`
-locks the casing and asserts no query_type resolves only to its own name.
+Fix: correct the names against the connectors and keep the seed names as aliases.
+`budget_actuals` maps to both budget-vs-actual tabs, which is what
+`docs/mcp-server-spec.md` documented all along ("Prior month + YTD combined") —
+rows carry their own `tab_name`, so a caller can still split them. Four shipped
+prompts call that query_type (`prompts/board-reporting.ts`, `finance-audit.ts`,
+`grant-prospecting.ts`, `grant-writing.ts`), so erroring on it was not an option.
+
+Tab names are matched **exactly**, via `tabName: { in: [...] }`, not with
+`mode: 'insensitive'`. Prisma compiles that mode to `ILIKE` and passes the value
+through unescaped, which would make the `%` in `q3_2026_actuals:global %` a
+wildcard and let the query claim rows from any tab sharing that prefix — verified
+against a planted neighbour tab. The one place a LIKE pattern survives is the
+caller's `tab_name` override, which stays case-insensitive for convenience and is
+run through `escapeLike()` first; without that, `tab_name: '%'` returned rows from
+every tab in `finance_snapshots`. Exact matching also lets the query use
+`finance_snapshots_tab_name_idx`, which `ILIKE` cannot.
+
+`apps/mcp-server/src/__tests__/finance-tab-map.test.ts` locks the casing, asserts
+no query_type resolves only to its own name, and — against a local DB — plants a
+`q3_2026_actuals:global %-other` tab to prove neither the map nor a `%` override
+reaches it.
 
 ### 2. `query_finances` accepted a `contains` filter and ignored it
 

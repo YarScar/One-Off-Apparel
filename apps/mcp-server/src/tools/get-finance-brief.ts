@@ -49,14 +49,10 @@ export function registerGetFinanceBrief(server: McpServer): void {
           take: 20,
         }),
         // The dashboard sync writes this tab as 'Combined Funds'; 'fund_balances'
-        // is the seed's name. Match either, case-insensitively.
+        // is the seed's name. Match either, exactly — `mode: 'insensitive'`
+        // compiles to an unescaped ILIKE, which would make the `_` a wildcard.
         prisma.financeSnapshot.findMany({
-          where: {
-            OR: [
-              { tabName: { equals: 'Combined Funds', mode: 'insensitive' } },
-              { tabName: { equals: 'fund_balances', mode: 'insensitive' } },
-            ],
-          },
+          where: { tabName: { in: ['Combined Funds', 'fund_balances'] } },
           orderBy: { period: 'desc' },
           take: 50,
         }),
