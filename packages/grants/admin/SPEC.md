@@ -28,7 +28,7 @@ Five gates. Do not start a gate until the one before it passes. Each maps to a d
 | **G2** | `grant_match_question`. | 13 matcher parity tests pass. **Sequence-ratio parity is proven.** Refer to section 5. | ✅ **passed exactly** |
 | **G3** | `grant_build_draft`, resize off. | ~~25~~ **20** pipeline parity tests pass. A full form fixture returns a draft package and a figure work order. | ✅ **passed 2026-08-04**, on the restated condition. Refer to the note below |
 | **G4** | `grant_resize_answer`. | ~~7~~ **12** parity tests pass, with no network. | ✅ **passed 2026-08-04**, on the restated bar. Refer to the note below |
-| **G5** | Rewrite `skill_grant_writing`. Author in the Playbook craft. Release and pilot. | A draft produced from the skill alone is judged at least as good as a prototype draft. | not started |
+| **G5** | Rewrite `skill_grant_writing`. Author in the Playbook craft. Release and pilot. | A draft produced from the skill alone is judged at least as good as a prototype draft. **The condition itself is an open decision — refer below.** | not started, and **not startable** |
 
 **G2 is the risk gate.** Stop there and check the result before building anything above it. Refer to section 5.3.
 
@@ -105,6 +105,28 @@ prototype does not check figure fidelity at all — see section 2.2.
 
 `src/resize.test.ts` holds 18 cases in total; 12 is the parity bar and the rest cover the
 `checkFigures` primitive and the two data-honesty warnings.
+
+**G5's condition is itself an open decision, raised 2026-08-06 and deliberately left open.** `bd`
+`grant-k4i`, board #75. *"Judged at least as good as a prototype draft"* is not one judgement; three
+separable decisions sit inside it, and none can be taken yet — Chip and Iman cannot judge a draft
+against the prototype until the knowledge base can fill a form. **It is blocked on `grant-miy`, not
+on anyone's calendar.**
+
+1. **Where the line falls between C5 and the human judge.** Anything C5's test set can grade against
+   the Playbook rules is a *test*, not a judgement. What is left for a person is the residue. Undrawn,
+   the gate double-counts and neither measurement is clean.
+2. **Whether the prototype draft is the right comparator.** The baseline draft answers *"What is the
+   name of your solution?"* — a **30-character** field — with a **1,403-character** program
+   description flagged `OVER LIMIT`. That is `grant-miy` exactly. So the condition may measure the
+   knowledge base's content gap rather than the skill. **This is the same failure class that forced G3
+   to be restated 25 → 20 and G4 7 → 12**, and it cost a decision after the build both times.
+3. **Which Playbook the judge judges against.** Section 4.2 of `TAD.md` rules that the skill is wrong
+   when it disagrees with the Playbook after authoring — but C1 and C4 are undecided and ownership is
+   mid-handover, so the standard can move after the draft is written. This one genuinely blocks on
+   Phase C.
+
+**Unverified:** whether Chip or Iman has read either prototype draft. If neither has, the condition
+asks a judge to compare against an artifact they have no prior on.
 
 Two changes to G1 as originally written:
 

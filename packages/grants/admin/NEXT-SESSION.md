@@ -312,10 +312,13 @@ Struck-through items record what was done, so the next session does not redo the
    marks it TODO too), so the port is the interface and there is no parity fixture; and the reframe
    guardrail is **not** the resize guardrail reworded, because the two tasks fail in opposite
    directions. Unreachability is asserted structurally over the real import graph, not by a spy.
-5. **D5 / G5, rewrite `skill_grant_writing`.** The last gate, and the one with no parity fixture to
-   check itself against. Half of it depends on Phase C, because the drafting craft is authored into the
-   skill rather than read per draft (`TAD.md` §4.2). Do not read its estimate as soft the way D1's and
-   D3's turned out to be.
+5. **D5 / G5 is BLOCKED, and not on Phase C.** Its pass condition is an open decision — `bd`
+   `grant-k4i`, raised 2026-08-06 — and the blocker is `grant-miy`: Chip and Iman cannot judge a draft
+   against the prototype while roughly 40% of a form comes back `reference_only`. **Refine the
+   knowledge bank first.** `SPEC.md` §1 holds the three decisions inside that one sentence. When it
+   does start: the last gate, no parity fixture to check itself against, and do not read its estimate
+   as soft the way D1's, D3's and D4's turned out to be — those landed short because earlier gates had
+   already built their parts, and G5 has nothing underneath it.
 6. **Prove one ACL path end to end.** Repeat G1's bearer-token method on `grant_build_draft` or
    `grant_resize_answer`. It is cheap, it is local, and it converts "the row exists" into "the tool
    resolves" for the two tools where that is still an inference.
