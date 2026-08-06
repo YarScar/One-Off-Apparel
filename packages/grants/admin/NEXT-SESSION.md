@@ -319,9 +319,10 @@ Struck-through items record what was done, so the next session does not redo the
    does start: the last gate, no parity fixture to check itself against, and do not read its estimate
    as soft the way D1's, D3's and D4's turned out to be — those landed short because earlier gates had
    already built their parts, and G5 has nothing underneath it.
-6. **Prove one ACL path end to end.** Repeat G1's bearer-token method on `grant_build_draft` or
-   `grant_resize_answer`. It is cheap, it is local, and it converts "the row exists" into "the tool
-   resolves" for the two tools where that is still an inference.
+6. ~~**Prove one ACL path end to end.**~~ Done 2026-08-06, on **both** tools rather than one.
+   `leadership` succeeded on each, `program_staff` was refused on each, and all four calls reached
+   `usage_logs` with the caller email — refusals included. "The row exists" is no longer an inference
+   anywhere in this layer. Still local; production is A7 (#163).
 7. **Find an owner for A3's production half.** Still the last thing holding G1 to a local claim.
 8. **Open the lint rollout package** with the 415 figure and the build-order caveat, and **add the CI
    lint step** (`bd` `grant-b5c`) — nothing enforces the config that is already turned on.

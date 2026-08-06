@@ -43,10 +43,16 @@ nothing here is verified against RDS, and that half of the migration work is sti
 **And the condition is satisfied by three table rows, only one of which had a registered tool** when
 G1 passed, so G1 passing means the ACL path was proven on `grant_match_question` alone.
 `grant_build_draft` became a registered tool on 2026-08-04 and `grant_resize_answer` later the same
-day, so all three rows now have a registered tool and the reserved row is gone. **Neither new tool's
-ACL path has been driven end to end** — the G1 method would have to be repeated per tool, and nothing
-has. Both rows were confirmed present by query (`grant_resize_answer`: `{leadership, admin}`, category
-`grants`), which says the tools will resolve, not that they were observed resolving.
+day, so all three rows now have a registered tool and the reserved row is gone.
+
+**Closed 2026-08-06: the G1 method was repeated on both new tools, and all three ACL paths are now
+observed rather than inferred.** From 2026-08-04 to 2026-08-06 the claim rested on the rows being
+present by query, which says a tool *will* resolve, not that it *was seen* resolving. A `leadership`
+caller succeeded on both tools, a `program_staff` caller was refused on both with `permission_denied`,
+and all four calls reached `usage_logs` with the caller email — **refusals included**, so a denied
+call is visible on HQ `/tools` rather than silent. Method and table in `../CHANGELOG.md` under
+2026-08-06. **The first limit above still stands: the evidence is local, and A7 (#163) is open for
+production.**
 
 **How G3 passed, and what its condition now says.** The second half held all along and is proven
 through the real server: `grant_build_draft` with `form_id: 'aug7_truist'` returns a 17-question draft

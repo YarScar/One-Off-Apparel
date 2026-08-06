@@ -122,13 +122,14 @@ accounting, and the 3 cases with no analogue anywhere are named there rather tha
   email. See `CHANGELOG.md` under 2026-08-03 for the method and the table.
 - **Read "G1 passed" narrowly.** The pass condition is satisfied by three *table rows*, only one of
   which had a registered tool when it passed, so it does not mean three working tools. It means the
-  ACL path is proven, on `grant_match_question`. And it is proven **locally only** — nothing is
-  verified against RDS; board A3 (#52) is still open for that.
-- **Neither `grant_build_draft`'s nor `grant_resize_answer`'s ACL path is proven.** Both
-  `tool_permissions` rows exist and were confirmed by query on 2026-08-04 (`leadership`, `admin`,
-  category `grants`), so both will resolve, but nothing has driven a real bearer-token call through
-  either the way G1 did for `grant_match_question`. Repeating that method per tool is the only thing
-  that would settle it.
+  ACL path was proven, on `grant_match_question`. And it is proven **locally only** — nothing is
+  verified against RDS; board A7 (#163) is open for that.
+- **All three grant tools now have a proven ACL path, verified 2026-08-06.** The G1 method was
+  repeated on `grant_build_draft` and `grant_resize_answer`: a `leadership` caller succeeded on both,
+  a `program_staff` caller was refused on both with `permission_denied`, and all four calls landed in
+  `usage_logs` with the caller email — refusals included. This replaces the inference that stood from
+  2026-08-04 to 2026-08-06, which was "the row exists, so the tool will resolve". Method and table in
+  `CHANGELOG.md` under 2026-08-06. **Still local only.**
 - The ACL branch is unreachable from the test suite. `tool-helpers.ts` only calls `canCallTool()`
   when `currentCaller` is set, and only `serve-http.ts` sets it. **A green test run is not evidence
   about permissions** — not even the integration suite that spawns the real server over stdio.

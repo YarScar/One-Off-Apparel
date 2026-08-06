@@ -27,6 +27,40 @@ entry can be verified rather than trusted.
 
 ## 2026-08-06
 
+### Verified — all three grant tools resolve in the ACL, not just `grant_match_question`
+
+The G1 method, repeated on `grant_build_draft` and `grant_resize_answer`. **No source file changed.**
+
+From 2026-08-04 to today the claim about these two rested on the `tool_permissions` rows being
+present by query. That says a tool *will* resolve; it does not say one *was seen* resolving, and the
+distinction is exactly the kind this workstream has been caught by before. It is also the one thing
+no test run could settle: `tool-helpers.ts` reaches `canCallTool()` only when `currentCaller` is set,
+and only `serve-http.ts` sets it, from a verified bearer token. **The ACL branch is unreachable from
+the entire suite**, including the integration tests that spawn the real server over stdio.
+
+Method, unchanged from 2026-08-03: `dist/serve-http.js` against local Postgres, a throwaway RSA
+keypair in `JWT_PRIVATE_KEY`, and two `ACTIVE` `mcp_users` — one `leadership`, one `program_staff`.
+Tokens signed with the same key, then `initialize` and `tools/call` over Streamable HTTP.
+
+| Caller | Tool | HTTP | Outcome |
+|---|---|---|---|
+| no bearer token | — | 401 | refused by the transport, never reaches a tool |
+| `leadership` | `grant_build_draft` | 200 | draft package returned (`form`, `summary`, `results`, `kb_refs_used`) |
+| `leadership` | `grant_resize_answer` | 200 | resize result returned (`model`, `answer_full`, `answer_truncated_preview`, `units_before`) |
+| `program_staff` | `grant_build_draft` | 200 | `isError: true`, `{ code: 'permission_denied' }` |
+| `program_staff` | `grant_resize_answer` | 200 | `isError: true`, `{ code: 'permission_denied' }` |
+
+**All four authenticated calls reached `usage_logs` with the caller email, refusals included** — a
+denied call is visible on HQ `/tools` rather than silent. The `usage_logs` rows are left in place as
+the evidence: `select tool_name, anthropic_user_email, error from usage_logs where
+anthropic_user_email like 'acl-%'` reproduces the table on any clone that ran this.
+
+**What it still does not prove.** Production. Every result is local, and whether the grant
+`tool_permissions` rows exist on RDS remains unknown and unowned — board **A7 (#163)**.
+
+**Blast radius: none.** The keypair lived only in a session scratchpad and was deleted; the server
+was stopped and both test users removed.
+
 ### Added — the reframe seam, built and deliberately not connected (board D4 / #74)
 
 `packages/grants/src/reframe.ts` and `reframe.test.ts`. `admin/SPEC.md` §8 and `admin/TAD.md` §5
