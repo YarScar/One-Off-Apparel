@@ -305,6 +305,30 @@ Three things to know that the description above does not say:
 **Acceptance:** the seam exists and is unreachable from any registered tool. A test asserts it is not called.
 **Owner:** Demitri. **Estimate:** 4h. **Follows:** D3.
 
+**CLOSED 2026-08-06**, well under the estimate for a reason worth recording, because it is the third
+package in a row to land short: **there was no prototype implementation to port.** The prototype
+marks reframe TODO too — `pipeline.py` threads a `hat` through its `context` dict, and `resize.py`
+comments that the real hook is "a separate, richer transform". So the port is the *interface*, and
+this module has **no parity fixture and cannot have one**. It is not part of the 45-case accounting
+in `SPEC.md` §4. Two corrections to the description above:
+
+- **The guardrail is the substance of the package, not the plumbing.** `REFRAME_RULES` is not
+  `RESIZE_RULES` reworded. Resizing asks a model to say less, which fails safe; reframing asks it to
+  lean into a theme, which fails by *manufacturing* the theme — invisible to the length check and to
+  the figure check both. The no-invention clause is carried verbatim, and two rules are added:
+  reframing is reordering and re-weighting rather than adding, and a source that does not support the
+  funder's emphasis gets said so and returned unchanged, because that mismatch is a knowledge-base
+  finding rather than a writing problem.
+- **"A test asserts it is not called" is asserted structurally, not by a spy.** A spy proves only the
+  paths a test exercises. `src/reframe.ts` is left off `src/index.ts` — the only door the MCP tools
+  have into this package — and does not widen `HandbackTask`, which would put a `reframe` value into
+  a module three registered tools import. The test walks `index.ts`, `apps/mcp-server/src/`, and the
+  rest of `packages/grants/src/` at run time, so wiring the seam without deleting the test fails the
+  suite.
+
+15 cases. Suite 207 → **222 across 14 files**. Tool surface unchanged at 23; an unregistered seam
+needs no `tool_permissions` row.
+
 ### D5 — Rewrite skill_grant_writing (G5)
 `apps/mcp-server/src/prompts/grant-writing.ts`. The skill calls the three new tools first, then verifies every figure through the existing `query_*` tools, then drafts.
 
@@ -417,6 +441,27 @@ These dates are read back from the board, not typed by hand. OpenProject schedul
 # The board of record
 
 The set is live in OpenProject at `projects.liftofflearning.tech`, project **Internal AI Integrations** (`internal-ai-integrations`), as work packages **#49 to #88**. It was created through the API v3, not a CSV import.
+
+## The 2026-08-06 reconciliation
+
+The board had drifted two days behind the repository. `bd` had not — it carried D1, D2, D3 and all of Phase A closed since 2026-08-04, so this was a one-way sync into OpenProject, and **`bd` is the tracker to trust when the two disagree** (`../CLAUDE.md` §2 says as much).
+
+What changed:
+
+| Work package | Was | Now |
+|---|---|---|
+| **D3** (#73) | New | **Closed.** Built 2026-08-04; the 7 → 12 restatement and the figure-fidelity addition are on the journal entry. |
+| **D2** (#72) | On hold | **Closed.** G3 passed on the restated 20-case condition. |
+| **A3** (#52) | In progress | **Closed** on its local half only. |
+| **A7** (#163) | — | **New.** The production migration half, split off #52 because it has no owner and a different access path — RDS is not publicly reachable. |
+| **Phase H** (#164) | — | **New**, with H1 (#165) and H2 (#166) closed and H3 (#167) open. |
+| **#168, #169** | — | **New.** The lint rollout and the CI lint step, which existed in `bd` (`grant-0sk`, `grant-b5c`) and had never reached the board. |
+
+**Phase H is the Google Drive discovery workstream**, built 2026-08-06 outside this set because the grant layer could not reach LaunchPad's own past applications and the cause turned out to be a platform defect: the `Grants` tree is in a Shared Drive, so every Drive call needs `supportsAllDrives` and `includeItemsFromAllDrives`. It is lettered **H rather than G** because G1 to G5 are the release gates in `SPEC.md` §1 and a Phase G would collide with them in every conversation.
+
+**#168 and #169 are deliberately not children of any phase.** They are platform work with their own owner, and `NEXT-SESSION.md` is explicit that lint debt does not belong inside a grant gate.
+
+Four `bd` issues remain deliberately `bd`-only, because each is a finding rather than a scheduled package: `grant-h32`, `grant-miy`, `grant-l0f`, and the documentation-debt register `grant-sl0`.
 
 Type mapping, because this instance has no Phase type:
 

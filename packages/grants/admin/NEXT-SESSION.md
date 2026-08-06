@@ -22,14 +22,14 @@ resizer cases moved onto G4, both gates then passed). **The knowledge-base conte
 
 ## State now
 
-Checked rather than assumed, at the end of the 2026-08-04 D3/G4 session.
+Checked rather than assumed, at the end of the 2026-08-06 D4 session.
 
 | | |
 |---|---|
-| `packages/grants` tests | **162 pass**, 207 across the whole repo in about 8 seconds. No database, no network for this package. |
+| `packages/grants` tests | **177 pass**, 222 across the whole repo in about 9 seconds. No database, no network for this package. |
 | Release gates | **G1 passed 2026-08-03, locally** — refer to `CHANGELOG.md`. **G2 passed exactly.** **G3 and G4 both passed 2026-08-04**, each on a restated condition (20 cases and 12 cases). **G5 not started.** |
-| Tools registered | **3 of 3** — `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, all wired into `make-server.ts`. |
-| OpenProject board | **Live.** 40 work packages, #49 to #88, Aug 03 to Sep 16. D1 (#71), D2 (#72) and D3 (#73) all closed. |
+| Tools registered | **3 of 3** — `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, all wired into `make-server.ts`. The reframe seam is deliberately **not** among them. |
+| OpenProject board | **Live and current as of 2026-08-06.** D1 (#71), D2 (#72), D3 (#73) and A3 (#52) all closed; #72 and #73 had been stale since 2026-08-04. Seven packages added: A7 (#163, the production migration half split off #52), Phase H (#164) with H1 (#165) and H2 (#166) closed and H3 (#167) open, plus the lint rollout (#168) and the CI lint step (#169). `bd` now mirrors all of it. |
 | Committed to git | **Everything.** 19 commits on `writing/dev`; the D3/G4 work is `1f3a2fb`, `19ca6e9`, `715862e`. Working tree clean apart from two files unrelated to this workstream — see "Open the PR". |
 | Pushed / PR opened | **Pushed 2026-08-04**, in sync with `origin/writing/dev`, 19 ahead of `origin/master`. **PR not opened.** Refer to "Open the PR" below. |
 | Linter | **Runs.** `packages/grants` is clean. Repo-wide baseline measured — 415. |
@@ -85,7 +85,8 @@ Two consequences worth carrying forward:
 - **The ACL path is still unproven**, now for two tools rather than one. Both permission rows were
   confirmed by query, so both will resolve. Nothing has driven a bearer-token call through either the
   way G1 did for `grant_match_question`. A green suite says nothing here.
-- **D4 (the reframe seam) is not started.** It is a 4h package and deliberately unwired.
+- ~~**D4 (the reframe seam) is not started.**~~ **Done 2026-08-06.** `src/reframe.ts`, 15 cases,
+  unwired and asserted unwired. Refer to `../CHANGELOG.md` under 2026-08-06.
 
 ---
 
@@ -306,8 +307,11 @@ Struck-through items record what was done, so the next session does not redo the
    framing: B6 measured misses, and misses are the safe failure. One confident wrong match fixed
    (bank v0.4.1), three recorded on `bd` `grant-h32`, and `grant-miy`'s count corrected 42 → 35. It
    stays open on the stemming decision, which is a `TAD.md` decision and already fully measured.
-4. **D4, the reframe seam.** 4h, and the smallest thing left in Phase D. Port it, do not wire it —
-   `SPEC.md` §8 and `TAD.md` decision 7. A test must assert it is unreachable from any registered tool.
+4. ~~**D4, the reframe seam.**~~ Done 2026-08-06. Two things the package turned up that its
+   description did not anticipate: there was **no prototype implementation to port** (the prototype
+   marks it TODO too), so the port is the interface and there is no parity fixture; and the reframe
+   guardrail is **not** the resize guardrail reworded, because the two tasks fail in opposite
+   directions. Unreachability is asserted structurally over the real import graph, not by a spy.
 5. **D5 / G5, rewrite `skill_grant_writing`.** The last gate, and the one with no parity fixture to
    check itself against. Half of it depends on Phase C, because the drafting craft is authored into the
    skill rather than read per draft (`TAD.md` §4.2). Do not read its estimate as soft the way D1's and

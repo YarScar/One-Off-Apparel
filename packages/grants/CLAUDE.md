@@ -78,18 +78,19 @@ Do not restate these; link to them. Duplication is how the set drifts.
 
 ---
 
-## 3 Where we are — verified 2026-08-04
+## 3 Where we are — verified 2026-08-06
 
 Re-verify before trusting this section; it is a snapshot, not a contract. Every claim here was
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **207 tests across 13
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **222 tests across 14
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
-over stdio. `packages/grants` alone is **162 in 8 files**, with no database and no network. (183 across
-12 before G4 added `resize.test.ts` and three integration cases; 131 across 10 before G3 added
-`pipeline.test.ts` and `handback.test.ts`; 82 across 8 before 2026-08-03, when the code review added
-suites for `limits.ts` and `py.ts`, which had none.)
+over stdio. `packages/grants` alone is **177 in 9 files**, with no database and no network. (207 across
+13 before 2026-08-06, when D4 added `reframe.test.ts`; 183 across 12 before G4 added `resize.test.ts`
+and three integration cases; 131 across 10 before G3 added `pipeline.test.ts` and `handback.test.ts`;
+82 across 8 before 2026-08-03, when the code review added suites for `limits.ts` and `py.ts`, which
+had none.)
 
 Use `pnpm db:migrate`, never `db:push`, for local setup. `db push` writes no migration SQL, so the
 `tool_permissions` rows never land and every tool call fails closed. This is not a preference — it is
@@ -204,7 +205,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 207 passed, 0 skipped, 13 files.
+# Full suite — expect 222 passed, 0 skipped, 14 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

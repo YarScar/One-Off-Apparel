@@ -377,6 +377,14 @@ Ingested rows stay addressable: each carries `source = 'notion'` and a `source_i
 
 One Claude seam exists in the prototype and stays unconnected: **reframe**, which re-emphasises an answer for a specific funder. Port the seam. Do not wire it. Refer to `TAD.md` section 5, decision 7.
 
+**Done 2026-08-06** — `src/reframe.ts` and `src/reframe.test.ts`, 15 cases. Three corrections to the sentence above:
+
+- **There was no implementation to port.** The prototype never wired reframe either: `pipeline/pipeline.py` threads a `hat` through its `context` dict and marks the transform TODO, and `resize.py::_build_user_prompt` comments that the real hook is "a separate, richer transform". So the port is the *interface* — the hat vocabulary, the context assembly, and the guardrail — and **there is no parity fixture for this module and cannot be one.** It is not part of the 45-case accounting in section 4.
+- **The guardrail is not `RESIZE_RULES` with a word changed.** Resizing asks a model to say less, which fails safe. Reframing asks it to lean into a theme, which fails by manufacturing the theme when the source does not support it — invisible to both the length check and the figure check. `REFRAME_RULES` keeps the no-invention clause verbatim and adds two rules: reframing is reordering and re-weighting, not adding; and a source that does not support the funder's emphasis gets **said so and returned unchanged**, because a mismatch is a knowledge-base finding rather than a writing problem.
+- **"Unconnected" is enforced structurally.** The module is not re-exported from `src/index.ts`, which is the only door the MCP tools have into this package, and it does not widen `HandbackTask` — that would put a `reframe` value into a module three registered tools import. The test walks `index.ts`, `apps/mcp-server/src/`, and the rest of `packages/grants/src/` at run time, so wiring it without deleting that test fails the suite.
+
+To wire it later, revisit `TAD.md` decision 7 first: the decision holds this, not the code.
+
 ---
 
 ## 9 Key files

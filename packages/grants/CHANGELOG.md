@@ -25,6 +25,58 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-06
+
+### Added — the reframe seam, built and deliberately not connected (board D4 / #74)
+
+`packages/grants/src/reframe.ts` and `reframe.test.ts`. `admin/SPEC.md` §8 and `admin/TAD.md` §5
+decision 7 both say the same thing about this hook: port the seam, do not wire it. Both halves landed.
+
+**There was no implementation to port.** The prototype never wired reframe either — `pipeline.py`
+threads a `hat` through its `context` dict and marks the transform TODO, and `resize.py`'s
+`_build_user_prompt` carries a comment calling the real hook "a separate, richer transform". So what
+ported is the *interface*: the funder-hat vocabulary, the context assembly, and a guardrail. There is
+no parity fixture for this module and there cannot be one.
+
+**The guardrail is not the resize guardrail with a word changed, and that is the substance of the
+package.** Resizing asks a model to say less, which fails safe. Reframing asks it to lean into a
+theme, which fails by *manufacturing* the theme when the source does not support it — and no length
+check or figure check would ever catch that. So `REFRAME_RULES` carries the no-invention clause
+word-for-word from `RESIZE_RULES` (a model that gets a softer guardrail from one tool than another
+uses the softer one), then adds the two rules this task needs:
+
+- Reframing is **reordering and re-weighting** what is already there, not adding material.
+- If the source contains nothing supporting the funder's emphasis, **say so and return it unchanged**.
+  A mismatch is a finding about the knowledge base, not a writing problem to solve.
+
+**`FUNDER_HATS` is a closed vocabulary** — `workforce`, `youth`, `tech_equity`, `economic_mobility`,
+`dei`, `education_innovation`, `place_based` — taken from the prototype's roadmap entry, where
+`research/LaunchPad-Philly-Application.md` records that a hat is concretely about which program and
+phase you pitch. `buildReframeHandback` throws on an unrecognised one rather than passing it through:
+a typo'd hat reaching a prompt would read to the model as an instruction somebody meant to give.
+
+**How it stays unconnected, mechanically.** The module is **not re-exported from `src/index.ts`**.
+`@lp-ai/lib-grants` is the only door the MCP tools have into this package, so leaving it off that
+barrel is what makes the seam unreachable rather than merely unused. It also does **not** widen
+`HandbackTask` with a `'reframe'` value, which would put the new task into a module three registered
+tools import — precisely the wiring decision 7 defers. The seam pays a small duplication to stay a
+seam.
+
+**The acceptance criterion is asserted structurally, not by spying.** A spy only proves the paths a
+test happens to exercise; unreachability is a property of the import graph. Three assertions:
+`index.ts` does not mention it, nothing under `apps/mcp-server/src/` mentions it, and nothing else in
+`packages/grants/src/` imports it. Each walks the real files at test time, so wiring it without
+deleting the test fails the suite.
+
+**To wire it later:** revisit `admin/TAD.md` decision 7 first — the decision is what holds it, not the
+code — then add the barrel export, register a tool, and delete the unreachability test, in that order.
+
+**Tool surface unchanged at 23.** No migration, no `tool_permissions` row: an unregistered seam needs
+neither. **Suite: 207 → 222 tests across 14 files**, all passing, zero skipped. `packages/grants`
+alone is **177 in 9 files**, still with no database and no network.
+
+---
+
 ## 2026-08-04 (later)
 
 ### Fixed — a confident WRONG match on the JEVS form, and bank v0.4.0 → v0.4.1 (board B6 / #62)
