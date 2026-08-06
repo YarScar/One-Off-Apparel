@@ -24,6 +24,8 @@ export const envSchema = z.object({
 
   GOOGLE_SERVICE_ACCOUNT_JSON: optional,
   GOOGLE_DRIVE_FOLDER_ID: optional,
+  /** Root of the shared grant corpus. Defaults to the known "Grants" folder ID. */
+  GOOGLE_DRIVE_GRANTS_FOLDER_ID: optional,
   GOOGLE_SHEETS_STUDENT_INFO_ID: optional,
   GOOGLE_SHEETS_STUDENT_INFO_V2: optional,
   GOOGLE_SHEETS_DASHBOARD_ID: optional,

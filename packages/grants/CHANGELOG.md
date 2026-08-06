@@ -25,6 +25,182 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-06
+
+### Fixed — Drive discovery rebuilt as a connector: efficient enumeration, and identity that refuses to guess
+
+Landed on branch `fix/google-drive-discovery`. The catalog design bet is unchanged — query
+`grant_documents` to find a document, then fetch it by ID — but the thing that fills the catalog is no
+longer a one-off script, and no longer limited to what the local mirror happened to hold.
+
+**Connector `google-drive` is implemented.** It was a 16-line `noop`. It now walks the Drive `Grants`
+tree and upserts `grant_documents`. It writes **no document text and no embeddings**, which settles
+question 1 of Fix 4 in `docs/data-sources/google-drive-discovery.md` §6: fetch-by-ID already covers
+retrieval, so embedding 3.5+ GiB would be cost without capability. `OPENAI_API_KEY` is not needed.
+
+- `connectors/google-drive/src/drive-client.ts` — the **only** code permitted to call Drive. Sets
+  `supportsAllDrives` + `includeItemsFromAllDrives` on every call (omitting either is what makes a
+  Shared Drive return an empty list instead of an error), retries 429/5xx with backoff, and resolves
+  shortcuts to `shortcutDetails.targetId` — a shortcut's own ID reads as empty content.
+- `connectors/google-drive/src/reconcile.ts` — identity, strongest evidence first: `drive_file_id`,
+  then exact path, then *unique* normalized path, then a new row. Two candidates is never resolved by
+  picking one; the row is flagged `needs_review` instead. A wrong ID silently serves a grant writer
+  the wrong funder's document.
+- `connectors/google-drive/src/sync.ts` — walk, classify, upsert. **Throws** when the root reads but
+  lists nothing, because that is the original bug's exact signature and `ok, 0 records` would have
+  been the most expensive possible outcome: green runs in HQ `/sync` while the catalog rotted.
+- `packages/grants/scripts/drive-walk-grants.ts` — reduced to a CLI over the connector (`--dry-run`,
+  plus the `data/drive-manifest.jsonl` audit trail). Its own copy of the walk is gone, so the
+  scheduled sync and the script cannot behave differently.
+
+**Enumeration costs `ceil(n/1000)` API calls instead of ~600.** Where the root is in a Shared Drive
+the connector sweeps it once with `corpora: 'drive'` and reassembles the tree locally from each file's
+`parents`; the per-folder walk survives as the My Drive fallback. Fewer calls is not only faster — each
+call was a chance to be rate-limited into a truncated walk that looks like a complete one.
+
+**Drive-only files now get catalog rows.** The old script could only stamp IDs onto rows the local
+mirror had already created, which made the ~1243-file gap between the 1.6 GB mirror and the 3.5+ GiB
+corpus permanently invisible. Drive is the discovery source now; the mirror is secondary.
+`data/drive-unmatched.txt` is no longer written — that gap is the run's `created` count.
+
+### Fixed — `parseYear` returned null for underscore-dated filenames it documented as handled
+
+`8_7_2026 GSK Grant` parsed to no year: underscores are word characters, so `\b(20\d{2})\b` never
+matched. Every underscore-dated file in the tree was losing its application year, and with it its
+`archive_only` decision — an undated file is treated as current, so pre-2025 applications were
+reaching drafting context. `parseYear` now scans an underscore-to-space copy, the same trick
+`classifyByFilename` already used. **If you have a loaded catalog, re-run the loader** — existing rows
+keep the wrong `year` until something rewrites them.
+
+### Changed — classification extracted from a script into `packages/grants/src/catalog.ts`
+
+Two callers now classify the same corpus: `scripts/build-grants-index.ts` over the local mirror, and
+the connector over Drive. Two copies would mean a file classified one way when found locally and
+another way when found remotely. The module is pure — no filesystem, no network, no database — and is
+re-exported from `@lp-ai/lib-grants`. `load-grant-catalog.ts` was switched onto its `needsReview`,
+`mimeForExt` and `driveUrlFor`, deleting a third copy.
+
+It was also **entirely untested** while it lived in a script; it now has 24 cases covering the
+judgements that would otherwise be re-argued — fiscal-year shifting, span years, the `7.28`
+month-day trap, archive-only policy, and externally-authored material.
+
+**Suite: 255 tests across 17 files, all passing** (was 207 across 13). New: `catalog.test.ts` (24),
+`connectors/google-drive/src/{drive-client,reconcile,sync}.test.ts` (24).
+
+### Added — `GOOGLE_DRIVE_GRANTS_FOLDER_ID`
+
+Optional, in `packages/config/src/schema.ts`. Overrides the grant root; defaults to the known
+`Grants` folder ID. Distinct from `GOOGLE_DRIVE_FOLDER_ID`, which the never-built student-document
+ingestion claimed.
+
+### Unverified — none of this has run against real Drive
+
+`GOOGLE_SERVICE_ACCOUNT_JSON` is empty in this environment and `USE_AWS_SECRETS` is off, so the API
+path is exercised only by unit tests with a fake client. The root cause of the original failure
+(`H1` vs `H2` in the discovery doc) is therefore **still unconfirmed** — the code is written to be
+correct under either, and reports the root's `driveId` in `sync_runs.notes` so the first successful
+run answers it as a side effect. What would settle it: `pnpm sync:drive` with an identity that is a
+member of the shared drive, or the folder shared with the service account's `client_email`.
+
+
+### Added — `grant_documents` catalog and `find_grant_documents`, because Drive cannot find its own files
+
+The Drive "Grants" tree could not be discovered through any existing tool. Two separate causes, and
+neither was a query mistake:
+
+**The Google Drive connector cannot enumerate the tree.** Verified by direct calls:
+`get_file_metadata` on `Prospects and Proposals` succeeds, but listing its children
+(`parentId = '<id>'`) returns `{}` — same for `Current and Past`. `title contains 'Truist'` finds only
+an unrelated shortcut, never the real `8_10_2026 Truist Application.docx`. This is **not** a recursion
+limit: `Meeting Transcripts` and `Project Management (do not ingest)` are nested just as deep under
+`Launchpad Internal AI OS` and list fine. The pattern — metadata by ID works, listing returns empty,
+shortcuts unreadable — is the signature of a **Shared Drive queried without `includeItemsFromAllDrives`**.
+*Unverified:* confirming that needs a Drive API call with the shared-drive flags set, which requires
+credentials this workstream did not have.
+
+**`search_documents` returned nothing because `document_chunks` is empty.** `select source, count(*)
+from document_chunks group by source` returns **0 rows** — every source, not just Drive, including the
+Notion sync the README describes as live. `connectors/google-drive/src/index.ts` is still a stub
+returning `status: 'noop'`. Nothing had ever been ingested locally.
+
+Crucially, **fetching a Grants-tree file by ID works** — confirmed by reading
+`1mnx4NjQlZFHDljMgcpeSa-368C4wcYHkKsXkRQ7vRCo` (Cambiar Thrive working response) and getting full
+content. So only the *discovery* half is broken. That is why this landed as a **catalog** rather than an
+ingestion pipeline: 3.5+ GiB of grant material stays reachable with nothing embedded.
+
+**Schema.** New `grant_documents` table — migration
+`20260806000000_add_grant_documents_catalog`. One row per file, **no document text**: Drive file ID,
+path, funder, year, `doc_kind`, and the flags below. Anyone with an existing clone needs
+`pnpm db:migrate`.
+
+**Tool surface: 23 → 24.** `find_grant_documents` (`apps/mcp-server/src/tools/find-grant-documents.ts`)
+filters by funder, year range, kind, and collection, returning Drive file IDs plus facet counts. Reachable
+via `20260806000100_add_find_grant_documents_permission`
+(`program_staff`, `development`, `finance`, `leadership`, `admin` — wider than the deterministic grant
+tools, since it returns no document text). Category `grants` already existed in
+`PermissionsMatrix.tsx`, so no HQ change was needed.
+
+**Two safety flags, both enforced as query defaults.** `archive_only` implements the 2026-07-21 client
+rule *"Do NOT load old grants as AI writing context"* via `ARCHIVE_BEFORE_YEAR = 2025` — 572 of 1252
+files. `external_reference` marks the **32 files Launchpad did not author** (funder NOFOs, scoring
+rubrics, and two other grantees' winning narratives under `Reference/`); quoting those into a submission
+is plagiarism, not staleness, which is why it is a separate column. Both are excluded unless explicitly
+requested, and `excluded` rows (22 files under `Project Management (do not ingest)` and `Ignore`) are
+never returned on any flag combination.
+
+**Scripts** (`packages/grants/scripts/`, outside the package build — `packages/grants` keeps its
+zero-dependency-beyond-zod contract, hence the relative import of `../../db/src/client.js`):
+`build-grants-index.ts` (read-only walk of `data/` → CSV/JSONL/summary), `load-grant-catalog.ts`
+(index → catalog), `drive-walk-grants.ts` (backfills Drive IDs; sets the shared-drive flags).
+`googleapis` was added to **root** devDependencies for the walk.
+
+**Known incomplete.** Only **9 of 1252** rows have a Drive ID — harvested from `.gdoc`/`.gsheet` stubs,
+the only place the mirror records one. The rest need `drive-walk-grants.ts`, which needs an identity with
+shared-drive membership; a human's browser access is not sufficient. **393 rows are flagged
+`needs_review`** (no year, or `doc_kind = other`) — `funder`, `year`, and `doc_kind` are inferred from
+folder and file names only, never from contents. The local mirror is also **1.6 GB of a 3.5+ GiB
+corpus**, so the catalog undercounts; the walk writes `data/drive-unmatched.txt` listing Drive files with
+no catalog row.
+
+### Added — a diagnosis document for the Drive discovery failure, and a staleness banner on the old spec
+
+`docs/data-sources/google-drive-discovery.md` — the diagnosis, the rule-outs, the ranked hypotheses with
+a decisive test for each, and the ordered remediation. Written to hand the work to a branch rather than
+leave it in a conversation.
+
+Two things in it are worth knowing even if you never open it:
+
+- **The `parentId`-is-not-recursive explanation is wrong, and this workstream published it.** Recursion
+  by repeated `parentId` calls works fine elsewhere in the same Drive — `Meeting Transcripts` and
+  `Project Management (do not ingest)` are nested just as deep under `Launchpad Internal AI OS` and list
+  their children. The Grants tree specifically is unenumerable below its first level. The document
+  records the rule-outs so the branch does not re-test them.
+- **Root cause remains unconfirmed.** The best-fit hypothesis is a Shared Drive queried without
+  `includeItemsFromAllDrives`, which matches the whole signature (get-by-ID works, listing returns empty,
+  shortcuts unreadable). Settling it is one `files.get` with `fields: 'driveId'`, which needs credentials
+  this workstream did not have. Stated as unverified rather than asserted.
+
+`docs/data-sources/google-drive-connector.md` gained a warning banner. It scopes the connector to two
+student documents, never mentions the grant corpus, and its "Sync Logic" step 2 — list a folder by name
+pattern — is the exact operation proven not to work for that tree. Reconciling it is tracked as §7 of the
+new document rather than left silent.
+
+Also added `packages/grants/scripts/export-grant-catalog.ts`. Neither artifact on disk paired a document
+with its Drive ID: `build-grants-index.ts` writes the index from the local mirror, which records no IDs,
+and the IDs are attached later by the loader and the walk — landing only in Postgres. This exports the
+pairing to `data/grant-catalog.{json,csv}`. Currently 9 of 1252 rows carry an ID, all Cambiar Education
+`.gdoc`/`.gsheet` stubs.
+
+Four classification bugs were found by validating against all 1252 real paths rather than a sample, and
+each would have shipped silently: multi-year folders like `2026-2028 Grant` filed a 2026 application
+under **2028** (spans now take the earlier year); `FY27` meant applied-in-**2026**, not 2027, since
+Building 21's fiscal year starts in July (confirmed by that folder's own invoice reading `3.1.26-6.30.26`);
+74 files dated `M.D.YY` parsed to no year at all; and `\bReport\b` never matched `Report_` because
+underscore is a word character — filenames are now normalized before kind matching, which cut
+`doc_kind = other` from 385 to 285.
+
+---
+
 ## 2026-08-04 (later)
 
 ### Fixed — a confident WRONG match on the JEVS form, and bank v0.4.0 → v0.4.1 (board B6 / #62)

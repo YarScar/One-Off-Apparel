@@ -2,7 +2,7 @@
 
 ## Tool Availability
 
-The server currently exposes **23 tools** — 16 data tools, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 4 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+The server currently exposes **24 tools** — 16 data tools, `find_grant_documents`, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 4 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
 
 **Active tools (16):**
 - `get_student_info` — Sheets student roster + Drive student info doc
@@ -25,6 +25,7 @@ The server currently exposes **23 tools** — 16 data tools, `grant_match_questi
 **Grant writing tools (3):** deterministic, and they read seed files in `packages/grants/seed/` rather than the database. No model, no network, no database in any of them.
 - `grant_match_question` — funder question → canonical entry in the question bank
 - `grant_build_draft` — captured funder form → reviewable draft package + figure verification work order
+- `find_grant_documents` — funder / year / kind filters over the Drive Grants catalog → matching files and their Drive file IDs
 - `grant_resize_answer` — one stored answer + one stated limit → the measurement, the rewrite rules, and a check on the rewrite the caller sends back
 
 **Still pending:**
@@ -34,7 +35,7 @@ Composite tools (`get_entity_brief`, `get_finance_brief`) MUST gracefully omit s
 
 ## Overview
 
-The MCP server exposes 23 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
+The MCP server exposes 24 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
 
 Every tool call is logged to the `usage_logs` Postgres table (tool name, timestamp, duration, caller identity, token usage).
 
@@ -694,6 +695,40 @@ Resolve a captured funder form into a reviewable draft package: match each quest
 - **Nothing it returns is submittable.** A person always reviews and always submits.
 
 ---
+
+### `find_grant_documents`
+
+Find grant documents in the Google Drive "Grants" tree by funder, year, and document kind. Returns a **catalog listing — no document text**. Reads the `grant_documents` table; touches neither Drive nor pgvector.
+
+**Why it exists.** Drive discovery does not work for this tree. Listing a subfolder's children returns an empty set and `title`/`fullText` search never matches inside it, while fetching a *known* file ID returns full content. Only the discovery half is broken, so this tool replaces it: filter here to get Drive file IDs, then fetch those IDs with a Google Drive read tool. That keeps 3.5+ GiB of grant material reachable with nothing embedded.
+
+**Inputs:** all optional — `funder` (case-insensitive substring, so `truist` matches `Truist Foundation`), `year`, `year_min`, `year_max`, `doc_kind`, `collection`, `title_contains`, `include_archive`, `include_external`, `only_fetchable`, `limit` (default 25, max 100).
+
+**Returns:** `total_matching`, `returned`, `facets` (counts by funder and by kind, for narrowing a broad hit list without a second call), `results[]`, and `usage_note`. Each result carries `drive_file_id`, `drive_url`, `fetchable`, `path`, `filename`, `funder`, `year`, `doc_kind`, `collection`, `mime_type`, `archive_only`, `external_reference`, `needs_review`, `size_bytes`, `modified_at`.
+
+| `doc_kind` | Meaning |
+|---|---|
+| `application_response` | Narrative answers submitted to a funder |
+| `budget` | Budgets, financials, invoices, 990s |
+| `report` | Grant reports and performance measures |
+| `letter_of_support` | Letters of support |
+| `loi` | Letters of inquiry / intent |
+| `agreement` | Executed grant agreements |
+| `program_description` | Launchpad describing its own programs — prime drafting context |
+| `template` | Blank templates |
+| `attachment` | Consent forms, signature requests, supporting paperwork |
+| `transcript` | Interview and meeting transcripts |
+| `meeting_notes` | Meeting notes |
+| `external_reference` | **Not written by Launchpad** — funder rules, other grantees' applications |
+| `other` | Not confidently classified; see `needs_review` |
+
+**Three contracts worth knowing before you call it:**
+
+- **Two exclusions are on by default, and they are not the same risk.** `archive_only` hides applications predating the current program (`ARCHIVE_BEFORE_YEAR = 2025`), which describe a program Launchpad no longer runs — the failure is a confidently outdated draft. `external_reference` hides documents Launchpad did not author — the failure there is **plagiarism**, putting another organization's narrative in a Launchpad submission. Pass `include_archive` / `include_external` for research, never for drafting.
+- **`excluded` rows are never returned, on any flag combination.** Those files sit under `Project Management (do not ingest)` or `Ignore` and were marked by an explicit human instruction rather than by inference, so no argument overrides them.
+- **`funder`, `year`, and `doc_kind` are inferred from folder and file names only** — nothing is read from file contents. `needs_review` marks rows where inference was not decisive (no year, or `doc_kind = other`). Treat a filter built on them as a good shortlist, not a guarantee of completeness.
+
+**`fetchable=false` means the row has no Drive file ID recorded yet**, so it can be seen but not read. IDs come from the `google-drive` connector (`pnpm sync:drive`, or `packages/grants/scripts/drive-walk-grants.ts --dry-run` to look first), which needs an identity with shared-drive membership — see [docs/data-sources/google-drive-connector.md](data-sources/google-drive-connector.md).
 
 ### `grant_resize_answer`
 

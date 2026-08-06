@@ -20,6 +20,9 @@ importers:
       eslint:
         specifier: ^9.0.0
         version: 9.39.4(jiti@2.7.0)
+      googleapis:
+        specifier: ^140.0.1
+        version: 140.0.1
       prettier:
         specifier: ^3.3.0
         version: 3.8.3
@@ -199,6 +202,12 @@ importers:
       '@lp-ai/lib-embedding':
         specifier: workspace:*
         version: link:../../packages/embedding
+      '@lp-ai/lib-grants':
+        specifier: workspace:*
+        version: link:../../packages/grants
+      googleapis:
+        specifier: ^140.0.1
+        version: 140.0.1
       zod:
         specifier: ^3.23.0
         version: 3.25.76

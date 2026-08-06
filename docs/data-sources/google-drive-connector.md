@@ -1,90 +1,157 @@
 # Google Drive Connector
 
+Discovers the shared Google Drive grant corpus and records it in the `grant_documents`
+catalog, so `find_grant_documents` can find files that Drive's own search cannot see.
+
+Read **[google-drive-discovery.md](google-drive-discovery.md)** for the failure this connector
+exists to answer, and for what is still unconfirmed about its root cause. This file describes what
+the code does; that one describes why it does it that way.
+
 ## Purpose
 
-Ingests two Google Drive documents that contain student information for use by the AI:
-1. **"Student Information for Launchpad LLMs"** — structured student profiles + narrative notes
-2. **"Outcomes"** — structured outcome summaries
+**Discovery, not ingestion.** The connector walks the Drive tree and writes one catalog row per
+file — path, funder, application year, document kind, honesty flags, and the **Drive file ID that
+content is fetched with**. It writes no document text and no embeddings.
 
-Structured fields go to Postgres. Long narrative sections go to pgvector (`document_chunks` table).
+That split is deliberate. Inside the shared `Grants` tree, reading a file by ID works and always
+did; *finding* a file does not. Embedding 3.5+ GiB to answer questions a catalog query answers
+would be cost with no capability behind it. `document_chunks` stays out of this path until there
+is a stated need for semantic search over the corpus — see
+[google-drive-discovery.md §6](google-drive-discovery.md) Fix 4.
 
 ## Documents in Scope
 
-Documents are identified by name pattern within a designated Drive folder (`GOOGLE_DRIVE_FOLDER_ID`). Do not hardcode document IDs — scan the folder by name to be resilient to file recreation.
+Everything under the grant root, currently `1ZqQaFrfVZJ6kPvXNd3pPNVyaL8PpaX3S` ("Grants"),
+overridable with `GOOGLE_DRIVE_GRANTS_FOLDER_ID`. Files are **not** matched by name pattern:
+name-pattern search is precisely the operation that does not work for this tree.
 
-| Document pattern | Structured destination | Unstructured destination |
-|---|---|---|
-| `Student Information for Launchpad LLMs` | `students`, `student_info` | `document_chunks` (pgvector) |
-| `Outcomes` | `beacon_outcomes` (if structured) | `document_chunks` (pgvector) |
+Every file becomes a `grant_documents` row. Classification is by path, in
+[`packages/grants/src/catalog.ts`](../../packages/grants/src/catalog.ts) — the same module the
+local-mirror index uses, so a file classifies identically however it was discovered.
 
-## Structured vs. Unstructured Split
-
-### Goes to Postgres (structured)
-- Tabular rows where each row = one student: name, ID, grade, cohort, IEP flag, ELL flag, interests list, goals list
-- Any field that is discrete and filterable belongs in Postgres
-
-### Goes to pgvector (unstructured)
-- Paragraph-length narrative notes about individual students
-- Free-form outcome summaries that don't fit a table schema
-- Any content that requires semantic search to retrieve
-
-When in doubt: if you'd filter by it in a WHERE clause, it's structured. If you'd search for it with a sentence, it's unstructured.
+| Column | Source |
+|---|---|
+| `drive_file_id`, `drive_url`, `mime_type`, `size_bytes`, `modified_at` | Drive API |
+| `collection`, `funder`, `year`, `doc_kind` | inferred from the path |
+| `excluded`, `external_reference`, `archive_only` | inferred from the path (policy flags) |
+| `content_class` | Drive MIME type, falling back to the file extension |
+| `needs_review` | set when inference was not decisive, or the row was ambiguous |
 
 ## Sync Schedule
 
-AWS EventBridge: **hourly** (via `apps/sync` Fargate task)
+Not scheduled. Run it when the corpus changes:
 
-For manual triggering: `pnpm --filter google-drive sync`
+```bash
+pnpm sync:drive
+```
+
+The walk is cheap enough to schedule (see *Efficiency* below) but a catalog of a
+human-curated Drive does not change hourly, and nothing yet depends on it being fresh.
 
 ## Auth
 
 - Same Google service account as the Sheets connector (`GOOGLE_SERVICE_ACCOUNT_JSON`)
-- Service account must have Viewer access to the Drive folder
-- Uses Google Drive API v3 and Google Docs API
+- Google Drive API v3, read-only scope (`drive.readonly`)
+- Missing key → the sync returns `status: 'noop'`, as every connector does
 
-## Sync Logic (Step by Step)
+> ⚠️ **The access requirement people get wrong.** A service account is a *separate identity*. It
+> does **not** inherit the "Shared with me" access a human has, so being able to open the folder in
+> your own browser proves nothing about whether the walk will work. The folder must be shared with
+> the service account's `client_email`, **or** that account added as a member of the Shared Drive.
 
-1. Write `sync_runs` row with `status = 'running'`
-2. List files in `GOOGLE_DRIVE_FOLDER_ID` matching document name patterns
-3. For each matching document:
-   a. Export document as plain text (Google Docs API `export` endpoint)
-   b. Parse the text to extract structured table rows (simple line-by-line parsing for V0)
-   c. Upsert structured fields into Postgres (`students`, `student_info`, `beacon_outcomes`)
-   d. Pass remaining narrative text through the [embedding pipeline](../embedding-pipeline.md)
-   e. Embed chunks via OpenAI `text-embedding-3-large` and upsert into `document_chunks` table
-4. Update `sync_runs`
+## Sync Logic
 
-## Entity Seeding (Special Case)
+1. `files.get` on the root, with `supportsAllDrives` — reports the folder's name and its
+   **`driveId`**, which is the fact that tells you whether this is a Shared Drive at all.
+2. Enumerate the tree (see *Efficiency*).
+3. Refuse an empty listing. Reading the root but listing nothing inside it is the discovery bug's
+   exact signature, so the connector **throws** rather than reporting a successful zero-record run.
+4. Reconcile each Drive file against the catalog — see *Identity*.
+5. Upsert. Matched rows are updated; unmatched files become new rows.
 
-The "Student Information for Launchpad LLMs" document is **the primary seed source** for entity resolution. The connector runs entity seeding as its first step:
+### Efficiency
 
-1. Parse the student table in the document
-2. For each student row, upsert into `students` (using email or student ID as conflict key)
-3. Create `entity_aliases` rows for: full name (source: 'drive'), student number (source: 'sheets'), nickname if present (source: 'drive')
+Drive has no recursive listing, so the obvious walk is one `files.list` per folder: ~600 calls for
+this corpus, ~600 round trips, and ~600 chances to be rate-limited mid-walk. When the root is in a
+Shared Drive, the connector instead sweeps the whole drive with `corpora: 'drive'` in
+`ceil(n / 1000)` pages and reassembles the tree locally from each file's `parents` — same answer,
+two orders of magnitude fewer calls. The per-folder walk remains as the fallback for a My Drive
+root, where a drive-scoped sweep is not available.
 
-This must complete before other connectors run so student IDs can be resolved.
+**Every Drive call sets `supportsAllDrives` and `includeItemsFromAllDrives`.** Without both, a
+Shared Drive returns nothing at all — no error, just an empty list. That is why there is exactly one
+module ([`drive-client.ts`](../../connectors/google-drive/src/drive-client.ts)) permitted to talk to
+Drive: a single omission reintroduces the original bug silently.
+
+Rate limits and 5xx responses are retried with exponential backoff. An unhandled 429 would truncate
+the walk into a wrong answer that looks like a right one.
+
+### Identity
+
+The catalog was first built from a partial local mirror (1.6 GB of a 3.5+ GiB corpus) whose
+filenames Drive for Desktop had already rewritten, so the same document can exist under two
+spellings. [`reconcile.ts`](../../connectors/google-drive/src/reconcile.ts) resolves each Drive file
+to a row by strongest evidence first:
+
+1. **`drive_file_id`** — an ID is the file, whatever either path says.
+2. **Exact path.**
+3. **Normalized path**, and only when unique. Normalization undoes Drive for Desktop's rewriting
+   (`/` and `:` → `_`, and the `.gdoc`/`.gsheet` suffix on Google-native files).
+4. **No match** → a new row. This is the common case, not the edge one: most of Drive was never
+   mirrored locally.
+
+Two candidates is never resolved by picking one. A wrong ID silently serves the wrong document to a
+grant writer, which is worse than a row flagged `needs_review`.
+
+**Shortcuts are resolved to `shortcutDetails.targetId`.** A shortcut's own ID reads as empty
+content, so storing it would catalog a file that cannot be fetched.
+
+A matched row keeps its stored `path` rather than adopting Drive's spelling, so that
+`load-grant-catalog.ts` — which upserts on the mirror's spelling — stays idempotent alongside this.
 
 ## Error Handling
 
-- Document not found → log warning, skip document, continue with others
-- Parse failures (unexpected document format) → log error with document name, skip to pgvector embedding of full text as fallback
-- Auth failures → fail entire sync, write error to `sync_runs`
+- Missing credentials → `status: 'noop'`, no rows touched
+- Root not readable, or not a folder → the sync fails, error lands in `sync_runs`
+- Root readable but empty listing → the sync fails **loudly**, naming the access requirement above
+- Rate limit / 5xx → retried with backoff, then failed
+- Broken shortcut (no target) → skipped
+- Ambiguous identity → new row, flagged `needs_review`; nothing is overwritten
+
+**Never deletes.** Per the sync safety rule in the root [CLAUDE.md](../../CLAUDE.md), absence from
+a run is not evidence a document is gone — the thing that vanished may be the credential's access.
+Rows the walk did not reach are counted in `sync_runs.notes` and left alone. The 5% integrity guard
+is armed via `tables: ['grant_documents']`, so a run that shrinks the catalog says so.
 
 ## Environment Variables Required
 
 ```
-GOOGLE_SERVICE_ACCOUNT_JSON=   # base64-encoded service account JSON
-GOOGLE_DRIVE_FOLDER_ID=        # Drive folder ID containing the source documents
+GOOGLE_SERVICE_ACCOUNT_JSON=     # base64-encoded service account JSON
+GOOGLE_DRIVE_GRANTS_FOLDER_ID=   # optional; defaults to the known "Grants" folder
 DATABASE_URL=
-OPENAI_API_KEY=                # for text-embedding-3-large embeddings
 ```
+
+`OPENAI_API_KEY` is **not** required — this connector computes no embeddings.
 
 ## Connector Location
 
 `connectors/google-drive/`
 
-Key files:
-- `index.ts` — entrypoint
-- `drive-client.ts` — Drive API wrapper
-- `parse.ts` — document text → structured fields
-- `sync.ts` — orchestration
+| File | Role |
+|---|---|
+| `index.ts` | `sync()` — the `runSync` wrapper, the noop-when-unconfigured check |
+| `drive-client.ts` | The only code that talks to Drive. Flags, retries, paging, shortcut resolution, tree reassembly |
+| `reconcile.ts` | Drive file → catalog row identity. Pure |
+| `sync.ts` | Orchestration: walk, classify, upsert |
+
+Classification lives in [`packages/grants/src/catalog.ts`](../../packages/grants/src/catalog.ts),
+shared with `packages/grants/scripts/build-grants-index.ts`.
+
+## Related
+
+- [`find_grant_documents`](../mcp-server-spec.md) — the tool that reads this catalog
+- [`packages/grants/scripts/drive-walk-grants.ts`](../../packages/grants/scripts/drive-walk-grants.ts)
+  — CLI over the same sync, with `--dry-run` and a `data/drive-manifest.jsonl` audit trail
+- The student-document ingestion this file used to describe was never built. If it is wanted, it is
+  a second, separate sync — the `Grants` corpus and the student seed documents share nothing but a
+  credential.

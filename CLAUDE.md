@@ -32,7 +32,7 @@ An internal AI intelligence layer for Launchpad that lets team members query Cla
 | Connector | Source | Destination | Status |
 |---|---|---|---|
 | `google-sheets` | Launchpad Dashboard + Outcomes sheets (12 spreadsheets) | Postgres | ✅ Live — all 12 sheet syncs ported; 27K+ records ingested |
-| `google-drive` | Drive docs folder | Postgres + pgvector | Skeleton — creds available, implementation pending |
+| `google-drive` | Drive `Grants` tree | `grant_documents` catalog (no text, no embeddings) | ✅ Implemented — discovery + catalog sync; **never run against real Drive** (no local credentials) |
 | `aplos` | Aplos nonprofit accounting | `finance_snapshots` (accounts, funds, transactions) | ✅ Live — RSA-decryption auth; 16K+ records; synced daily in production via EventBridge |
 | `notion` | Notion meeting transcripts database | `document_chunks` (pgvector) | ✅ Live — meeting transcript sync with embeddings |
 | `slack` | Designated Slack channels | pgvector | Skeleton — awaiting `SLACK_BOT_TOKEN` |
@@ -74,7 +74,7 @@ pnpm --filter @lp-ai/mcp-server start:http # HTTP at :8080 (for ECS / local test
 pnpm sync:sheets                # google-sheets (live)
 pnpm sync:aplos                 # aplos (live)
 pnpm sync:notion                # notion meeting transcripts (live)
-pnpm sync:drive                 # google-drive (skeleton)
+pnpm sync:drive                 # google-drive (Grants catalog discovery)
 pnpm sync:slack                 # slack (skeleton — awaiting SLACK_BOT_TOKEN)
 pnpm sync:all                   # all connectors in parallel
 
@@ -120,7 +120,7 @@ packages/grants      → zod; deterministic grant-writing logic + seed (question
 - `prisma.config.ts` (repo root) — Prisma config pointing at the schema and migrations
 - `packages/db/src/entity-resolution.ts` — fuzzy name matching across all data sources; called by `get_student_info` and `search_by_person`
 - `packages/db/src/sync-runs.ts` — `runSync()` wrapper used by every connector
-- `apps/mcp-server/src/make-server.ts` — registers all tools (22: 16 data + `grant_match_question` + `grant_build_draft` + 4 skill); edit here to add/remove tools
+- `apps/mcp-server/src/make-server.ts` — registers all tools (24: 16 data + `find_grant_documents` + `grant_match_question` + `grant_build_draft` + `grant_resize_answer` + 4 skill); edit here to add/remove tools
 - `apps/mcp-server/src/tool-helpers.ts` — `runTool()` wrapper (error capture + usage logging), `parseStr()`, `parseNum()`
 - `apps/mcp-server/src/errors.ts` — `toolError()` and `notImplemented()` for structured error envelopes
 - `apps/mcp-server/src/usage-log.ts` — writes every tool call to `usage_logs` table; surfaced in HQ `/tools`

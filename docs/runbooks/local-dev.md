@@ -113,7 +113,7 @@ Each connector exposes a CLI:
 pnpm sync:sheets       # google-sheets (live — 12 syncs)
 pnpm sync:aplos        # aplos (live)
 pnpm sync:notion       # notion meeting transcripts (live)
-pnpm sync:drive        # google-drive (skeleton)
+pnpm sync:drive        # google-drive (Grants catalog discovery)
 pnpm sync:slack        # slack (skeleton)
 ```
 

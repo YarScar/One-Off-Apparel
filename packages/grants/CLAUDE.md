@@ -78,31 +78,46 @@ Do not restate these; link to them. Duplication is how the set drifts.
 
 ---
 
-## 3 Where we are — verified 2026-08-04
+## 3 Where we are — verified 2026-08-04, Drive claims re-verified 2026-08-06
 
 Re-verify before trusting this section; it is a snapshot, not a contract. Every claim here was
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **207 tests across 13
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **255 tests across 17
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
-over stdio. `packages/grants` alone is **162 in 8 files**, with no database and no network. (183 across
-12 before G4 added `resize.test.ts` and three integration cases; 131 across 10 before G3 added
-`pipeline.test.ts` and `handback.test.ts`; 82 across 8 before 2026-08-03, when the code review added
-suites for `limits.ts` and `py.ts`, which had none.)
+over stdio. `packages/grants` alone is **186 in 9 files**, with no database and no network. (207 across
+13 before 2026-08-06, when the Drive rebuild added `catalog.test.ts` and three connector suites;
+183 across 12 before G4 added `resize.test.ts` and three integration cases; 131 across 10 before G3
+added `pipeline.test.ts` and `handback.test.ts`; 82 across 8 before 2026-08-03, when the code review
+added suites for `limits.ts` and `py.ts`, which had none.)
 
 Use `pnpm db:migrate`, never `db:push`, for local setup. `db push` writes no migration SQL, so the
 `tool_permissions` rows never land and every tool call fails closed. This is not a preference — it is
 the difference between a working environment and a silently broken one.
 
-**MCP server: 23 tools registered** — 16 data, `grant_match_question`, `grant_build_draft`,
+**MCP server: 24 tools registered** — 16 data, `find_grant_documents`, `grant_match_question`, `grant_build_draft`,
 `grant_resize_answer`, 4 `skill_*`. Every one has a `tool_permissions` row, so nothing currently fails
-closed. Of the 29 rows, 6 have no registered tool, all `future` placeholders — the reserved
+closed. Of the 30 rows, 6 have no registered tool, all `future` placeholders — the reserved
 `grant_resize_answer` row was claimed at G4, so no grant tool is pending a registration any more.
 
 **Connectors** (root `CLAUDE.md` holds the detail): `google-sheets`, `aplos`, and `notion` are live.
-`google-drive` and `slack` are skeletons that return `status: "noop"` — Drive has credentials and no
-implementation; Slack awaits `SLACK_BOT_TOKEN`.
+`google-drive` is **implemented but unexercised** as of 2026-08-06 — it discovers the Drive `Grants`
+tree into the `grant_documents` catalog and writes no text or embeddings, but no run has reached real
+Drive from here, because `GOOGLE_SERVICE_ACCOUNT_JSON` is empty locally. `slack` is still a skeleton
+returning `status: "noop"`, awaiting `SLACK_BOT_TOKEN`.
+
+**Drive discovery is broken through the Claude Drive connector, and our own path around it is
+written but unproven.** Verified 2026-08-06: `get_file_metadata` on `Prospects and Proposals`
+succeeds, listing its children returns `{}`, and `title`/`fullText` search never matches inside the
+tree — while reading a known file ID returns full content. Not a recursion limit; sibling folders
+nested just as deep under `Launchpad Internal AI OS` list fine. Suspected cause is a Shared Drive
+queried without `includeItemsFromAllDrives`; **still unverified**. The same day, `connectors/google-drive`
+was rebuilt to set those flags unconditionally, sweep a shared drive in `ceil(n/1000)` calls instead
+of ~600, resolve shortcuts, and refuse to treat an empty listing as success — but **nothing has run
+against real Drive**, so read it as covered by unit tests, not as working. Consequence unchanged: the
+`grant_documents` catalog is how those files are found, and `document_chunks` was **empty for every
+source** when checked. Detail in `docs/data-sources/google-drive-discovery.md`.
 
 **Grant writing layer:** **G1, G2, G3 and G4 have all passed. G5 not started.** All three grant tools
 are registered. G3 and G4 both passed on **restated conditions**, and the restatement is the same
@@ -157,7 +172,7 @@ unrecorded. Tracked build work lives in `bd` — `bd ready --json` — not here.
 | # | Item | Detail |
 |---|---|---|
 | 1 | **`docs/architecture.md` does not exist** | The root `CLAUDE.md` links it as "Architecture — system overview and data flow" and instructs reading it before modifying any component. The link is dead, so that instruction cannot be followed. Either write it or drop the reference — but a broken pointer in an instruction file is the worst of the three states. **`packages/grants/admin/ARCHITECTURE.md` is not this document** and must not be pointed at from the root as if it were: it is scoped to the grant workstream, and a platform-wide instruction resolving into one package's folder is the confusion it was written to avoid. |
-| 2 | **Eight dead links, five missing targets** | Found by the §6 link check on 2026-08-03. Targets: `docs/architecture.md` (from `CLAUDE.md`); `HOW-SKILLS-WORK.md` (from `README.md` and `docs/setup/README.md`); `docs/reference/connector-capability-matrix.md` and `docs/reference/new-developer-playbook.md` (each from both `README.md` and `docs/setup/README.md`); `docs/embedding-pipeline.md` (from `docs/data-sources/google-drive-connector.md`). `docs/reference/` contains only `v0-migrations/`. Each needs a decision: write it, or remove the pointer. Do not leave them dangling. |
+| 2 | **Seven dead links, four missing targets** | Found by the §6 link check on 2026-08-03; one retired 2026-08-06. Targets: `docs/architecture.md` (from `CLAUDE.md`); `HOW-SKILLS-WORK.md` (from `README.md` and `docs/setup/README.md`); `docs/reference/connector-capability-matrix.md` and `docs/reference/new-developer-playbook.md` (each from both `README.md` and `docs/setup/README.md`). `docs/reference/` contains only `v0-migrations/`. Each needs a decision: write it, or remove the pointer. Do not leave them dangling. **Retired:** `docs/embedding-pipeline.md`, whose only referrer (`docs/data-sources/google-drive-connector.md`) was rewritten. |
 | 3 | **`docs/setup/` is unaudited against reality** | 25 phase-numbered files, most last revised 2026-06-24 or earlier, describing AWS build-out. Numbering skips 16, 19, 20. Nothing has confirmed these still match the deployed infrastructure. Treat as historical until audited. |
 | 4 | **Connector status claims spread across files** | Live/skeleton status appears in the root `CLAUDE.md`, `docs/data-sources/*`, and `docs/runbooks/local-dev.md`. A connector changing status requires all three. Candidate for collapsing into one owner. |
 | 5 | **Grant layer under-documented in `docs/`** | Partly retired 2026-08-04: `docs/mcp-server-spec.md` now carries entries for all three grant tools — `grant_match_question`, `grant_build_draft`, and `grant_resize_answer`. Still missing: any `docs/data-sources/` or user-guide coverage. All other grant documentation lives in `packages/grants/`, aimed at the build rather than at consumers — `admin/ARCHITECTURE.md` included, which orients a developer and does not serve a staff user. |
@@ -204,7 +219,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 207 passed, 0 skipped, 13 files.
+# Full suite — expect 255 passed, 0 skipped, 17 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 
