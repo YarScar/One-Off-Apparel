@@ -14,7 +14,7 @@ file — path, funder, application year, document kind, honesty flags, and the *
 content is fetched with**. It writes no document text and no embeddings.
 
 That split is deliberate. Inside the shared `Grants` tree, reading a file by ID works and always
-did; *finding* a file does not. Embedding 3.5+ GiB to answer questions a catalog query answers
+did; *finding* a file does not. Embedding the corpus to answer questions a catalog query answers
 would be cost with no capability behind it. `document_chunks` stays out of this path until there
 is a stated need for semantic search over the corpus — see
 [google-drive-discovery.md §6](google-drive-discovery.md) Fix 4.
@@ -92,6 +92,8 @@ job that depends on one person's account breaks when they leave.
 2. Enumerate the tree (see *Efficiency*).
 3. Refuse an empty listing. Reading the root but listing nothing inside it is the discovery bug's
    exact signature, so the connector **throws** rather than reporting a successful zero-record run.
+   The same reasoning applies one level down: a folder reached through a shortcut is probed before
+   being walked, so an inaccessible subtree is named, not silently read as empty.
 4. Reconcile each Drive file against the catalog — see *Identity*.
 5. Upsert. Matched rows are updated; unmatched files become new rows.
 
@@ -118,23 +120,37 @@ the walk into a wrong answer that looks like a right one.
 
 ### Identity
 
-The catalog was first built from a partial local mirror (1.6 GB of a 3.5+ GiB corpus) whose
-filenames Drive for Desktop had already rewritten, so the same document can exist under two
-spellings. [`reconcile.ts`](../../connectors/google-drive/src/reconcile.ts) resolves each Drive file
-to a row by strongest evidence first:
+The catalog was first built from a local mirror produced by *downloading* the tree, which converted
+Google-native files to Office formats and rewrote characters in names — so the same document exists
+under two spellings, and only one of them has a Drive ID.
+[`reconcile.ts`](../../connectors/google-drive/src/reconcile.ts) resolves each Drive file to a row by
+strongest evidence first:
 
 1. **`drive_file_id`** — an ID is the file, whatever either path says.
 2. **Exact path.**
-3. **Normalized path**, and only when unique. Normalization undoes Drive for Desktop's rewriting
-   (`/` and `:` → `_`, and the `.gdoc`/`.gsheet` suffix on Google-native files).
-4. **No match** → a new row. This is the common case, not the edge one: most of Drive was never
-   mirrored locally.
+3. **Normalized path**, and only when unique. Undoes the `/`→`_` and `:`→`_` substitution and the
+   `.gdoc`/`.gsheet` suffix on Google-native files.
+4. **Loose key**, and only when unique — punctuation collapsed to single spaces and the extension
+   dropped. No single substitution rule covers what downloading did: Drive's `Meetings / Site Visit`
+   came down as `Meetings - Site Visit` in one place and `Meetings _ Site Visit` in another. On the
+   real corpus this tier recovers 538 rows the precise keys miss.
+5. **No match** → a new row.
 
-Two candidates is never resolved by picking one. A wrong ID silently serves the wrong document to a
-grant writer, which is worse than a row flagged `needs_review`.
+Two candidates is never resolved by picking one — 60 files hit that on the real corpus and became new
+rows flagged `needs_review`. A wrong ID silently serves the wrong document to a grant writer, which
+is worse than a row a human has to look at.
 
-**Shortcuts are resolved to `shortcutDetails.targetId`.** A shortcut's own ID reads as empty
-content, so storing it would catalog a file that cannot be fetched.
+**Shortcuts are resolved to `shortcutDetails.targetId`,** because a shortcut's own ID reads as empty
+content. Two further facts, both measured rather than assumed:
+
+- **A shortcut's target is often unreadable.** 10 of 22 in the corpus point at files in someone
+  else's drive. The walk probes each one and records `unreadable`, which the sync stores as
+  `content_class = 'unknown'` so `find_grant_documents` reports `fetchable: false` rather than
+  handing over an ID that 404s.
+- **A shortcut may point at a folder** (7 in the corpus). Those are traversal instructions, not
+  documents, so they are followed rather than catalogued — and probed first, because an inaccessible
+  folder **lists as empty rather than failing**, which is the original bug's own signature. 6 of the 7
+  are inaccessible and are reported by path in the run's output.
 
 A matched row keeps its stored `path` rather than adopting Drive's spelling, so that
 `load-grant-catalog.ts` — which upserts on the mirror's spelling — stays idempotent alongside this.

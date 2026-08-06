@@ -63,6 +63,54 @@ mirror had already created, which made the ~1243-file gap between the 1.6 GB mir
 corpus permanently invisible. Drive is the discovery source now; the mirror is secondary.
 `data/drive-unmatched.txt` is no longer written — that gap is the run's `created` count.
 
+### Verified — the walk works against real Drive, and the root cause is confirmed
+
+Run 2026-08-06 as `ddelu0068@launchpadphilly.org` through the user-identity path, `--dry-run`, against
+the live tree. **No database writes yet.**
+
+- **`Grants` is in a Shared Drive: `driveId=0AAj6r5Nb_TnNUk9PVA`.** H1 in
+  `docs/data-sources/google-drive-discovery.md` §4 is **confirmed**: with `supportsAllDrives` +
+  `includeItemsFromAllDrives` set, the same human identity the Claude Drive connector failed with
+  enumerated **1257 files across 617 folders** — the operation that previously returned `{}`.
+- **Reading by ID works**: 47,886 characters of `3_31_25 Truist Foundation Grant Response` exported as
+  text.
+- **1145 of 1234 `Grants` catalog rows reconciled** (607 exact path, 538 loose), 112 Drive-only files
+  would be added, 60 ambiguous refused and flagged, 107 rows not seen and **left alone**.
+- The drive-scoped sweep was **refused** for this identity — `corpora: 'drive'` needs membership of the
+  drive, and this account holds the folder by direct share — so the per-folder walk carried the run in
+  646 calls. The fallback added for exactly this case is what made the run possible.
+
+**Corrected: the corpus is ~1.5 GiB and 1257 files, not "3.5+ GiB".** That figure appears in earlier
+entries below and in `admin/` docs; it was never measured. Entries are not rewritten, so read any
+"3.5+ GiB" in this file as superseded by this measurement.
+
+### Fixed — three accuracy defects only real Drive could surface
+
+All three produced *plausible* catalog rows, which is the dangerous kind of wrong.
+
+1. **121 Drive filenames contain `/`** (`12/8/25 Vanguard Philanthropic Impact Fund Response`).
+   Concatenated into a path, one filename became three fake folders, so the file classified under a
+   funder subtree that does not exist. Names are now escaped per segment (`escapePathSegment`), the way
+   Drive for Desktop already does locally; the true name is still stored in `filename`.
+2. **The mirror's names were rewritten inconsistently by downloading**, so precise matching reconciled
+   only 608 of 1234 rows. Google-native files arrived as `.docx`/`.xlsx`, `/` inside a folder name
+   became ` - ` in one place and `_` in another, `*` became `_`. Rather than chase substitutions,
+   `looseKey` collapses punctuation and drops the extension — used **only** after the precise keys
+   miss, and **only** when it names exactly one row. 1145 rows now reconcile; 60 collisions are refused
+   and flagged rather than guessed.
+3. **Shortcut targets were assumed fetchable, and 16 of 29 are not.** 10 point at files in someone
+   else's drive: the walk now probes each target and stores `content_class = 'unknown'`, so
+   `find_grant_documents` reports `fetchable: false` instead of handing over an ID that 404s. The other
+   7 pointed at **folders** and were being catalogued as documents; those are traversal instructions
+   now — probed first, because an inaccessible folder **lists as empty rather than failing**, which is
+   the original bug's own signature. 6 of the 7 are inaccessible and are named by path in the run
+   output, which makes them an access request rather than a silent hole.
+
+The walk also gained a visited-set: a shortcut can point at a folder already in the tree, or at an
+ancestor of it, and following one without that is an infinite walk.
+
+**Suite: 269 tests across 17 files.**
+
 ### Added — a second Drive identity, so the walk can be tested without waiting on the folder's owner
 
 `connectors/google-drive` now authenticates either way:

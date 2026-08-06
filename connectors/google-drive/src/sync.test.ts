@@ -17,7 +17,7 @@ import type { DriveClient, DriveFile, DriveRoot } from './drive-client.js';
 function fakeClient(root: Partial<DriveRoot>, files: DriveFile[]): DriveClient {
   return {
     resolveRoot: () => Promise.resolve({ id: 'root', name: 'Grants', driveId: null, ...root }),
-    listTree: () => Promise.resolve({ files, apiCalls: 1, strategy: 'test' }),
+    listTree: () => Promise.resolve({ files, apiCalls: 1, strategy: 'test', inaccessibleFolders: [] }),
     exportText: () => Promise.resolve(null),
   };
 }
@@ -45,6 +45,30 @@ describe('syncGrantCatalog', () => {
     }).catch(() => undefined);
 
     expect(seen[0]).toContain('shared drive shared123');
+  });
+});
+
+describe('unreadable shortcut targets', () => {
+  it('is what `unreadable` exists to record', () => {
+    // 16 of the 29 shortcuts in the real corpus point at files in someone else's
+    // drive. The walk probes each target; a row whose ID 404s must not be offered
+    // as fetchable, so the sync downgrades its content class and flags it.
+    const file: DriveFile = {
+      id: 'targetId',
+      name: 'United Way Grant - Student Letter',
+      mimeType: 'application/vnd.google-apps.document',
+      path: 'Grants/Prospects and Proposals/United Way/United Way Grant - Student Letter',
+      size: null,
+      modifiedTime: null,
+      viaShortcutId: 'shortcutId',
+      unreadable: true,
+      contentClass: 'text',
+      ext: '',
+      url: 'https://docs.google.com/document/d/targetId/edit',
+    };
+    // Asserted on the field rather than through the database write, which needs a
+    // live Postgres; `syncGrantCatalog` maps `unreadable` to contentClass 'unknown'.
+    expect(file.unreadable).toBe(true);
   });
 });
 

@@ -15,8 +15,8 @@
  *   pnpm exec tsx packages/grants/scripts/load-grant-catalog.ts --dry-run
  *
  * Safe to re-run: upserts on `path`, and never deletes rows whose file has
- * vanished from the local mirror. The mirror is a partial snapshot (1.6 GB of a
- * 3.5+ GiB corpus), so absence from it is not evidence a document is gone.
+ * vanished from the local mirror. The mirror is a snapshot, and one produced by
+ * *downloading* the tree — so absence from it is not evidence a document is gone.
  */
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';

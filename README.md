@@ -353,7 +353,7 @@ Full input/output schemas: [docs/mcp-server-spec.md](docs/mcp-server-spec.md)
 | Connector | Source | Destination | Status |
 |---|---|---|---|
 | `google-sheets` | Launchpad Dashboard + Outcomes sheets (12 spreadsheets) | Postgres | ✅ Live — all 12 syncs ported; 26K+ records |
-| `google-drive` | Drive `Grants` tree | `grant_documents` catalog (no text, no embeddings) | ✅ Implemented — discovery + catalog sync; not yet run against real Drive |
+| `google-drive` | Drive `Grants` tree | `grant_documents` catalog (no text, no embeddings) | ✅ Implemented — discovery + catalog sync; verified read-only against real Drive, write not yet applied |
 | `bigquery` | `lp-internal-ai` BigQuery project | Postgres | Skeleton — creds available, implementation pending |
 | `givebutter` | GiveButter donation platform | `donor_contacts`, `donor_gifts`, `donor_pipeline` | ✅ Live — REST client syncing |
 | `aplos` | Aplos nonprofit accounting | Postgres (finance snapshots) | ✅ Live — RSA-decryption auth; 16K+ records |

@@ -443,6 +443,51 @@ export function driveUrlFor(id: string, mimeType: string | null): string {
  * spelling for the same file. Comparison happens on this form; storage always
  * keeps the real Drive path.
  */
+/**
+ * Escapes one Drive name for use as a path segment.
+ *
+ * Drive filenames may contain `/` and `:`; paths may not. 121 files in the real
+ * corpus are named things like `12/8/25 Vanguard Response`, and concatenating
+ * those raw turns one filename into three fake folders — which then classify as
+ * a funder's subtree that does not exist. Escaping to `_` is what Drive for
+ * Desktop already does locally, so the two spellings agree for free.
+ */
+export function escapePathSegment(name: string): string {
+  return name.replace(/[/:]/g, '_');
+}
+
+/**
+ * Extensions worth ignoring when comparing two spellings of one document.
+ *
+ * Wider than the convertible set on purpose: the local mirror was produced by
+ * *downloading* the tree, which converts Google-native files to Office formats
+ * and sometimes drops an extension Drive never stored (`file 1.jpg` locally,
+ * `file 1` in Drive).
+ */
+const COMPARABLE_EXT =
+  /\.(gdoc|gsheet|gslides|docx?|dotx|xlsx?|pptx?|pdf|csv|tsv|txt|rtf|md|vtt|html?|jpe?g|png|heic|gif|mp4|m4a|mp3|mov|wav|zip)$/;
+
+/**
+ * A deliberately lossy comparison key: same document, however either side spelled it.
+ *
+ * Downloading the corpus rewrote characters in ways no single rule predicts — a `/`
+ * in a folder name became ` - ` in one place and `_` in another, `*` became `_`,
+ * trailing punctuation appeared and vanished. Rather than chase each substitution,
+ * this collapses every run of non-alphanumerics to one space and drops the
+ * extension.
+ *
+ * It is lossy enough to produce collisions (68 in the real corpus), which is why it
+ * is only ever consulted **after** the precise keys miss, and only when it names
+ * exactly one candidate. Ambiguity here is refused, not resolved.
+ */
+export function looseKey(path: string): string {
+  return path
+    .toLowerCase()
+    .replace(COMPARABLE_EXT, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 export function normalizePath(path: string): string {
   return path
     .toLowerCase()

@@ -29,6 +29,7 @@ import {
   contentClassForExt,
   contentClassForMime,
   driveUrlFor,
+  escapePathSegment,
   fileExtension,
   type ContentClass,
 } from '@lp-ai/lib-grants';
@@ -54,12 +55,27 @@ export interface DriveFile {
   modifiedTime: string | null;
   /** The shortcut's own ID, when this row was reached through one. */
   viaShortcutId: string | null;
+  /**
+   * The stored ID exists but this identity cannot read it.
+   *
+   * Real and common: 16 of the 29 shortcuts in the corpus point at files in
+   * someone else's drive. Cataloguing those as fetchable hands a grant writer an
+   * ID that 404s, which is worse than saying so.
+   */
+  unreadable: boolean;
   /** Whether text can be extracted from this file today. */
   contentClass: ContentClass;
   /** Extension as the catalog records it, '' for Google-native files. */
   ext: string;
   /** The URL a human opens. */
   url: string;
+}
+
+/** The target of a shortcut that points at a folder: traverse it, do not catalog it. */
+export function shortcutFolderTarget(raw: drive_v3.Schema$File): string | null {
+  if (raw.mimeType !== SHORTCUT_MIME) return null;
+  if (raw.shortcutDetails?.targetMimeType !== FOLDER_MIME) return null;
+  return raw.shortcutDetails.targetId ?? null;
 }
 
 export interface DriveRoot {
@@ -75,9 +91,18 @@ export interface DriveRoot {
   driveId: string | null;
 }
 
+/** What one enumeration of the tree produced, and what it could not reach. */
+export interface TreeListing {
+  files: DriveFile[];
+  apiCalls: number;
+  strategy: string;
+  /** Folders the identity could see referenced but not list. Skipped, not fatal. */
+  inaccessibleFolders: string[];
+}
+
 export interface DriveClient {
   resolveRoot(folderId: string): Promise<DriveRoot>;
-  listTree(root: DriveRoot): Promise<{ files: DriveFile[]; apiCalls: number; strategy: string }>;
+  listTree(root: DriveRoot): Promise<TreeListing>;
   /** Plain text for a Google-native document. Null when the type has no text export. */
   exportText(fileId: string, mimeType: string): Promise<string | null>;
 }
@@ -131,9 +156,10 @@ async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
 /**
  * Turns a raw API file into a `DriveFile`, resolving shortcuts.
  *
- * Returns null for folders (they are traversed, not catalogued) and for
- * shortcuts whose target Drive declines to name — a shortcut with no target is
- * a broken link, and recording its own unreadable ID is worse than skipping it.
+ * Returns null for folders (they are traversed, not catalogued), for shortcuts
+ * **to** folders (7 of them in the corpus — a folder is not a document, and
+ * cataloguing one produces a row nothing can ever fetch), and for shortcuts whose
+ * target Drive declines to name — a shortcut with no target is a broken link.
  */
 export function toDriveFile(raw: drive_v3.Schema$File, path: string): DriveFile | null {
   if (!raw.id || !raw.name || raw.mimeType === FOLDER_MIME) return null;
@@ -144,6 +170,8 @@ export function toDriveFile(raw: drive_v3.Schema$File, path: string): DriveFile 
 
   const mimeType =
     (isShortcut ? raw.shortcutDetails?.targetMimeType : raw.mimeType) ?? 'application/octet-stream';
+  // A shortcut to a folder is a traversal instruction, not a document.
+  if (mimeType === FOLDER_MIME) return null;
   const ext = fileExtension(raw.name);
   // Drive's MIME type is the better authority — Google-native files carry no
   // extension, and a file named without one still reports its real type. The
@@ -159,6 +187,8 @@ export function toDriveFile(raw: drive_v3.Schema$File, path: string): DriveFile 
     size: raw.size === undefined || raw.size === null ? null : Number(raw.size),
     modifiedTime: raw.modifiedTime ?? null,
     viaShortcutId: isShortcut ? raw.id : null,
+    // Set later, by the one probe per shortcut in `verifyShortcutTargets`.
+    unreadable: false,
     contentClass,
     ext,
     url: driveUrlFor(id, mimeType),
@@ -186,7 +216,7 @@ export function buildPaths(
   const folderParent = new Map<string, string>();
   for (const f of raw) {
     if (f.mimeType !== FOLDER_MIME || !f.id) continue;
-    folderName.set(f.id, f.name ?? f.id);
+    folderName.set(f.id, escapePathSegment(f.name ?? f.id));
     const parent = f.parents?.[0];
     if (parent) folderParent.set(f.id, parent);
   }
@@ -222,7 +252,7 @@ export function buildPaths(
     if (!parent) continue;
     const dir = folderPath(parent);
     if (dir === null) continue;
-    paths.set(f.id, `${dir}/${f.name ?? f.id}`);
+    paths.set(f.id, `${dir}/${escapePathSegment(f.name ?? f.id)}`);
   }
   return paths;
 }
@@ -306,10 +336,46 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
     return calls;
   }
 
+  /**
+   * One probe per shortcut, to find out whether its target can actually be read.
+   *
+   * Worth the calls — 29 out of 616 in this corpus — because the alternative is a
+   * catalog row promising content that 404s. Nothing else in the walk needs this:
+   * an ordinary file listed inside the tree is readable by the identity that listed
+   * it, and only shortcuts can point outside.
+   */
+  /** True when the identity can see the file/folder at all. */
+  async function canRead(fileId: string): Promise<boolean> {
+    try {
+      await withRetry('files.get', () =>
+        drive.files.get({ fileId, fields: 'id', supportsAllDrives: true }),
+      );
+      return true;
+    } catch (err) {
+      const status = statusOf(err);
+      if (status !== 403 && status !== 404) throw err;
+      return false;
+    }
+  }
+
+  async function verifyShortcutTargets(files: DriveFile[]): Promise<number> {
+    let calls = 0;
+    for (const file of files) {
+      if (file.viaShortcutId === null) continue;
+      calls += 1;
+      if (await canRead(file.id)) {
+        // Readable: nothing to record.
+      } else {
+        file.unreadable = true;
+      }
+    }
+    return calls;
+  }
+
   async function sweepDrive(
     root: { id: string; name: string },
     driveId: string,
-  ): Promise<{ files: DriveFile[]; apiCalls: number; strategy: string }> {
+  ): Promise<TreeListing> {
     const raw: drive_v3.Schema$File[] = [];
     const apiCalls = await listPages({ q: 'trashed = false', corpora: 'drive', driveId }, (page) =>
       raw.push(...page),
@@ -323,36 +389,89 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
       const mapped = toDriveFile(f, path);
       if (mapped) files.push(mapped);
     }
-    return { files, apiCalls, strategy: `shared-drive sweep (${driveId})` };
+    return {
+      files,
+      apiCalls: apiCalls + (await verifyShortcutTargets(files)),
+      strategy: `shared-drive sweep (${driveId})`,
+      // A sweep sees the whole drive, so nothing inside it was unreachable. A
+      // shortcut pointing out of the drive is reported per-file as `unreadable`.
+      inaccessibleFolders: [],
+    };
   }
 
-  async function walkFolders(
-    root: DriveRoot,
-  ): Promise<{ files: DriveFile[]; apiCalls: number; strategy: string }> {
+  async function walkFolders(root: DriveRoot): Promise<TreeListing> {
     const files: DriveFile[] = [];
     const queue: { id: string; path: string }[] = [{ id: root.id, path: root.name }];
+    // Shortcuts can point at a folder that is already in the tree, or at an
+    // ancestor of it. Without this, that is an infinite walk.
+    const visited = new Set<string>();
+    const inaccessibleFolders: string[] = [];
+    /** Folder-shortcut targets to check before walking into them. */
+    const shortcutFolders: { id: string; path: string }[] = [];
     let apiCalls = 0;
     let folders = 0;
 
     while (queue.length > 0) {
       const current = queue.shift();
       if (!current) break;
+      if (visited.has(current.id)) continue;
+      visited.add(current.id);
       folders += 1;
-      apiCalls += await listPages({ q: `'${current.id}' in parents and trashed = false` }, (page) => {
-        for (const f of page) {
-          if (!f.id || !f.name) continue;
-          const path = `${current.path}/${f.name}`;
-          if (f.mimeType === FOLDER_MIME) {
-            queue.push({ id: f.id, path });
-            continue;
-          }
-          const mapped = toDriveFile(f, path);
-          if (mapped) files.push(mapped);
-        }
-      });
+
+      try {
+        apiCalls += await listPages(
+          { q: `'${current.id}' in parents and trashed = false` },
+          (page) => {
+            for (const f of page) {
+              if (!f.id || !f.name) continue;
+              const path = `${current.path}/${escapePathSegment(f.name)}`;
+
+              if (f.mimeType === FOLDER_MIME) {
+                queue.push({ id: f.id, path });
+                continue;
+              }
+              // A shortcut to a folder is part of the curated corpus: the files
+              // behind it are real, so follow it rather than dropping the subtree.
+              const folderTarget = shortcutFolderTarget(f);
+              if (folderTarget !== null) {
+                // Not enqueued directly: an inaccessible folder lists as **empty
+                // rather than failing**, which is the original bug's own signature.
+                // Silently walking one would report a real subtree as absent.
+                shortcutFolders.push({ id: folderTarget, path });
+                continue;
+              }
+
+              const mapped = toDriveFile(f, path);
+              if (mapped) files.push(mapped);
+            }
+          },
+        );
+      } catch (err) {
+        const status = statusOf(err);
+        if (status !== 403 && status !== 404) throw err;
+        // Reached through a shortcut into someone else's drive. One unreadable
+        // subtree must not lose the rest of the catalog.
+        inaccessibleFolders.push(current.path);
+        folders -= 1;
+      }
+
+      // Drained after each folder rather than at the end, so a shortcut inside a
+      // shortcut's target is followed too.
+      while (shortcutFolders.length > 0) {
+        const target = shortcutFolders.shift();
+        if (!target || visited.has(target.id)) continue;
+        apiCalls += 1;
+        if (await canRead(target.id)) queue.push(target);
+        else inaccessibleFolders.push(target.path);
+      }
     }
 
-    return { files, apiCalls, strategy: `folder walk (${String(folders)} folders)` };
+    return {
+      files,
+      apiCalls: apiCalls + (await verifyShortcutTargets(files)),
+      strategy: `folder walk (${String(folders)} folders)`,
+      inaccessibleFolders,
+    };
   }
 
   return {
@@ -375,7 +494,7 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
       };
     },
 
-    async listTree(root): Promise<{ files: DriveFile[]; apiCalls: number; strategy: string }> {
+    async listTree(root): Promise<TreeListing> {
       // Strategy 1 — one sweep of the shared drive.
       //
       // Drive has no recursive listing, so the obvious approach is one

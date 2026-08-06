@@ -1,12 +1,13 @@
 /**
  * Decides, for each file Drive returned, which catalog row it is.
  *
- * The hard part of this connector is not fetching — it is identity. The catalog
- * was first built from a partial local mirror (1.6 GB of a 3.5+ GiB corpus) whose
- * filenames Drive for Desktop had already rewritten, so "the same document" has
- * two spellings and only one of them has a Drive ID. Getting this wrong is not a
- * crash: it stamps a Drive ID onto the wrong row, and `find_grant_documents` then
- * serves confidently wrong content. So the rule is **never guess**.
+ * The hard part of this connector is not fetching — it is identity. The catalog was
+ * first built from a local mirror produced by *downloading* the tree, which converted
+ * Google-native files to Office formats and rewrote characters in filenames, so "the
+ * same document" has two spellings and only one of them has a Drive ID. Getting this
+ * wrong is not a crash: it stamps a Drive ID onto the wrong row, and
+ * `find_grant_documents` then serves confidently wrong content. So the rule is
+ * **never guess**.
  *
  * Identity precedence, strongest evidence first:
  *
@@ -15,13 +16,18 @@
  *   2. Exact path — Drive path equals the stored path.
  *   3. Normalized path, and only if unique. Two candidates means we would be
  *      picking one, so the file is left unmatched instead.
- *   4. No match — the file exists in Drive but not in the catalog. That is the
- *      1243-row gap the mirror never covered, so it becomes a new row.
+ *   4. Loose key, and only if unique — punctuation collapsed and the extension
+ *      dropped. The mirror was produced by *downloading* the tree, which converted
+ *      Google-native files to Office formats and rewrote characters inconsistently
+ *      (`/` became ` - ` in one folder name and `_` in another). Measured against the
+ *      real corpus this tier recovers 537 rows the precise keys miss.
+ *   5. No match — the file exists in Drive but not in the catalog. Most of Drive was
+ *      never mirrored, so this is the common case.
  *
  * Pure: no database, no network. The sync applies what this returns.
  */
 
-import { normalizePath } from '@lp-ai/lib-grants';
+import { looseKey, normalizePath } from '@lp-ai/lib-grants';
 
 import type { DriveFile } from './drive-client.js';
 
@@ -31,7 +37,7 @@ export interface CatalogRow {
   driveFileId: string | null;
 }
 
-export type MatchedBy = 'drive_id' | 'exact_path' | 'normalized_path';
+export type MatchedBy = 'drive_id' | 'exact_path' | 'normalized_path' | 'loose_path';
 
 export interface Resolution {
   file: DriveFile;
@@ -39,27 +45,30 @@ export interface Resolution {
   rowId: string | null;
   matchedBy: MatchedBy | null;
   /**
-   * Set when a normalized-path match had more than one candidate. The file still
-   * becomes a new row, but flagged for review — a human should merge it.
+   * Set when a path match had more than one candidate. The file still becomes a new
+   * row, but flagged for review — a human should merge it.
    */
   ambiguousWith: string[];
 }
 
 export interface ReconcileResult {
   resolutions: Resolution[];
-  counts: Record<'drive_id' | 'exact_path' | 'normalized_path' | 'created' | 'ambiguous', number>;
+  counts: Record<MatchedBy | 'created' | 'ambiguous', number>;
 }
 
 export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResult {
   const byDriveId = new Map<string, string>();
   const byExactPath = new Map<string, string>();
   const byNormalizedPath = new Map<string, string[]>();
+  const byLoosePath = new Map<string, string[]>();
 
   for (const row of rows) {
     if (row.driveFileId !== null) byDriveId.set(row.driveFileId, row.id);
     byExactPath.set(row.path, row.id);
-    const key = normalizePath(row.path);
-    byNormalizedPath.set(key, [...(byNormalizedPath.get(key) ?? []), row.id]);
+    const normalized = normalizePath(row.path);
+    byNormalizedPath.set(normalized, [...(byNormalizedPath.get(normalized) ?? []), row.id]);
+    const loose = looseKey(row.path);
+    byLoosePath.set(loose, [...(byLoosePath.get(loose) ?? []), row.id]);
   }
 
   /**
@@ -73,6 +82,7 @@ export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResu
     drive_id: 0,
     exact_path: 0,
     normalized_path: 0,
+    loose_path: 0,
     created: 0,
     ambiguous: 0,
   };
@@ -89,6 +99,7 @@ export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResu
     const byId = byDriveId.get(file.id);
     const byPath = byExactPath.get(file.path);
     const normalized = byNormalizedPath.get(normalizePath(file.path)) ?? [];
+    const loose = byLoosePath.get(looseKey(file.path)) ?? [];
 
     if (byId !== undefined && !claimed.has(byId)) {
       rowId = byId;
@@ -101,6 +112,11 @@ export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResu
       matchedBy = 'normalized_path';
     } else if (normalized.length > 1) {
       ambiguousWith = normalized;
+    } else if (loose.length === 1 && loose[0] && !claimed.has(loose[0])) {
+      rowId = loose[0];
+      matchedBy = 'loose_path';
+    } else if (loose.length > 1) {
+      ambiguousWith = loose;
     }
 
     if (rowId !== null) {

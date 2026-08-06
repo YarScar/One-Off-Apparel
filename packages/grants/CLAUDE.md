@@ -84,7 +84,7 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **259 tests across 17
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **269 tests across 17
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
 over stdio. `packages/grants` alone is **186 in 9 files**, with no database and no network. (207 across
 13 before 2026-08-06, when the Drive rebuild added `catalog.test.ts` and three connector suites;
@@ -102,25 +102,26 @@ closed. Of the 30 rows, 6 have no registered tool, all `future` placeholders —
 `grant_resize_answer` row was claimed at G4, so no grant tool is pending a registration any more.
 
 **Connectors** (root `CLAUDE.md` holds the detail): `google-sheets`, `aplos`, and `notion` are live.
-`google-drive` is **implemented but unexercised** as of 2026-08-06 — it discovers the Drive `Grants`
-tree into the `grant_documents` catalog and writes no text or embeddings, but no run has reached real
-Drive from here: `GOOGLE_SERVICE_ACCOUNT_JSON` is empty locally, and the service account has no
-access to that tree anyway. It also accepts a user identity (`GOOGLE_OAUTH_CLIENT_ID` +
-`_SECRET` + `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`, via `connectors/google-drive/scripts/authorize.ts`),
-which is the path that can be run today by someone who can already open the folder. `slack` is still a skeleton
+`google-drive` is **implemented and verified read-only against real Drive** on 2026-08-06 — 1257 files
+across 617 folders enumerated, read-by-ID confirmed — but **no catalog write has been applied**: every
+run so far was `--dry-run`. It discovers into `grant_documents` and writes no text or embeddings. The
+run used a *user* identity (`GOOGLE_OAUTH_CLIENT_ID` + `_SECRET` +
+`GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`, via `connectors/google-drive/scripts/authorize.ts`), which is
+local-testing only; the service account still has no access to that tree, so **production is
+unverified**. `slack` is still a skeleton
 returning `status: "noop"`, awaiting `SLACK_BOT_TOKEN`.
 
-**Drive discovery is broken through the Claude Drive connector, and our own path around it is
-written but unproven.** Verified 2026-08-06: `get_file_metadata` on `Prospects and Proposals`
-succeeds, listing its children returns `{}`, and `title`/`fullText` search never matches inside the
-tree — while reading a known file ID returns full content. Not a recursion limit; sibling folders
-nested just as deep under `Launchpad Internal AI OS` list fine. Suspected cause is a Shared Drive
-queried without `includeItemsFromAllDrives`; **still unverified**. The same day, `connectors/google-drive`
-was rebuilt to set those flags unconditionally, sweep a shared drive in `ceil(n/1000)` calls instead
-of ~600, resolve shortcuts, and refuse to treat an empty listing as success — but **nothing has run
-against real Drive**, so read it as covered by unit tests, not as working. Consequence unchanged: the
+**Drive discovery is broken through the Claude Drive connector; our own path around it now works.**
+Verified 2026-08-06: `get_file_metadata` on `Prospects and Proposals` succeeds, listing its children
+returns `{}`, and `title`/`fullText` search never matches inside the tree — while reading a known file
+ID returns full content. **Root cause confirmed the same day: `Grants` is in a Shared Drive
+(`driveId=0AAj6r5Nb_TnNUk9PVA`)**, and with `supportsAllDrives` + `includeItemsFromAllDrives` set, the
+*same* human identity enumerated 1257 files across 617 folders. `connectors/google-drive` sets those
+flags on every call, falls back to a per-folder walk when a drive-scoped sweep is refused, probes
+shortcut targets, and refuses to treat an empty listing as success. Consequence unchanged: the
 `grant_documents` catalog is how those files are found, and `document_chunks` was **empty for every
-source** when checked. Detail in `docs/data-sources/google-drive-discovery.md`.
+source** when checked. **The corpus is ~1.5 GiB / 1257 files — the "3.5+ GiB" figure repeated in
+earlier documents was never measured.** Detail in `docs/data-sources/google-drive-discovery.md` §5.2.
 
 **Grant writing layer:** **G1, G2, G3 and G4 have all passed. G5 not started.** All three grant tools
 are registered. G3 and G4 both passed on **restated conditions**, and the restatement is the same
@@ -222,7 +223,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 259 passed, 0 skipped, 17 files.
+# Full suite — expect 269 passed, 0 skipped, 17 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

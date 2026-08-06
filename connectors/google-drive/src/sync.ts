@@ -7,9 +7,10 @@
  *     where it is, including the Drive file ID content is fetched with.
  *   - **Does not** ingest document text. Discovery is the thing that was broken
  *     (`docs/data-sources/google-drive-discovery.md`); retrieval already works by
- *     ID, so embedding 3.5+ GiB to answer questions a catalog query answers would
- *     be cost with no capability behind it. `document_chunks` stays out of this
- *     path until there is a stated need for semantic search over the corpus.
+ *     ID, so embedding the corpus (measured 2026-08-06: 1257 files, ~1.5 GiB) to
+ *     answer questions a catalog query answers would be cost with no capability
+ *     behind it. `document_chunks` stays out of this path until there is a stated
+ *     need for semantic search over the corpus.
  *
  * Safety, per the root `CLAUDE.md` sync rule: this upserts on a stable key and
  * **never deletes**. Absence from a run is not evidence a document is gone — the
@@ -28,7 +29,7 @@ import {
   type DriveFile,
   type DriveRoot,
 } from './drive-client.js';
-import { reconcile, type CatalogRow } from './reconcile.js';
+import { reconcile, type CatalogRow, type ReconcileResult } from './reconcile.js';
 
 /** The shared "Grants" folder, when the environment does not name one. */
 export const DEFAULT_GRANTS_FOLDER_ID = '1ZqQaFrfVZJ6kPvXNd3pPNVyaL8PpaX3S';
@@ -48,6 +49,12 @@ export interface CatalogSyncResult {
   updated: number;
   created: number;
   ambiguous: number;
+  /** How each matched row was identified. A shift here is worth noticing. */
+  matchedBy: ReconcileResult['counts'];
+  /** Shortcut targets this identity cannot read. Recorded as not fetchable. */
+  unreadable: number;
+  /** Folders referenced but not listable — skipped, not fatal. */
+  inaccessibleFolders: string[];
   shortcutsResolved: number;
   /** Catalog rows the walk never reached. Left alone, not deleted. */
   notSeen: number;
@@ -60,7 +67,12 @@ export function summarize(r: CatalogSyncResult): string {
     `${r.root.name}: ${String(r.filesFound)} files via ${r.strategy} in ` +
     `${String(r.apiCalls)} API calls | ${String(r.updated)} rows updated, ` +
     `${String(r.created)} created, ${String(r.ambiguous)} ambiguous (flagged for review), ` +
-    `${String(r.shortcutsResolved)} shortcuts resolved, ${String(r.notSeen)} catalog rows not seen | ` +
+    `${String(r.shortcutsResolved)} shortcuts resolved (${String(r.unreadable)} unreadable), ` +
+    `${String(r.inaccessibleFolders.length)} folders unlistable, ` +
+    `${String(r.notSeen)} catalog rows not seen | ` +
+    `matched by id/exact/normalized/loose: ${String(r.matchedBy.drive_id)}/` +
+    `${String(r.matchedBy.exact_path)}/${String(r.matchedBy.normalized_path)}/` +
+    `${String(r.matchedBy.loose_path)} | ` +
     // Recorded because it is the answer to the open question in the discovery
     // doc, and a run's notes are where it will still be readable next month.
     `driveId=${r.root.driveId ?? 'none (My Drive)'}`
@@ -88,8 +100,11 @@ export async function syncGrantCatalog(
       (root.driveId !== null ? `shared drive ${root.driveId}` : 'My Drive'),
   );
 
-  const { files, apiCalls, strategy } = await client.listTree(root);
+  const { files, apiCalls, strategy, inaccessibleFolders } = await client.listTree(root);
   progress(`${String(files.length)} files via ${strategy} in ${String(apiCalls)} API calls`);
+  for (const folder of inaccessibleFolders) {
+    progress(`  could not list (shortcut into an inaccessible drive): ${folder}`);
+  }
 
   // An identity that can read the root but list nothing inside it is the original
   // bug's exact signature. Say so, rather than reporting a successful empty sync.
@@ -114,7 +129,7 @@ export async function syncGrantCatalog(
 
   for (const { file, rowId, ambiguousWith } of resolutions) {
     const meta = classifyPath(file.path);
-    const review = needsReview(meta) || ambiguousWith.length > 0;
+    const review = needsReview(meta) || ambiguousWith.length > 0 || file.unreadable;
 
     const data = {
       driveFileId: file.id,
@@ -130,7 +145,9 @@ export async function syncGrantCatalog(
       archiveOnly: meta.archive_only,
       needsReview: review,
       ext: file.ext || null,
-      contentClass: file.contentClass,
+      // An ID that 404s is not fetchable, whatever its type says. `find_grant_documents`
+      // gates `fetchable` on contentClass, so this is what keeps it honest.
+      contentClass: file.unreadable ? 'unknown' : file.contentClass,
       ...(file.size !== null ? { sizeBytes: BigInt(file.size) } : {}),
       ...(file.modifiedTime ? { modifiedAt: new Date(file.modifiedTime) } : {}),
       syncedAt: new Date(),
@@ -165,7 +182,10 @@ export async function syncGrantCatalog(
     updated,
     created,
     ambiguous: counts.ambiguous,
+    matchedBy: counts,
     shortcutsResolved: files.filter((f) => f.viaShortcutId !== null).length,
+    unreadable: files.filter((f) => f.unreadable).length,
+    inaccessibleFolders,
     notSeen: rows.filter((r) => !seenRowIds.has(r.id)).length,
     files,
   };

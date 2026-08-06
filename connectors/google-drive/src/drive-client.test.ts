@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import type { drive_v3 } from 'googleapis';
 
-import { buildPaths, toDriveFile } from './drive-client.js';
+import { buildPaths, shortcutFolderTarget, toDriveFile } from './drive-client.js';
 
 const FOLDER = 'application/vnd.google-apps.folder';
 const SHORTCUT = 'application/vnd.google-apps.shortcut';
@@ -68,6 +68,28 @@ describe('buildPaths', () => {
     );
   });
 
+  it('escapes a slash inside a Drive filename instead of forging folders', () => {
+    // 121 files in the real corpus are named like this. Concatenated raw, one
+    // filename becomes three fake folders that then classify as a subtree of the
+    // funder that does not exist.
+    const raw = [
+      folder('f1', 'Prospects and Proposals', 'root'),
+      folder('f2', 'Truist Foundation', 'f1'),
+      file('d1', '8/10/2026 Truist Application', 'f2', DOC),
+    ];
+    expect(buildPaths(raw, ROOT).get('d1')).toBe(
+      'Grants/Prospects and Proposals/Truist Foundation/8_10_2026 Truist Application',
+    );
+  });
+
+  it('escapes a slash inside a Drive folder name too', () => {
+    const raw = [
+      folder('f1', 'Meetings / Site Visit', 'root'),
+      file('d1', 'notes.docx', 'f1'),
+    ];
+    expect(buildPaths(raw, ROOT).get('d1')).toBe('Grants/Meetings _ Site Visit/notes.docx');
+  });
+
   it('drops files that do not descend from the root', () => {
     // A shared drive can hold material this connector has no business cataloguing.
     const raw = [
@@ -96,6 +118,27 @@ describe('buildPaths', () => {
   });
 });
 
+describe('shortcutFolderTarget', () => {
+  it('names the folder to traverse, and nothing else', () => {
+    expect(
+      shortcutFolderTarget({
+        id: 's',
+        mimeType: SHORTCUT,
+        shortcutDetails: { targetId: 'folderId', targetMimeType: FOLDER },
+      }),
+    ).toBe('folderId');
+    // A shortcut to a document is a document, not a traversal target.
+    expect(
+      shortcutFolderTarget({
+        id: 's',
+        mimeType: SHORTCUT,
+        shortcutDetails: { targetId: 'docId', targetMimeType: DOC },
+      }),
+    ).toBeNull();
+    expect(shortcutFolderTarget({ id: 'f', mimeType: FOLDER })).toBeNull();
+  });
+});
+
 describe('toDriveFile', () => {
   it('stores a shortcut’s target ID, not the shortcut’s own', () => {
     // Reading a shortcut's own ID returns empty content — this is the bug the
@@ -114,6 +157,23 @@ describe('toDriveFile', () => {
     expect(mapped?.viaShortcutId).toBe('shortcutId');
     expect(mapped?.mimeType).toBe(DOC);
     expect(mapped?.url).toBe('https://docs.google.com/document/d/realId/edit');
+  });
+
+  it('skips a shortcut that points at a folder', () => {
+    // 7 of the 29 shortcuts in the corpus do. A folder is not a document, and
+    // cataloguing one makes a row nothing can ever fetch — it is a traversal
+    // instruction, handled by `shortcutFolderTarget`.
+    expect(
+      toDriveFile(
+        {
+          id: 's',
+          name: 'Old Development Folder',
+          mimeType: SHORTCUT,
+          shortcutDetails: { targetId: 'folderId', targetMimeType: FOLDER },
+        },
+        'Grants/x',
+      ),
+    ).toBeNull();
   });
 
   it('skips a shortcut with no target', () => {
@@ -144,6 +204,16 @@ describe('toDriveFile', () => {
     );
     expect(mapped?.contentClass).toBe('text');
     expect(mapped?.ext).toBe('.xlsx');
+  });
+
+  it('keeps the real filename even where the path had to escape it', () => {
+    // The path is a key; the name is what a human reads. They are allowed to differ.
+    const mapped = toDriveFile(
+      { id: 'd', name: '12/8/25 Vanguard Response', mimeType: DOC },
+      'Grants/x/12_8_25 Vanguard Response',
+    );
+    expect(mapped?.name).toBe('12/8/25 Vanguard Response');
+    expect(mapped?.path).toBe('Grants/x/12_8_25 Vanguard Response');
   });
 
   it('carries size and modified time through as given', () => {

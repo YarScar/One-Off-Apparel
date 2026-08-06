@@ -22,6 +22,7 @@ function driveFile(path: string, id: string): DriveFile {
     size: 1,
     modifiedTime: null,
     viaShortcutId: null,
+    unreadable: false,
     contentClass: 'text',
     ext: '.docx',
     url: `https://drive.google.com/file/d/${id}/view`,
@@ -88,9 +89,52 @@ describe('reconcile', () => {
     expect(counts.created).toBe(1);
   });
 
+  it('matches a downloaded Office copy of a Google-native file', () => {
+    // The mirror was produced by downloading the tree, so a native Doc arrived as
+    // `.docx`. 537 rows in the real corpus differ only this way, or by punctuation.
+    const { resolutions } = reconcile(
+      [driveFile('Grants/Truist/1Philadelphia Grant Application', 'D1')],
+      [row('r1', 'Grants/Truist/1Philadelphia Grant Application.docx')],
+    );
+    expect(resolutions[0]?.rowId).toBe('r1');
+    expect(resolutions[0]?.matchedBy).toBe('loose_path');
+  });
+
+  it('matches across inconsistent punctuation rewriting', () => {
+    // Drive's `Meetings / Site Visit` came down as `Meetings - Site Visit` in one
+    // place and `Meetings _ Site Visit` in another. No single substitution rule
+    // covers it, so the loose key collapses punctuation instead of chasing them.
+    const { resolutions } = reconcile(
+      [driveFile('Grants/CCFF/Meetings _ Site Visit/2024/prep', 'D1')],
+      [row('r1', 'Grants/CCFF/Meetings - Site Visit/2024/prep.docx')],
+    );
+    expect(resolutions[0]?.matchedBy).toBe('loose_path');
+  });
+
+  it('refuses a loose match with two candidates', () => {
+    // The loose key is lossy by design — 68 keys collide in the real corpus — so it
+    // is only ever allowed to name exactly one row.
+    const { resolutions, counts } = reconcile(
+      [driveFile('Grants/ATF/Budget 5.23', 'D1')],
+      [row('r1', 'Grants/ATF/Budget 5.23.xlsx'), row('r2', 'Grants/ATF/Budget 5-23.pdf')],
+    );
+    expect(resolutions[0]?.rowId).toBeNull();
+    expect(counts.ambiguous).toBe(1);
+  });
+
+  it('prefers a precise match over a loose one', () => {
+    // r2 is the exact path. The loose key would also reach r1, and must not.
+    const { resolutions } = reconcile(
+      [driveFile('Grants/T/answers.docx', 'D1')],
+      [row('r1', 'Grants/T/answers'), row('r2', 'Grants/T/answers.docx')],
+    );
+    expect(resolutions[0]?.rowId).toBe('r2');
+    expect(resolutions[0]?.matchedBy).toBe('exact_path');
+  });
+
   it('creates a row for a Drive file the mirror never held', () => {
-    // The mirror is 1.6 GB of a 3.5+ GiB corpus, so this is the common case, not
-    // the edge one: most of Drive has no catalog row yet.
+    // Drive holds material the mirror never did — 655 files on the first real
+    // walk — so this is an ordinary case, not an edge one.
     const { resolutions, counts } = reconcile([driveFile('Grants/New Funder/loi.docx', 'D1')], []);
     expect(resolutions[0]?.rowId).toBeNull();
     expect(resolutions[0]?.ambiguousWith).toHaveLength(0);

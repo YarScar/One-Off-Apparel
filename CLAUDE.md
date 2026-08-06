@@ -32,7 +32,7 @@ An internal AI intelligence layer for Launchpad that lets team members query Cla
 | Connector | Source | Destination | Status |
 |---|---|---|---|
 | `google-sheets` | Launchpad Dashboard + Outcomes sheets (12 spreadsheets) | Postgres | ✅ Live — all 12 sheet syncs ported; 27K+ records ingested |
-| `google-drive` | Drive `Grants` tree | `grant_documents` catalog (no text, no embeddings) | ✅ Implemented — discovery + catalog sync; **never run against real Drive** (no local credentials) |
+| `google-drive` | Drive `Grants` tree | `grant_documents` catalog (no text, no embeddings) | ✅ Implemented — discovery + catalog sync. Verified read-only against real Drive (1257 files); **catalog write not yet applied**, and production auth unverified |
 | `aplos` | Aplos nonprofit accounting | `finance_snapshots` (accounts, funds, transactions) | ✅ Live — RSA-decryption auth; 16K+ records; synced daily in production via EventBridge |
 | `notion` | Notion meeting transcripts database | `document_chunks` (pgvector) | ✅ Live — meeting transcript sync with embeddings |
 | `slack` | Designated Slack channels | pgvector | Skeleton — awaiting `SLACK_BOT_TOKEN` |

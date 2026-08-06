@@ -1,9 +1,11 @@
 # Google Drive discovery — diagnosis and remediation
 
-**Status:** diagnosed 2026-08-06. Discovery rebuilt on branch `fix/google-drive-discovery` the same
-day; **root cause still unconfirmed**, because confirming it needs credentials this environment does
-not hold (`GOOGLE_SERVICE_ACCOUNT_JSON` is empty locally).
-**Owner:** the branch above. What it landed is in §5.1; what it could not is in §6 Fix 1.
+**Status:** diagnosed, rebuilt, and **root cause confirmed** 2026-08-06 on branch
+`fix/google-drive-discovery`. `Grants` is in a Shared Drive (`driveId=0AAj6r5Nb_TnNUk9PVA`), and with
+`supportsAllDrives` + `includeItemsFromAllDrives` set the same human identity that the Claude Drive
+connector failed with enumerated **1257 files across 617 folders**. Reading by ID was verified too.
+The catalog write has **not** been applied yet — every run so far was `--dry-run`.
+**Owner:** the branch above. What it landed is in §5.1; the live results are in §5.2.
 
 Read this before touching `connectors/google-drive/` or the Drive MCP path.
 [`google-drive-connector.md`](google-drive-connector.md) beside it now describes the connector as
@@ -39,6 +41,7 @@ Google Drive MCP connector as the signed-in user (`ddelu0068@launchpadphilly.org
 | `search_files` `title contains 'Truist'` | whole corpus | ❌ one unrelated shortcut only; never the real `8_10_2026 Truist Application.docx` |
 | `read_file_content` | shortcut `1R5hkoEmHmJT7g5z1DlgTF6b2LMabvORP` | ❌ `{}` |
 | `read_file_content` | **`1mnx4NjQlZFHDljMgcpeSa-368C4wcYHkKsXkRQ7vRCo`** (Cambiar Thrive working response, *inside* the tree) | ✅ **full document text** |
+| `files.list` `'<id>' in parents` **with the shared-drive flags**, as the same user, 2026-08-06 | every folder in the tree | ✅ **1257 files, 617 folders** — see §5.2 |
 
 **The shape of the bug: content is readable by ID, but nothing inside the tree is discoverable.**
 
@@ -80,7 +83,16 @@ Ranked by fit. **None is confirmed** — confirming requires a Drive API call wi
 not available when this was diagnosed (`GOOGLE_SERVICE_ACCOUNT_JSON` is empty in `.env`, and
 `USE_AWS_SECRETS=true` routes secrets through AWS Secrets Manager).
 
-### H1 — Shared Drive queried without the shared-drive flags *(best fit)*
+### H1 — Shared Drive queried without the shared-drive flags *(**CONFIRMED** 2026-08-06)*
+
+`files.get` on the root with `fields: 'driveId'` returns **`0AAj6r5Nb_TnNUk9PVA`**: `Grants` is in a
+Shared Drive. Setting both flags makes the previously-empty `parentId` listing return the whole tree,
+as the *same* human identity that the Claude Drive connector failed with. That is the mechanism, and
+it was ours to fix.
+
+H2 is not disproved and does not need to be: the Claude connector is not ours to change, and the
+catalog makes the corpus discoverable without it.
+
 
 `files.list` omits shared-drive items unless **both** `supportsAllDrives: true` and
 `includeItemsFromAllDrives: true` are set. That produces exactly this signature: get-by-ID works,
@@ -162,17 +174,55 @@ Three behaviour changes worth knowing:
   underscores are word characters, so `\b(20\d{2})\b` never matched. Every underscore-dated file in
   the tree was losing its year, and with it its `archive_only` decision.
 
+### 5.2 First live run — 2026-08-06, `--dry-run`, as a user identity
+
+Run as `ddelu0068@launchpadphilly.org` through the OAuth path in §5.1, against the real tree. **No
+database writes.** Every number below is output, not an estimate.
+
+```
+root "Grants" (1ZqQaFrfVZJ6kPvXNd3pPNVyaL8PpaX3S) — shared drive 0AAj6r5Nb_TnNUk9PVA
+1257 files via folder walk (617 folders), drive-scoped sweep refused in 646 API calls
+1145 rows updated, 112 created, 60 ambiguous (flagged for review),
+22 shortcuts resolved (10 unreadable), 6 folders unlistable, 107 catalog rows not seen
+matched by id/exact/normalized/loose: 0/607/0/538
+```
+
+| Fact | Value | Note |
+|---|---|---|
+| Shared Drive | `0AAj6r5Nb_TnNUk9PVA` | Confirms H1 |
+| Files in the tree | **1257** | Corpus size **~1.5 GiB**, not the 3.5+ GiB claimed before this was measured |
+| Catalog rows reconciled | **1145** of 1234 `Grants` rows | 607 by exact path, 538 by loose key |
+| New rows Drive-only | 112 | Files the mirror never held |
+| Ambiguous, refused | 60 | Became new rows flagged `needs_review` for a human to merge |
+| Catalog rows not seen | 107 | 89 `Grants` (mostly local `(1)` duplicate downloads) + 18 `Launchpad Internal AI OS`, which this walk does not cover. **Left alone, never deleted** |
+| Read-by-ID | ✅ | 47,886 characters of `3_31_25 Truist Foundation Grant Response` exported as text |
+
+**The sweep was refused, and that is expected for this identity.** `corpora: 'drive'` needs membership
+of the shared drive; this account holds `Grants` by direct share (`sharedWithMeTime` 2026-07-27), so it
+gets 403/404 and the per-folder walk carries the run — 646 calls. A service account added as a *member*
+would take the one-sweep path instead.
+
+**Two defects the live data found, both now fixed.** Neither was visible without real Drive:
+
+1. **121 filenames contain `/`** (`12/8/25 Vanguard Response`). Concatenated raw, one filename became
+   three fake folders, and the file then classified under a funder subtree that does not exist.
+2. **Downloading rewrote names inconsistently** — Google-native files arrived as `.docx`/`.xlsx`, `/`
+   in a folder name became ` - ` in one place and `_` in another, `*` became `_`. Precise matching
+   reconciled only 608 of 1234 rows; the loose tier took it to 1145.
+
+**Still not fetchable, honestly marked:** 10 shortcut targets in other people's drives, and 6
+shortcut-to-folder targets whose subtrees this identity cannot list. Those 6 are named by path in the
+run output — they are an access request, not a bug. Asking the tree's owner to share them is what
+would close the gap.
+
+---
+
 ## 6 The remediation, in order
 
-### Fix 1 — Confirm the root cause *(still open, no longer blocking)*
+### Fix 1 — Confirm the root cause *(**done** 2026-08-06)*
 
-**Not done.** It needs credentials that are not available here, so §5.1 was built to be correct under
-either hypothesis rather than waiting: the shared-drive flags are set unconditionally, and the
-connector reports the root's `driveId` in `sync_runs.notes` on every run. The first successful run
-therefore answers this question as a side effect.
-
-It stopped blocking, but it is still worth one deliberate call — H1 and H2 differ in whether anything
-is ours to fix.
+`driveId=0AAj6r5Nb_TnNUk9PVA`. H1 confirmed — see §4 H1 and §5.2. The connector reports the `driveId`
+in `sync_runs.notes` on every run, so this stays visible rather than living only here.
 
 **The cheapest way to make that call, now available.** The service-account route needs the tree's
 owner (`chip@b-21.org`) to share it, which no one here controls. So the connector also accepts a
@@ -213,7 +263,7 @@ files or returns zero.
 > browser proves nothing about whether the walk will work. The folder must be shared with the service
 > account's `client_email`, **or** that account added as a member of the Shared Drive.
 
-### Fix 2 — Backfill Drive IDs *(mechanism landed, not yet run)*
+### Fix 2 — Backfill Drive IDs *(**dry-run verified, write not applied**)*
 
 `pnpm sync:drive`, or `drive-walk-grants.ts --dry-run` first. Identity resolution is described in
 §5.1 and in the connector doc; the rule that matters is that it **skips ambiguous matches rather than
@@ -298,9 +348,11 @@ State these as unknown rather than guessing. Each names what would settle it.
 
 | Unknown | What settles it |
 |---|---|
-| Is `Grants` in a Shared Drive? | Still unknown. Any successful `pnpm sync:drive` now prints it and records it in `sync_runs.notes` — the connector asks on every run |
-| Can the service account see the tree? | Still unknown. `drive-walk-grants.ts --dry-run`. A readable root with an empty listing now fails loudly instead of looking like success |
-| Does the rebuilt walk work at all against real Drive? | **Nothing here has been run against Drive.** The logic is covered by 24 unit tests with a fake client; the API path is unexercised |
+| ~~Is `Grants` in a Shared Drive?~~ | **Answered 2026-08-06: yes, `0AAj6r5Nb_TnNUk9PVA`** |
+| ~~Does the rebuilt walk work against real Drive?~~ | **Answered: yes** — 1257 files, 617 folders, read-by-ID verified. §5.2 |
+| Can the **service account** see the tree? | Still unknown, and still needs the tree's owner to share it with the key's `client_email`. Only the user identity has been exercised |
+| Does the write path work end to end? | Every run so far was `--dry-run`. `pnpm sync:drive` without it, then check `sync_runs` and `find_grant_documents({only_fetchable: true})` |
+| Can the 6 unlistable shortcut subtrees be reached? | An access request to the tree's owner. Named by path in the §5.2 run output |
 | Is H2 (connector indexing) also in play? | Share one deep subfolder directly, retry `parentId =` |
 | Why is `document_chunks` empty for `notion`? | Run `pnpm sync:notion` and read the `sync_runs` row |
 | Do the grant `tool_permissions` rows exist in **production**? | Needs an ECS one-off task or the bastion; RDS is not publicly reachable. Pre-existing gap — `packages/grants/CLAUDE.md` §3 |
