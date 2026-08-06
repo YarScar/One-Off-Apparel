@@ -4,7 +4,7 @@
 |---|---|
 | Audience | The developer who does the build |
 | Date | 2026-07-28, revised 2026-07-29, revised 2026-08-04, revised 2026-08-04 (G4) |
-| Status | **G1, G2, G3 and G4 passed.** Eleven modules, 162 tests, three tools registered (`grant_match_question`, `grant_build_draft`, `grant_resize_answer`). G3 passed on its restated condition of 20 parity cases; G4 passed on a restated bar of 12. Both restatements and their reasoning are in section 1. **G5 not started.** |
+| Status | **G1, G2, G3 and G4 passed.** Twelve modules, 177 tests, three tools registered (`grant_match_question`, `grant_build_draft`, `grant_resize_answer`) plus the unconnected reframe seam. G3 passed on its restated condition of 20 parity cases; G4 passed on a restated bar of 12. Both restatements and their reasoning are in section 1. **G5 not started.** |
 | Companion documents | `PROPOSAL.md` (scope), `TAD.md` (architecture, security, governance) |
 
 **What this document is.** The build detail and the release gates. It maps each prototype module to its target tool, names the functions to port, and holds the parity test tables.
