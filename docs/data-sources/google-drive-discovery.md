@@ -393,7 +393,7 @@ State these as unknown rather than guessing. Each names what would settle it.
 | ~~Does the rebuilt walk work against real Drive?~~ | **Answered: yes** — 1257 files, 617 folders, read-by-ID verified. §5.2 |
 | Can the **service account** see the tree? | Still unknown, and still needs the tree's owner to share it with the key's `client_email`. Only the user identity has been exercised |
 | ~~Does the write path work end to end?~~ | **Answered 2026-08-06 on local Postgres: yes.** 1248 of 1356 rows carry a Drive ID, 595 fetchable through the tool's default filters, re-run idempotent. §5.3 |
-| Does any of this hold in **production**? | Nothing has run against RDS, and the service account still has no access to the tree. Local only |
+| Does any of this hold in **production**? | Nothing has run against RDS. The deploy path itself is now verified — the `apps/sync` image builds and runs the sync from the task definition's own command — but the **identity** is not: the service account still has no access to the tree, so it must be shared with its `client_email` first. See "Deploying" in [google-drive-connector.md](google-drive-connector.md) |
 | Can the 6 unlistable shortcut subtrees be reached? | An access request to the tree's owner. Named by path in the §5.2 run output |
 | Is H2 (connector indexing) also in play? | Share one deep subfolder directly, retry `parentId =` |
 | Why is `document_chunks` empty for `notion`? | Run `pnpm sync:notion` and read the `sync_runs` row |

@@ -63,6 +63,43 @@ mirror had already created, which made the ~1243-file gap between the 1.6 GB mir
 corpus permanently invisible. Drive is the discovery source now; the mirror is secondary.
 `data/drive-unmatched.txt` is no longer written — that gap is the run's `created` count.
 
+### Fixed — the deployment path, which this connector had quietly broken
+
+Reviewed against the real target (ECS Fargate one-off tasks, `apps/sync` image, EventBridge) and
+verified by building and running that image locally. Five problems, four of them ours:
+
+1. **The image build was broken.** `apps/sync/Dockerfile` builds `lib-config`, `lib-db` and
+   `lib-embedding` and then every connector — but never `lib-grants`, which `google-drive` now
+   imports for classification. `tsc` cannot resolve its types, so the sync image would have failed
+   to build on the next push touching `connectors/`. Fixed by building it before the connectors.
+   **Verified**: `docker build -f apps/sync/Dockerfile` succeeds, and the taskdef's exact command
+   inside that image runs the real sync — 1253 files, `status ok`.
+2. **A failed sync exited 0.** `runSync` records the failure in `sync_runs` and returns normally, so
+   a one-off Fargate task would report success to ECS with nothing for EventBridge or a human to
+   notice. `connectors/google-drive/src/cli.ts` now sets `process.exitCode = 1` on
+   `status: 'error'`. **This is repo-wide behaviour and only google-drive is fixed** — every other
+   connector still exits 0 on failure, which is worth a follow-up.
+3. **No timeout on Drive requests.** gaxios has none by default; a hung socket in a task with no
+   timeout of its own runs until somebody kills it. Now 30s per request, with the existing backoff.
+4. **A user token could have become production auth.** The OAuth identity added for local testing
+   took precedence whenever all three variables were set — including in Secrets Manager. Now
+   refused outright when `NODE_ENV=production` or `USE_AWS_SECRETS=true`. **Verified in-image**: the
+   trio present under the image's baked `NODE_ENV=production` yields `status: noop`, not a run.
+5. **No task definition existed.** Added `infra/ecs/sync-google-drive-taskdef.json`, matching
+   `sync-notion`'s shape. Deliberately **not** scheduled in EventBridge: the corpus is
+   human-curated and rarely changes, and an hourly job would only manufacture failing tasks while
+   the access prerequisite below is unmet.
+
+**Two prerequisites production cannot satisfy by itself**, both documented in
+`docs/data-sources/google-drive-connector.md`:
+
+- The `Grants` tree must be shared with the service account's `client_email`, or that account added
+  to the shared drive. A service account does not inherit a person's "Shared with me" access, so
+  **the identity that has been verified against real Drive is not the one production will use.**
+- `grant_documents` must exist in RDS. Worth stating plainly: the `migrate` job in `deploy.yml`
+  *lists* applied migrations, it does not apply them, so no migration in this repository reaches
+  production automatically.
+
 ### Verified — the catalog write, applied to the local database
 
 `pnpm sync:drive` with writes enabled, three runs, 2026-08-06. The `sync_runs` row reads
@@ -106,7 +143,7 @@ write path.
   the demographics and outcomes reference sheets. They were landing in `unknown` and flagged for review —
   prime drafting material, hidden behind a filter nobody would think to widen. `unknown` is now 0 rows.
 
-**Suite: 279 tests across 17 files.**
+**Suite: 280 tests across 17 files.**
 
 ### Verified — the walk works against real Drive, and the root cause is confirmed
 

@@ -84,7 +84,7 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **279 tests across 17
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **280 tests across 17
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
 over stdio. `packages/grants` alone is **186 in 9 files**, with no database and no network. (207 across
 13 before 2026-08-06, when the Drive rebuild added `catalog.test.ts` and three connector suites;
@@ -108,7 +108,9 @@ with a Drive ID to **1248**, 1181 fetchable. Re-running is idempotent (1243 matc
 It discovers into `grant_documents` and writes no text or embeddings. The runs used a *user* identity
 (`GOOGLE_OAUTH_CLIENT_ID` + `_SECRET` + `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`, via
 `connectors/google-drive/scripts/authorize.ts`), which is local-testing only — the service account
-still has no access to that tree, so **production remains unverified**. `slack` is still a skeleton
+still has no access to that tree, so **the production identity remains unverified** — though the
+production *path* is: the `apps/sync` image builds and runs the sync from its task definition's own
+command, checked by building and running that image locally on 2026-08-06. `slack` is still a skeleton
 returning `status: "noop"`, awaiting `SLACK_BOT_TOKEN`.
 
 **Drive discovery is broken through the Claude Drive connector; our own path around it now works.**
@@ -223,7 +225,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 279 passed, 0 skipped, 17 files.
+# Full suite — expect 280 passed, 0 skipped, 17 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

@@ -97,10 +97,26 @@ describe('clientFromEnv', () => {
     expect(clientFromEnv({ GOOGLE_SERVICE_ACCOUNT_JSON: key })).not.toBeNull();
   });
 
-  it('prefers a fully configured user identity over the service account', () => {
-    // A machine with both is a developer's, and the identity that can actually see
-    // the tree is the person's — the service account does not inherit their access.
+  it('prefers a fully configured user identity over the service account, locally', () => {
+    // A developer's machine with both: the identity that can actually see the tree
+    // is the person's — the service account does not inherit their access.
     expect(clientFromEnv({ ...oauth, GOOGLE_SERVICE_ACCOUNT_JSON: 'ignored' })).not.toBeNull();
+  });
+
+  it('ignores a user identity in a deployed environment', () => {
+    // A user token belongs to one person and breaks the day they leave, so
+    // production must never authenticate with one — even if somebody puts the trio
+    // in Secrets Manager. ECS sets both of these signals.
+    const key = Buffer.from(JSON.stringify({ client_email: 'x@y.iam.gserviceaccount.com' })).toString(
+      'base64',
+    );
+    expect(clientFromEnv({ ...oauth, NODE_ENV: 'production' })).toBeNull();
+    expect(clientFromEnv({ ...oauth, USE_AWS_SECRETS: true })).toBeNull();
+    expect(clientFromEnv({ ...oauth, USE_AWS_SECRETS: 'true' })).toBeNull();
+    // ...and falls through to the service account when there is one.
+    expect(
+      clientFromEnv({ ...oauth, NODE_ENV: 'production', GOOGLE_SERVICE_ACCOUNT_JSON: key }),
+    ).not.toBeNull();
   });
 
   it('ignores a half-configured user identity', () => {

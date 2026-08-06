@@ -213,21 +213,36 @@ export async function disconnect(): Promise<void> {
 /**
  * Builds the client from the environment. Null when no identity is configured.
  *
- * A user identity wins when one is fully configured, because it is only ever set
- * deliberately for a local run — a machine that has both is a developer's, and the
- * one that can actually see the tree is the person's. Production sets only the
- * service account.
+ * The service account is how this runs anywhere that matters. A *user* identity is
+ * accepted only outside production, and only when all three of its variables are
+ * present: it exists because a service account does not inherit the "Shared with
+ * me" access a person has, so a developer who can already open the tree can verify
+ * the walk without waiting on the folder's owner.
+ *
+ * **A user token must never become production auth.** It belongs to one person, it
+ * grants read access to everything that person can see, and a scheduled job built on
+ * it breaks the day they leave. So in production the trio is ignored outright rather
+ * than trusted to be absent — the cost of the check is nothing, and the cost of
+ * being wrong is a sync that silently depends on somebody's account.
  */
 export function clientFromEnv(env: {
+  NODE_ENV?: string | undefined;
+  USE_AWS_SECRETS?: boolean | string | undefined;
   GOOGLE_SERVICE_ACCOUNT_JSON?: string | undefined;
   GOOGLE_OAUTH_CLIENT_ID?: string | undefined;
   GOOGLE_OAUTH_CLIENT_SECRET?: string | undefined;
   GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN?: string | undefined;
 }): DriveClient | null {
+  // Either signal means "this is a deployed environment": ECS sets both.
+  const deployed =
+    env.NODE_ENV === 'production' ||
+    env.USE_AWS_SECRETS === true ||
+    env.USE_AWS_SECRETS === 'true';
+
   const clientId = env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET;
   const refreshToken = env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN;
-  if (clientId && clientSecret && refreshToken) {
+  if (!deployed && clientId && clientSecret && refreshToken) {
     return makeOAuthDriveClient({ clientId, clientSecret, refreshToken });
   }
 

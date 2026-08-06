@@ -40,6 +40,17 @@ const ALL_DRIVES = { supportsAllDrives: true, includeItemsFromAllDrives: true } 
 /** The API maximum. Fewer pages means fewer chances to be rate-limited. */
 const PAGE_SIZE = 1000;
 
+/**
+ * Per-request timeout.
+ *
+ * gaxios has none by default, so a socket that stops responding hangs the process
+ * with no output. In production this runs as a one-off Fargate task with no
+ * timeout of its own, which means one bad connection burns a task until somebody
+ * notices. A timeout turns that into a retry, and then into a failed run with an
+ * error in `sync_runs`.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 const LIST_FIELDS =
   'nextPageToken, files(id, name, mimeType, size, modifiedTime, parents, ' +
   'shortcutDetails(targetId, targetMimeType), trashed)';
@@ -362,13 +373,16 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
     let calls = 0;
     do {
       const res = await withRetry('files.list', () =>
-        drive.files.list({
-          ...params,
-          fields: LIST_FIELDS,
-          pageSize: PAGE_SIZE,
-          ...ALL_DRIVES,
-          ...(pageToken ? { pageToken } : {}),
-        }),
+        drive.files.list(
+          {
+            ...params,
+            fields: LIST_FIELDS,
+            pageSize: PAGE_SIZE,
+            ...ALL_DRIVES,
+            ...(pageToken ? { pageToken } : {}),
+          },
+          { timeout: REQUEST_TIMEOUT_MS },
+        ),
       );
       calls += 1;
       onPage(res.data.files ?? []);
@@ -389,7 +403,10 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
   async function canRead(fileId: string): Promise<boolean> {
     try {
       await withRetry('files.get', () =>
-        drive.files.get({ fileId, fields: 'id', supportsAllDrives: true }),
+        drive.files.get(
+          { fileId, fields: 'id', supportsAllDrives: true },
+          { timeout: REQUEST_TIMEOUT_MS },
+        ),
       );
       return true;
     } catch (err) {
@@ -522,12 +539,15 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
   return {
     async resolveRoot(folderId): Promise<DriveRoot> {
       const res = await withRetry('files.get', () =>
-        drive.files.get({
-          fileId: folderId,
-          fields: 'id, name, mimeType, driveId',
-          // `get` needs the support flag too, or a shared-drive folder 404s.
-          supportsAllDrives: true,
-        }),
+        drive.files.get(
+          {
+            fileId: folderId,
+            fields: 'id, name, mimeType, driveId',
+            // `get` needs the support flag too, or a shared-drive folder 404s.
+            supportsAllDrives: true,
+          },
+          { timeout: REQUEST_TIMEOUT_MS },
+        ),
       );
       if (res.data.mimeType !== FOLDER_MIME) {
         throw new Error(`${folderId} is not a folder (got ${String(res.data.mimeType)})`);
@@ -580,7 +600,7 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
       const res = await withRetry('files.export', () =>
         drive.files.export(
           { fileId, mimeType: 'text/plain' },
-          { responseType: 'text' },
+          { responseType: 'text', timeout: REQUEST_TIMEOUT_MS },
         ),
       );
       return typeof res.data === 'string' ? res.data : null;

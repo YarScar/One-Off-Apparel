@@ -48,6 +48,52 @@ pnpm sync:drive
 
 The walk is cheap enough to schedule (see *Efficiency* below) but a catalog of a
 human-curated Drive does not change hourly, and nothing yet depends on it being fresh.
+Leaving it unscheduled also means the production prerequisites below can be unmet without
+generating a failing task every hour.
+
+## Deploying
+
+The connector ships inside the shared `lp-internal/sync` image, which
+[`deploy.yml`](../../.github/workflows/deploy.yml) rebuilds whenever anything under
+`connectors/` or `packages/` changes. Existing task definitions pin `sync:latest`, so a new
+image is picked up by the next task run.
+
+Two things are **not** automated, and the connector will fail loudly rather than quietly if
+either is missing:
+
+1. **Register the task definition, once.** No workflow registers `infra/ecs/*.json` — every
+   connector's family was registered by hand.
+   ```bash
+   AWS_PROFILE=lp-internal aws ecs register-task-definition \
+     --cli-input-json "$(sed "s/\${AWS_ACCOUNT_ID}/851725317896/g" infra/ecs/sync-google-drive-taskdef.json)"
+   ```
+   Then run it the same way as any other one-off sync (see the root [CLAUDE.md](../../CLAUDE.md)).
+2. **Share the tree with the service account.** This is the prerequisite that decides whether
+   any of this works in production, and it needs whoever owns the `Grants` tree — the `.gdoc`
+   stubs inside it record `chip@b-21.org`. Until then the run ends with an error in `sync_runs`
+   naming exactly this, and the task exits non-zero.
+   ```bash
+   AWS_PROFILE=lp-internal aws secretsmanager get-secret-value \
+     --secret-id lp-internal/google --query SecretString --output text \
+     | python3 -c 'import json,sys,base64; print(json.loads(base64.b64decode(json.load(sys.stdin)["GOOGLE_SERVICE_ACCOUNT_JSON"]))["client_email"])'
+   ```
+
+Also worth knowing before the first production run:
+
+- **`grant_documents` must exist in RDS.** The `migrate` job in `deploy.yml` *lists* applied
+  migrations; it does not apply them. Without
+  `migrations/20260806000000_add_grant_documents_catalog`, the sync fails on a missing relation.
+- **`GOOGLE_DRIVE_GRANTS_FOLDER_ID` needs no task-definition entry.** With
+  `USE_AWS_SECRETS=true`, `loadEnv` pulls the whole `lp-internal/google` secret, so adding the key
+  to that JSON is enough. Omit it and the known `Grants` folder ID is used.
+- **A user identity is refused in production.** `NODE_ENV=production` or `USE_AWS_SECRETS=true`
+  makes `clientFromEnv` ignore the OAuth trio outright, even if it is present in Secrets Manager —
+  a scheduled job must not depend on one person's Google account.
+- **Every Drive request times out after 30s** and retries with backoff. gaxios has no default
+  timeout, and a hung socket in a one-off Fargate task is a task that runs until someone notices.
+- **The task exits non-zero when the run fails.** `runSync` records the failure and returns
+  normally, so the connector's CLI sets the exit code itself; without that, a failed task reports
+  success to ECS.
 
 ## Auth
 
