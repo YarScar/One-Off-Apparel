@@ -20,6 +20,7 @@ import {
   needsReview,
   normalizePath,
   parseYear,
+  scopedNameKey,
 } from './catalog.js';
 
 describe('parseYear', () => {
@@ -134,6 +135,19 @@ describe('classifyPath', () => {
   it('calls a file directly under Grants org reference', () => {
     expect(classifyPath('Grants/990.pdf').collection).toBe('org_reference');
   });
+
+  it('knows the two organization-level folders real Drive turned out to have', () => {
+    // Found by walking Drive: both hold prime drafting material — the live response
+    // and report templates, and the demographics/outcomes reference sheets — and both
+    // were landing in `unknown` and flagged for review.
+    expect(classifyPath('Grants/Templates/Grant Response Template (MAKE A COPY)')).toMatchObject({
+      collection: 'org_reference',
+      doc_kind: 'template',
+    });
+    expect(classifyPath('Grants/Key Statistics/Launchpad Demographics').collection).toBe(
+      'org_reference',
+    );
+  });
 });
 
 describe('needsReview', () => {
@@ -187,6 +201,27 @@ describe('driveUrlFor', () => {
     );
     expect(driveUrlFor('X', 'application/pdf')).toBe('https://drive.google.com/file/d/X/view');
     expect(driveUrlFor('X', null)).toBe('https://drive.google.com/file/d/X/view');
+  });
+});
+
+describe('scopedNameKey', () => {
+  it('puts the same filename under one funder in one scope', () => {
+    expect(scopedNameKey('Grants/Current and Past/GSK/2026/budget.xlsx')).toBe(
+      scopedNameKey('Grants/Current and Past/GSK/2026/Finances/budget'),
+    );
+  });
+
+  it('separates the same filename under different funders', () => {
+    expect(scopedNameKey('Grants/Current and Past/GSK/2026/budget.xlsx')).not.toBe(
+      scopedNameKey('Grants/Current and Past/Truist/2026/budget.xlsx'),
+    );
+  });
+
+  it('shares one scope across the organization-level folders', () => {
+    // `Grants/x` and `Grants/Templates/x` are the same document after a tidy-up.
+    expect(scopedNameKey('Grants/Grant Report Template (MAKE A COPY).docx')).toBe(
+      scopedNameKey('Grants/Templates/Grant Report Template (MAKE A COPY)'),
+    );
   });
 });
 

@@ -132,6 +132,57 @@ describe('reconcile', () => {
     expect(resolutions[0]?.matchedBy).toBe('exact_path');
   });
 
+  it('matches a file that moved deeper inside the same funder folder', () => {
+    // 18 rows in the real corpus are this: documents get reorganized, and no
+    // path-based key can see that.
+    const { resolutions } = reconcile(
+      [
+        driveFile(
+          'Grants/Prospects and Proposals/Philadelphia Department of Commerce/2025 Grants/Grant Application/Responses/Launchpad Proposal Narrative',
+          'D1',
+        ),
+      ],
+      [
+        row(
+          'r1',
+          'Grants/Prospects and Proposals/Philadelphia Department of Commerce/2025 Grants/Launchpad Proposal Narrative.docx',
+        ),
+      ],
+    );
+    expect(resolutions[0]?.rowId).toBe('r1');
+    expect(resolutions[0]?.matchedBy).toBe('scoped_name');
+  });
+
+  it('refuses the same filename under a different funder', () => {
+    // `Launchpad Team 012023` really does exist under two funders here. Matching
+    // them would stamp McLean's Drive ID onto an American Heart Association row —
+    // the confident wrong match this whole ordering exists to prevent.
+    const { resolutions } = reconcile(
+      [driveFile('Grants/Current and Past/McLean Contributionship/Attachments/Launchpad Team 012023.pdf', 'D1')],
+      [
+        row(
+          'r1',
+          'Grants/Prospects and Proposals/American Heart Association/2022/Responses/Launchpad Team 012023.docx',
+        ),
+      ],
+    );
+    expect(resolutions[0]?.rowId).toBeNull();
+    expect(resolutions[0]?.matchedBy).toBeNull();
+  });
+
+  it('refuses a scoped-name match when two Drive files share the name', () => {
+    // Both would claim the one row that matches either, and the loser would take a
+    // new row with the winner's identity half-applied.
+    const { resolutions } = reconcile(
+      [
+        driveFile('Grants/Current and Past/GSK/2026/a/budget', 'D1'),
+        driveFile('Grants/Current and Past/GSK/2026/b/budget', 'D2'),
+      ],
+      [row('r1', 'Grants/Current and Past/GSK/2026/budget.xlsx')],
+    );
+    expect(resolutions.every((r) => r.rowId === null)).toBe(true);
+  });
+
   it('creates a row for a Drive file the mirror never held', () => {
     // Drive holds material the mirror never did — 655 files on the first real
     // walk — so this is an ordinary case, not an edge one.

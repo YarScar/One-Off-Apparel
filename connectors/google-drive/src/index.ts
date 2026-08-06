@@ -6,7 +6,13 @@ import { clientFromEnv, summarize, syncGrantCatalog, DEFAULT_GRANTS_FOLDER_ID } 
 export type SyncResult = SyncRunRecord;
 
 export { syncGrantCatalog, summarize, clientFromEnv, DEFAULT_GRANTS_FOLDER_ID } from './sync.js';
-export { makeDriveClient, makeOAuthDriveClient, buildPaths, toDriveFile } from './drive-client.js';
+export {
+  makeDriveClient,
+  makeOAuthDriveClient,
+  buildPaths,
+  dedupeById,
+  toDriveFile,
+} from './drive-client.js';
 export type { DriveClient, DriveFile, DriveRoot } from './drive-client.js';
 export { reconcile } from './reconcile.js';
 export type { CatalogRow, Resolution } from './reconcile.js';

@@ -4,8 +4,8 @@
 `fix/google-drive-discovery`. `Grants` is in a Shared Drive (`driveId=0AAj6r5Nb_TnNUk9PVA`), and with
 `supportsAllDrives` + `includeItemsFromAllDrives` set the same human identity that the Claude Drive
 connector failed with enumerated **1257 files across 617 folders**. Reading by ID was verified too.
-The catalog write has **not** been applied yet — every run so far was `--dry-run`.
-**Owner:** the branch above. What it landed is in §5.1; the live results are in §5.2.
+The catalog write **has now been applied to the local database** — see §5.3.
+**Owner:** the branch above. What it landed is in §5.1; the live results are in §5.2 and §5.3.
 
 Read this before touching `connectors/google-drive/` or the Drive MCP path.
 [`google-drive-connector.md`](google-drive-connector.md) beside it now describes the connector as
@@ -215,6 +215,47 @@ shortcut-to-folder targets whose subtrees this identity cannot list. Those 6 are
 run output — they are an access request, not a bug. Asking the tree's owner to share them is what
 would close the gap.
 
+### 5.3 The write, applied — 2026-08-06, local Postgres
+
+`pnpm sync:drive`, same identity, writes enabled. Third run's `sync_runs` row:
+
+```
+status ok | recordsUpserted 1253 | 307s
+1253 files via folder walk (617 folders), drive-scoped sweep refused in 642 API calls
+1248 rows updated, 5 created, 4 ambiguous, 18 shortcuts resolved (9 unreadable),
+6 folders unlistable, 4 duplicate paths dropped, 108 catalog rows not seen
+matched by id/exact/normalized/loose/scoped-name: 1243/5/0/0/0
+```
+
+| Before | After |
+|---|---|
+| 1252 rows, **9** with a Drive ID, **9** fetchable | 1356 rows, **1248** with a Drive ID, **1181** fetchable |
+| `find_grant_documents({only_fetchable: true})` → 9 | → **595** (after the default archive/external exclusions) |
+| 393 `needs_review`, 237 with no year | 423 `needs_review`, 251 with no year |
+
+**Fix 2's acceptance condition is met**: on the order of 1000 fetchable rows, not 9.
+
+Verified through the tool itself, not just SQL — `find_grant_documents({funder: 'truist'})` returns 5
+rows, all fetchable, including `8/10/2026 Truist Application`. That is the file §2.1 records Drive
+search as never finding.
+
+**The re-run is idempotent**: 1243 of 1253 files matched on `drive_file_id`, 0 rows created beyond the
+5 that are refused a match by design (ambiguous), and the 5% integrity guard did not warn on any run.
+
+**A fourth defect, found only by writing.** The first write attempt failed on
+`Unique constraint failed on (drive_file_id)` after four minutes: three Drive files are filed at two or
+three paths each — a shortcut inside an application folder plus the file itself under reporting — and
+`grant_documents.drive_file_id` is unique. One Drive file is now one row (`dedupeById`), keeping the
+instance where the file actually lives and reporting the dropped alias paths. **This is the argument for
+running the write rather than trusting a dry run:** the dry run counted the same three files three
+times and reported success.
+
+**Known residue, 8 rows.** Six catalog rows point at documents Drive has since moved into
+`Grants/Templates/` and `Grants/Key Statistics/`, and their ID-bearing replacements now exist too, so
+the catalog holds both. That is an artifact of this session's run order — the same-funder-filename tier
+that would have merged them landed after those rows were created — and not a code path anyone will hit
+again from a clean load. They are visible as `collection = 'org_reference' AND drive_file_id IS NULL`.
+
 ---
 
 ## 6 The remediation, in order
@@ -263,7 +304,7 @@ files or returns zero.
 > browser proves nothing about whether the walk will work. The folder must be shared with the service
 > account's `client_email`, **or** that account added as a member of the Shared Drive.
 
-### Fix 2 — Backfill Drive IDs *(**dry-run verified, write not applied**)*
+### Fix 2 — Backfill Drive IDs *(**done** on the local database — §5.3)*
 
 `pnpm sync:drive`, or `drive-walk-grants.ts --dry-run` first. Identity resolution is described in
 §5.1 and in the connector doc; the rule that matters is that it **skips ambiguous matches rather than
@@ -351,7 +392,8 @@ State these as unknown rather than guessing. Each names what would settle it.
 | ~~Is `Grants` in a Shared Drive?~~ | **Answered 2026-08-06: yes, `0AAj6r5Nb_TnNUk9PVA`** |
 | ~~Does the rebuilt walk work against real Drive?~~ | **Answered: yes** — 1257 files, 617 folders, read-by-ID verified. §5.2 |
 | Can the **service account** see the tree? | Still unknown, and still needs the tree's owner to share it with the key's `client_email`. Only the user identity has been exercised |
-| Does the write path work end to end? | Every run so far was `--dry-run`. `pnpm sync:drive` without it, then check `sync_runs` and `find_grant_documents({only_fetchable: true})` |
+| ~~Does the write path work end to end?~~ | **Answered 2026-08-06 on local Postgres: yes.** 1248 of 1356 rows carry a Drive ID, 595 fetchable through the tool's default filters, re-run idempotent. §5.3 |
+| Does any of this hold in **production**? | Nothing has run against RDS, and the service account still has no access to the tree. Local only |
 | Can the 6 unlistable shortcut subtrees be reached? | An access request to the tree's owner. Named by path in the §5.2 run output |
 | Is H2 (connector indexing) also in play? | Share one deep subfolder directly, retry `parentId =` |
 | Why is `document_chunks` empty for `notion`? | Run `pnpm sync:notion` and read the `sync_runs` row |

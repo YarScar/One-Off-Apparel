@@ -21,13 +21,17 @@
  *      Google-native files to Office formats and rewrote characters inconsistently
  *      (`/` became ` - ` in one folder name and `_` in another). Measured against the
  *      real corpus this tier recovers 537 rows the precise keys miss.
- *   5. No match — the file exists in Drive but not in the catalog. Most of Drive was
+ *   5. Same filename within the same funder folder, and only if unique **on both
+ *      sides** — the file-moved-deeper case, 18 rows in the real corpus. Filename
+ *      alone would be reckless: `Launchpad Team 012023` exists under two funders
+ *      here, and matching those would stamp one funder's ID onto the other's row.
+ *   6. No match — the file exists in Drive but not in the catalog. Most of Drive was
  *      never mirrored, so this is the common case.
  *
  * Pure: no database, no network. The sync applies what this returns.
  */
 
-import { looseKey, normalizePath } from '@lp-ai/lib-grants';
+import { looseKey, normalizePath, scopedNameKey } from '@lp-ai/lib-grants';
 
 import type { DriveFile } from './drive-client.js';
 
@@ -37,7 +41,12 @@ export interface CatalogRow {
   driveFileId: string | null;
 }
 
-export type MatchedBy = 'drive_id' | 'exact_path' | 'normalized_path' | 'loose_path';
+export type MatchedBy =
+  | 'drive_id'
+  | 'exact_path'
+  | 'normalized_path'
+  | 'loose_path'
+  | 'scoped_name';
 
 export interface Resolution {
   file: DriveFile;
@@ -61,6 +70,7 @@ export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResu
   const byExactPath = new Map<string, string>();
   const byNormalizedPath = new Map<string, string[]>();
   const byLoosePath = new Map<string, string[]>();
+  const byScopedName = new Map<string, string[]>();
 
   for (const row of rows) {
     if (row.driveFileId !== null) byDriveId.set(row.driveFileId, row.id);
@@ -69,6 +79,16 @@ export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResu
     byNormalizedPath.set(normalized, [...(byNormalizedPath.get(normalized) ?? []), row.id]);
     const loose = looseKey(row.path);
     byLoosePath.set(loose, [...(byLoosePath.get(loose) ?? []), row.id]);
+    const scoped = scopedNameKey(row.path);
+    byScopedName.set(scoped, [...(byScopedName.get(scoped) ?? []), row.id]);
+  }
+
+  // The Drive side has to be unique too: two files of the same name in one funder's
+  // subtree would otherwise both claim the single row that matches either.
+  const driveScopedCounts = new Map<string, number>();
+  for (const file of files) {
+    const key = scopedNameKey(file.path);
+    driveScopedCounts.set(key, (driveScopedCounts.get(key) ?? 0) + 1);
   }
 
   /**
@@ -83,6 +103,7 @@ export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResu
     exact_path: 0,
     normalized_path: 0,
     loose_path: 0,
+    scoped_name: 0,
     created: 0,
     ambiguous: 0,
   };
@@ -117,6 +138,18 @@ export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResu
       matchedBy = 'loose_path';
     } else if (loose.length > 1) {
       ambiguousWith = loose;
+    } else {
+      const key = scopedNameKey(file.path);
+      const scoped = byScopedName.get(key) ?? [];
+      if (
+        scoped.length === 1 &&
+        scoped[0] &&
+        !claimed.has(scoped[0]) &&
+        driveScopedCounts.get(key) === 1
+      ) {
+        rowId = scoped[0];
+        matchedBy = 'scoped_name';
+      }
     }
 
     if (rowId !== null) {

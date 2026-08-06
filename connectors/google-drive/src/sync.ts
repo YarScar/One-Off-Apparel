@@ -55,6 +55,8 @@ export interface CatalogSyncResult {
   unreadable: number;
   /** Folders referenced but not listable — skipped, not fatal. */
   inaccessibleFolders: string[];
+  /** Alias paths dropped because one Drive file is filed in several places. */
+  duplicatePaths: string[];
   shortcutsResolved: number;
   /** Catalog rows the walk never reached. Left alone, not deleted. */
   notSeen: number;
@@ -69,10 +71,11 @@ export function summarize(r: CatalogSyncResult): string {
     `${String(r.created)} created, ${String(r.ambiguous)} ambiguous (flagged for review), ` +
     `${String(r.shortcutsResolved)} shortcuts resolved (${String(r.unreadable)} unreadable), ` +
     `${String(r.inaccessibleFolders.length)} folders unlistable, ` +
+    `${String(r.duplicatePaths.length)} duplicate paths dropped, ` +
     `${String(r.notSeen)} catalog rows not seen | ` +
-    `matched by id/exact/normalized/loose: ${String(r.matchedBy.drive_id)}/` +
+    `matched by id/exact/normalized/loose/scoped-name: ${String(r.matchedBy.drive_id)}/` +
     `${String(r.matchedBy.exact_path)}/${String(r.matchedBy.normalized_path)}/` +
-    `${String(r.matchedBy.loose_path)} | ` +
+    `${String(r.matchedBy.loose_path)}/${String(r.matchedBy.scoped_name)} | ` +
     // Recorded because it is the answer to the open question in the discovery
     // doc, and a run's notes are where it will still be readable next month.
     `driveId=${r.root.driveId ?? 'none (My Drive)'}`
@@ -100,10 +103,14 @@ export async function syncGrantCatalog(
       (root.driveId !== null ? `shared drive ${root.driveId}` : 'My Drive'),
   );
 
-  const { files, apiCalls, strategy, inaccessibleFolders } = await client.listTree(root);
+  const { files, apiCalls, strategy, inaccessibleFolders, duplicatePaths } =
+    await client.listTree(root);
   progress(`${String(files.length)} files via ${strategy} in ${String(apiCalls)} API calls`);
   for (const folder of inaccessibleFolders) {
     progress(`  could not list (shortcut into an inaccessible drive): ${folder}`);
+  }
+  for (const duplicate of duplicatePaths) {
+    progress(`  one file, several paths — kept one row: ${duplicate}`);
   }
 
   // An identity that can read the root but list nothing inside it is the original
@@ -186,6 +193,7 @@ export async function syncGrantCatalog(
     shortcutsResolved: files.filter((f) => f.viaShortcutId !== null).length,
     unreadable: files.filter((f) => f.unreadable).length,
     inaccessibleFolders,
+    duplicatePaths,
     notSeen: rows.filter((r) => !seenRowIds.has(r.id)).length,
     files,
   };

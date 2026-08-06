@@ -17,7 +17,14 @@ import type { DriveClient, DriveFile, DriveRoot } from './drive-client.js';
 function fakeClient(root: Partial<DriveRoot>, files: DriveFile[]): DriveClient {
   return {
     resolveRoot: () => Promise.resolve({ id: 'root', name: 'Grants', driveId: null, ...root }),
-    listTree: () => Promise.resolve({ files, apiCalls: 1, strategy: 'test', inaccessibleFolders: [] }),
+    listTree: () =>
+      Promise.resolve({
+        files,
+        apiCalls: 1,
+        strategy: 'test',
+        inaccessibleFolders: [],
+        duplicatePaths: [],
+      }),
     exportText: () => Promise.resolve(null),
   };
 }

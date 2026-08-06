@@ -98,6 +98,16 @@ export interface TreeListing {
   strategy: string;
   /** Folders the identity could see referenced but not list. Skipped, not fatal. */
   inaccessibleFolders: string[];
+  /**
+   * Alias paths dropped because the same Drive file is filed in more than one place.
+   *
+   * A curated tree does this deliberately — a budget shortcut inside the application
+   * folder, the file itself under reporting — but `grant_documents.drive_file_id` is
+   * unique, so one Drive file is one row. The canonical instance is kept and these
+   * are reported, because a grant writer seeing the same document three times is its
+   * own kind of wrong.
+   */
+  duplicatePaths: string[];
 }
 
 export interface DriveClient {
@@ -257,6 +267,37 @@ export function buildPaths(
   return paths;
 }
 
+/**
+ * Reduces the walk to one entry per Drive file.
+ *
+ * Three files in the real corpus appear at two or three paths each, because a
+ * shortcut points at a file that also lives elsewhere in the tree. The direct
+ * instance wins — a shortcut is a pointer, and the file's own location is where it
+ * lives — with the lexicographically first path as the tie-break so a re-run makes
+ * the same choice.
+ *
+ * Exported for testing: the `drive_file_id` unique constraint means getting this
+ * wrong fails the whole sync, which is exactly what it did before this existed.
+ */
+export function dedupeById(files: DriveFile[]): { files: DriveFile[]; duplicatePaths: string[] } {
+  const best = new Map<string, DriveFile>();
+  const duplicatePaths: string[] = [];
+
+  for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
+    const held = best.get(file.id);
+    if (held === undefined) {
+      best.set(file.id, file);
+      continue;
+    }
+    // Prefer the direct instance; otherwise the first path already held wins.
+    const replace = held.viaShortcutId !== null && file.viaShortcutId === null;
+    best.set(file.id, replace ? file : held);
+    duplicatePaths.push(`${(replace ? held : file).path} (same file as ${(replace ? file : held).path})`);
+  }
+
+  return { files: [...best.values()], duplicatePaths };
+}
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
@@ -389,9 +430,11 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
       const mapped = toDriveFile(f, path);
       if (mapped) files.push(mapped);
     }
+    const deduped = dedupeById(files);
     return {
-      files,
-      apiCalls: apiCalls + (await verifyShortcutTargets(files)),
+      files: deduped.files,
+      duplicatePaths: deduped.duplicatePaths,
+      apiCalls: apiCalls + (await verifyShortcutTargets(deduped.files)),
       strategy: `shared-drive sweep (${driveId})`,
       // A sweep sees the whole drive, so nothing inside it was unreachable. A
       // shortcut pointing out of the drive is reported per-file as `unreadable`.
@@ -466,9 +509,11 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
       }
     }
 
+    const deduped = dedupeById(files);
     return {
-      files,
-      apiCalls: apiCalls + (await verifyShortcutTargets(files)),
+      files: deduped.files,
+      duplicatePaths: deduped.duplicatePaths,
+      apiCalls: apiCalls + (await verifyShortcutTargets(deduped.files)),
       strategy: `folder walk (${String(folders)} folders)`,
       inaccessibleFolders,
     };

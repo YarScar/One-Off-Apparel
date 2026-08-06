@@ -14,7 +14,9 @@
 import { describe, it, expect } from 'vitest';
 import type { drive_v3 } from 'googleapis';
 
-import { buildPaths, shortcutFolderTarget, toDriveFile } from './drive-client.js';
+import type { DriveFile } from './drive-client.js';
+
+import { buildPaths, dedupeById, shortcutFolderTarget, toDriveFile } from './drive-client.js';
 
 const FOLDER = 'application/vnd.google-apps.folder';
 const SHORTCUT = 'application/vnd.google-apps.shortcut';
@@ -115,6 +117,50 @@ describe('buildPaths', () => {
       file('d1', 'x.docx', 'a'),
     ];
     expect(buildPaths(cyclic, ROOT).has('d1')).toBe(false);
+  });
+});
+
+describe('dedupeById', () => {
+  const at = (path: string, id: string, viaShortcutId: string | null = null): DriveFile => ({
+    id,
+    name: path.split('/').pop() ?? path,
+    mimeType: DOCX,
+    path,
+    size: null,
+    modifiedTime: null,
+    viaShortcutId,
+    unreadable: false,
+    contentClass: 'text',
+    ext: '.docx',
+    url: `https://drive.google.com/file/d/${id}/view`,
+  });
+
+  it('keeps one row per Drive file, preferring where the file actually lives', () => {
+    // Three files in the real corpus are filed at two or three paths, because a
+    // shortcut points at a file that also lives elsewhere. `drive_file_id` is
+    // unique, so before this the whole sync died on a constraint violation.
+    const { files, duplicatePaths } = dedupeById([
+      at('Grants/CCFF/2024 Grant/Grant Application/Finances/Budget', 'X', 'shortcut1'),
+      at('Grants/CCFF/2024 Grant/Reporting/Budget', 'X'),
+      at('Grants/CCFF/other.docx', 'Y'),
+    ]);
+
+    expect(files).toHaveLength(2);
+    expect(files.find((f) => f.id === 'X')?.path).toBe('Grants/CCFF/2024 Grant/Reporting/Budget');
+    expect(duplicatePaths).toHaveLength(1);
+    expect(duplicatePaths[0]).toContain('Grant Application/Finances/Budget');
+  });
+
+  it('picks the same survivor whatever order the walk returned', () => {
+    const a = at('Grants/b/x', 'X', 's1');
+    const b = at('Grants/a/x', 'X', 's2');
+    expect(dedupeById([a, b]).files[0]?.path).toBe(dedupeById([b, a]).files[0]?.path);
+  });
+
+  it('leaves distinct files alone', () => {
+    const { files, duplicatePaths } = dedupeById([at('Grants/a', 'A'), at('Grants/b', 'B')]);
+    expect(files).toHaveLength(2);
+    expect(duplicatePaths).toHaveLength(0);
   });
 });
 

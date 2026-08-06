@@ -106,7 +106,17 @@ const COLLECTION_BY_SEGMENT = new Map<string, Collection>([
   ['prospects and proposals', 'prospects'],
   ['current and past', 'current_past'],
   ['launchpad program descriptions', 'program_descriptions'],
+  // Two organization-level folders the first pass did not know about, found by
+  // walking real Drive: `Templates` holds the live grant response and report
+  // templates, `Key Statistics` the demographics and outcomes reference sheets.
+  // Both are prime drafting material, and both were landing in `unknown` and
+  // flagged for review. `doc_kind` still distinguishes them.
+  ['templates', 'org_reference'],
+  ['key statistics', 'org_reference'],
 ]);
+
+/** Collections whose second path segment names a funder. */
+const FUNDER_COLLECTIONS = new Set(['prospects and proposals', 'current and past']);
 
 /**
  * Folder segment -> document kind, checked deepest-first so that
@@ -486,6 +496,31 @@ export function looseKey(path: string): string {
     .replace(COMPARABLE_EXT, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+/**
+ * A key for "same filename, same funder" — the file-moved-deeper case.
+ *
+ * Documents get reorganized: 18 catalog rows point at a file Drive now keeps one or
+ * two folders further down, and no path-based key can see that. The filename alone
+ * would be reckless — `Launchpad Team 012023` exists under two different funders in
+ * this very corpus, and matching those would stamp one funder's Drive ID onto the
+ * other's row, which is the confident-wrong-match failure this layer exists to avoid.
+ *
+ * So the key is scoped to the funder folder. Files outside a funder collection share
+ * the empty scope, which is narrow enough in practice: the organization-level folders
+ * hold a handful of distinctly-named templates and statistics sheets.
+ *
+ * Callers must additionally require the key to be unique on **both** sides.
+ */
+export function scopedNameKey(path: string): string {
+  const segments = path.split('/');
+  const collection = segments[1]?.toLowerCase() ?? '';
+  const scope =
+    segments.length > 3 && FUNDER_COLLECTIONS.has(collection)
+      ? looseKey(`${collection}/${segments[2] ?? ''}`)
+      : '';
+  return `${scope}||${looseKey(segments[segments.length - 1] ?? '')}`;
 }
 
 export function normalizePath(path: string): string {

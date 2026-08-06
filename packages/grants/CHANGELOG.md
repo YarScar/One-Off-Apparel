@@ -63,6 +63,51 @@ mirror had already created, which made the ~1243-file gap between the 1.6 GB mir
 corpus permanently invisible. Drive is the discovery source now; the mirror is secondary.
 `data/drive-unmatched.txt` is no longer written — that gap is the run's `created` count.
 
+### Verified — the catalog write, applied to the local database
+
+`pnpm sync:drive` with writes enabled, three runs, 2026-08-06. The `sync_runs` row reads
+`status ok`, `recordsUpserted 1253`, and the 5% integrity guard did not warn.
+
+| Before | After |
+|---|---|
+| 1252 rows, **9** with a Drive ID, **9** fetchable | 1356 rows, **1248** with a Drive ID, **1181** fetchable |
+| `find_grant_documents({only_fetchable: true})` → 9 | → **595** (after the default archive/external exclusions) |
+
+Checked through the tool rather than only in SQL: `find_grant_documents({funder: 'truist'})` returns 5
+rows, all fetchable, including `8/10/2026 Truist Application` — the file the discovery doc records
+Drive search as never finding. **The re-run is idempotent**: 1243 of 1253 files matched on
+`drive_file_id`, and the only rows still not matched are the ones deliberately refused as ambiguous.
+
+Production is untouched and unverified: nothing has run against RDS, and the service account still has
+no access to the tree.
+
+### Fixed — one Drive file was trying to become three catalog rows
+
+The first write attempt died four minutes in on `Unique constraint failed on (drive_file_id)`. Three
+files in the corpus are filed at two or three paths each — a shortcut inside an application folder plus
+the file itself under reporting — which is ordinary curation, but `grant_documents.drive_file_id` is
+unique. `dedupeById` now keeps the instance where the file actually lives (a shortcut is a pointer) and
+reports the dropped alias paths in the run notes.
+
+**Worth stating plainly: the dry run reported success on this.** It counted the same three files three
+times and never wrote, so nothing surfaced. A dry run proves the read path; only the write proves the
+write path.
+
+### Added — a fifth identity tier, and two collections real Drive turned out to have
+
+- **Same filename inside the same funder folder**, used only after every precise key misses and only
+  when the name is unique on *both* sides. Documents get reorganized: 18 catalog rows pointed at a file
+  Drive now keeps one or two folders deeper, and no path-based key can see that. Scoped to the funder
+  because `Launchpad Team 012023` exists under two different funders in this corpus — matching those
+  would stamp one funder's Drive ID onto the other's row, which is the confident-wrong-match failure
+  this layer exists to prevent, and there is a test pinning that refusal.
+- **`Templates` and `Key Statistics`** map to the `org_reference` collection. Both are top-level folders
+  in the real tree that classification did not know: the live grant response and report templates, and
+  the demographics and outcomes reference sheets. They were landing in `unknown` and flagged for review —
+  prime drafting material, hidden behind a filter nobody would think to widen. `unknown` is now 0 rows.
+
+**Suite: 279 tests across 17 files.**
+
 ### Verified — the walk works against real Drive, and the root cause is confirmed
 
 Run 2026-08-06 as `ddelu0068@launchpadphilly.org` through the user-identity path, `--dry-run`, against
@@ -109,7 +154,7 @@ All three produced *plausible* catalog rows, which is the dangerous kind of wron
 The walk also gained a visited-set: a shortcut can point at a folder already in the tree, or at an
 ancestor of it, and following one without that is an infinite walk.
 
-**Suite: 269 tests across 17 files.**
+**Suite: 269 tests across 17 files** at that point.
 
 ### Added — a second Drive identity, so the walk can be tested without waiting on the folder's owner
 

@@ -33,6 +33,7 @@ local-mirror index uses, so a file classifies identically however it was discove
 |---|---|
 | `drive_file_id`, `drive_url`, `mime_type`, `size_bytes`, `modified_at` | Drive API |
 | `collection`, `funder`, `year`, `doc_kind` | inferred from the path |
+| — | `Templates` and `Key Statistics` are organization-level collections, not funders |
 | `excluded`, `external_reference`, `archive_only` | inferred from the path (policy flags) |
 | `content_class` | Drive MIME type, falling back to the file extension |
 | `needs_review` | set when inference was not decisive, or the row was ambiguous |
@@ -94,8 +95,11 @@ job that depends on one person's account breaks when they leave.
    exact signature, so the connector **throws** rather than reporting a successful zero-record run.
    The same reasoning applies one level down: a folder reached through a shortcut is probed before
    being walked, so an inaccessible subtree is named, not silently read as empty.
-4. Reconcile each Drive file against the catalog — see *Identity*.
-5. Upsert. Matched rows are updated; unmatched files become new rows.
+4. Reduce to one entry per Drive file. Three files in the corpus are filed at two or three paths
+   (a shortcut in an application folder, the file itself under reporting) and `drive_file_id` is
+   unique, so the instance where the file lives wins and the alias paths are reported.
+5. Reconcile each Drive file against the catalog — see *Identity*.
+6. Upsert. Matched rows are updated; unmatched files become new rows.
 
 ### Efficiency
 
@@ -134,7 +138,11 @@ strongest evidence first:
    dropped. No single substitution rule covers what downloading did: Drive's `Meetings / Site Visit`
    came down as `Meetings - Site Visit` in one place and `Meetings _ Site Visit` in another. On the
    real corpus this tier recovers 538 rows the precise keys miss.
-5. **No match** → a new row.
+5. **Same filename inside the same funder folder**, and only when unique on *both* sides — the
+   file-moved-deeper case, 18 rows in the real corpus. Filename alone would be reckless:
+   `Launchpad Team 012023` exists under two different funders here, and matching those would stamp one
+   funder's Drive ID onto the other's row.
+6. **No match** → a new row.
 
 Two candidates is never resolved by picking one — 60 files hit that on the real corpus and became new
 rows flagged `needs_review`. A wrong ID silently serves the wrong document to a grant writer, which

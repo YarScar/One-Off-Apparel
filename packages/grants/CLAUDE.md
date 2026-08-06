@@ -84,7 +84,7 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **269 tests across 17
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **279 tests across 17
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
 over stdio. `packages/grants` alone is **186 in 9 files**, with no database and no network. (207 across
 13 before 2026-08-06, when the Drive rebuild added `catalog.test.ts` and three connector suites;
@@ -102,13 +102,13 @@ closed. Of the 30 rows, 6 have no registered tool, all `future` placeholders —
 `grant_resize_answer` row was claimed at G4, so no grant tool is pending a registration any more.
 
 **Connectors** (root `CLAUDE.md` holds the detail): `google-sheets`, `aplos`, and `notion` are live.
-`google-drive` is **implemented and verified read-only against real Drive** on 2026-08-06 — 1257 files
-across 617 folders enumerated, read-by-ID confirmed — but **no catalog write has been applied**: every
-run so far was `--dry-run`. It discovers into `grant_documents` and writes no text or embeddings. The
-run used a *user* identity (`GOOGLE_OAUTH_CLIENT_ID` + `_SECRET` +
-`GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`, via `connectors/google-drive/scripts/authorize.ts`), which is
-local-testing only; the service account still has no access to that tree, so **production is
-unverified**. `slack` is still a skeleton
+`google-drive` is **implemented and verified end to end against real Drive and the local database** on
+2026-08-06: `sync_runs` shows `status ok`, 1253 files upserted, and `grant_documents` went from 9 rows
+with a Drive ID to **1248**, 1181 fetchable. Re-running is idempotent (1243 matched on `drive_file_id`).
+It discovers into `grant_documents` and writes no text or embeddings. The runs used a *user* identity
+(`GOOGLE_OAUTH_CLIENT_ID` + `_SECRET` + `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`, via
+`connectors/google-drive/scripts/authorize.ts`), which is local-testing only — the service account
+still has no access to that tree, so **production remains unverified**. `slack` is still a skeleton
 returning `status: "noop"`, awaiting `SLACK_BOT_TOKEN`.
 
 **Drive discovery is broken through the Claude Drive connector; our own path around it now works.**
@@ -223,7 +223,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 269 passed, 0 skipped, 17 files.
+# Full suite — expect 279 passed, 0 skipped, 17 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 
