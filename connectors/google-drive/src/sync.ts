@@ -21,7 +21,13 @@
 import { prisma } from '@lp-ai/lib-db';
 import { classifyPath, needsReview } from '@lp-ai/lib-grants';
 
-import { makeDriveClient, type DriveClient, type DriveFile, type DriveRoot } from './drive-client.js';
+import {
+  makeDriveClient,
+  makeOAuthDriveClient,
+  type DriveClient,
+  type DriveFile,
+  type DriveRoot,
+} from './drive-client.js';
 import { reconcile, type CatalogRow } from './reconcile.js';
 
 /** The shared "Grants" folder, when the environment does not name one. */
@@ -176,10 +182,27 @@ export async function disconnect(): Promise<void> {
   await prisma.$disconnect();
 }
 
-/** Builds the client from the environment. Null when credentials are absent. */
+/**
+ * Builds the client from the environment. Null when no identity is configured.
+ *
+ * A user identity wins when one is fully configured, because it is only ever set
+ * deliberately for a local run — a machine that has both is a developer's, and the
+ * one that can actually see the tree is the person's. Production sets only the
+ * service account.
+ */
 export function clientFromEnv(env: {
   GOOGLE_SERVICE_ACCOUNT_JSON?: string | undefined;
+  GOOGLE_OAUTH_CLIENT_ID?: string | undefined;
+  GOOGLE_OAUTH_CLIENT_SECRET?: string | undefined;
+  GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN?: string | undefined;
 }): DriveClient | null {
+  const clientId = env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const refreshToken = env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN;
+  if (clientId && clientSecret && refreshToken) {
+    return makeOAuthDriveClient({ clientId, clientSecret, refreshToken });
+  }
+
   const key = env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!key) return null;
   return makeDriveClient(key);

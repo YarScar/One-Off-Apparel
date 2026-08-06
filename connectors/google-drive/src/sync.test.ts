@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { syncGrantCatalog } from './sync.js';
+import { clientFromEnv, syncGrantCatalog } from './sync.js';
 import type { DriveClient, DriveFile, DriveRoot } from './drive-client.js';
 
 function fakeClient(root: Partial<DriveRoot>, files: DriveFile[]): DriveClient {
@@ -45,5 +45,41 @@ describe('syncGrantCatalog', () => {
     }).catch(() => undefined);
 
     expect(seen[0]).toContain('shared drive shared123');
+  });
+});
+
+describe('clientFromEnv', () => {
+  const oauth = {
+    GOOGLE_OAUTH_CLIENT_ID: 'id',
+    GOOGLE_OAUTH_CLIENT_SECRET: 'secret',
+    GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN: 'token',
+  };
+
+  it('returns null when no identity is configured', () => {
+    expect(clientFromEnv({})).toBeNull();
+  });
+
+  it('builds a client from a service account key', () => {
+    const key = Buffer.from(JSON.stringify({ client_email: 'x@y.iam.gserviceaccount.com' })).toString(
+      'base64',
+    );
+    expect(clientFromEnv({ GOOGLE_SERVICE_ACCOUNT_JSON: key })).not.toBeNull();
+  });
+
+  it('prefers a fully configured user identity over the service account', () => {
+    // A machine with both is a developer's, and the identity that can actually see
+    // the tree is the person's — the service account does not inherit their access.
+    expect(clientFromEnv({ ...oauth, GOOGLE_SERVICE_ACCOUNT_JSON: 'ignored' })).not.toBeNull();
+  });
+
+  it('ignores a half-configured user identity', () => {
+    // Two of three env vars is a mistake mid-setup, not an identity. Falling back
+    // beats constructing a client that cannot authenticate.
+    expect(
+      clientFromEnv({
+        GOOGLE_OAUTH_CLIENT_ID: oauth.GOOGLE_OAUTH_CLIENT_ID,
+        GOOGLE_OAUTH_CLIENT_SECRET: oauth.GOOGLE_OAUTH_CLIENT_SECRET,
+      }),
+    ).toBeNull();
   });
 });

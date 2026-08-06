@@ -6,7 +6,7 @@ import { clientFromEnv, summarize, syncGrantCatalog, DEFAULT_GRANTS_FOLDER_ID } 
 export type SyncResult = SyncRunRecord;
 
 export { syncGrantCatalog, summarize, clientFromEnv, DEFAULT_GRANTS_FOLDER_ID } from './sync.js';
-export { makeDriveClient, buildPaths, toDriveFile } from './drive-client.js';
+export { makeDriveClient, makeOAuthDriveClient, buildPaths, toDriveFile } from './drive-client.js';
 export type { DriveClient, DriveFile, DriveRoot } from './drive-client.js';
 export { reconcile } from './reconcile.js';
 export type { CatalogRow, Resolution } from './reconcile.js';
@@ -18,7 +18,11 @@ export async function sync(): Promise<SyncResult> {
       const env = await loadEnv();
       const client = clientFromEnv(env);
       if (!client) {
-        return { status: 'noop', recordsUpserted: 0, notes: 'GOOGLE_SERVICE_ACCOUNT_JSON not set' };
+        return {
+          status: 'noop',
+          recordsUpserted: 0,
+          notes: 'no Drive identity configured (GOOGLE_SERVICE_ACCOUNT_JSON, or the OAuth trio)',
+        };
       }
 
       const folderId = env.GOOGLE_DRIVE_GRANTS_FOLDER_ID ?? DEFAULT_GRANTS_FOLDER_ID;

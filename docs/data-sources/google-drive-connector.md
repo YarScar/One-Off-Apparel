@@ -50,14 +50,40 @@ human-curated Drive does not change hourly, and nothing yet depends on it being 
 
 ## Auth
 
-- Same Google service account as the Sheets connector (`GOOGLE_SERVICE_ACCOUNT_JSON`)
-- Google Drive API v3, read-only scope (`drive.readonly`)
-- Missing key → the sync returns `status: 'noop'`, as every connector does
+Google Drive API v3, read-only scope (`drive.readonly`), and **two identities**:
 
-> ⚠️ **The access requirement people get wrong.** A service account is a *separate identity*. It
-> does **not** inherit the "Shared with me" access a human has, so being able to open the folder in
-> your own browser proves nothing about whether the walk will work. The folder must be shared with
-> the service account's `client_email`, **or** that account added as a member of the Shared Drive.
+| Identity | Env | Used for |
+|---|---|---|
+| Service account | `GOOGLE_SERVICE_ACCOUNT_JSON` — same key as the Sheets connector | Production, and the scheduled sync |
+| A person's own Google account | `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` + `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN` | Local runs against the real corpus |
+
+No identity configured → the sync returns `status: 'noop'`, as every connector does. A fully
+configured user identity wins over the service account, because it is only ever set deliberately for
+a local run; a half-configured one is ignored rather than used to build a client that cannot
+authenticate.
+
+> ⚠️ **The access requirement people get wrong, and the reason there are two identities.** A service
+> account is a *separate identity*. It does **not** inherit the "Shared with me" access a human has,
+> so being able to open the folder in your own browser proves nothing about whether the walk will
+> work. For the service account, the folder must be shared with its `client_email`, **or** that
+> account added as a member of the Shared Drive — which needs whoever owns the tree. A team member
+> who can already open it does not need any of that, which is what the user identity is for.
+
+### Authorizing your own account
+
+One browser round trip, and nothing is written to disk but `.env`:
+
+1. In the same GCP project (Drive API enabled): **APIs & Services → Credentials → Create
+   credentials → OAuth client ID → Desktop app**. Add `http://127.0.0.1:5787/callback` as an
+   authorized redirect URI.
+2. Put `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in `.env`.
+3. `node --env-file=.env --import tsx connectors/google-drive/scripts/authorize.ts`, approve in the
+   browser, and paste the printed `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN=` line into `.env`.
+4. `node --env-file=.env --import tsx packages/grants/scripts/drive-walk-grants.ts --dry-run`
+
+The token is personal and grants read access to everything that account can see, so it belongs in
+`.env` (gitignored) and nowhere else. It must not become how production authenticates: a scheduled
+job that depends on one person's account breaks when they leave.
 
 ## Sync Logic
 
@@ -77,6 +103,10 @@ Shared Drive, the connector instead sweeps the whole drive with `corpora: 'drive
 `ceil(n / 1000)` pages and reassembles the tree locally from each file's `parents` — same answer,
 two orders of magnitude fewer calls. The per-folder walk remains as the fallback for a My Drive
 root, where a drive-scoped sweep is not available.
+
+A drive-scoped sweep needs membership of that drive, so an identity holding the folder by direct
+share but not the drive gets 403 or 404. That is caught and falls back to the folder walk rather
+than failing the run — slower beats nothing, and the run's notes say which path it took.
 
 **Every Drive call sets `supportsAllDrives` and `includeItemsFromAllDrives`.** Without both, a
 Shared Drive returns nothing at all — no error, just an empty list. That is why there is exactly one
@@ -126,9 +156,14 @@ is armed via `tables: ['grant_documents']`, so a run that shrinks the catalog sa
 ## Environment Variables Required
 
 ```
-GOOGLE_SERVICE_ACCOUNT_JSON=     # base64-encoded service account JSON
-GOOGLE_DRIVE_GRANTS_FOLDER_ID=   # optional; defaults to the known "Grants" folder
+GOOGLE_SERVICE_ACCOUNT_JSON=        # base64-encoded service account JSON
+GOOGLE_DRIVE_GRANTS_FOLDER_ID=      # optional; defaults to the known "Grants" folder
 DATABASE_URL=
+
+# Or, for a local run as your own account, instead of the service account key:
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN=   # from scripts/authorize.ts
 ```
 
 `OPENAI_API_KEY` is **not** required — this connector computes no embeddings.
@@ -142,6 +177,7 @@ DATABASE_URL=
 | `index.ts` | `sync()` — the `runSync` wrapper, the noop-when-unconfigured check |
 | `drive-client.ts` | The only code that talks to Drive. Flags, retries, paging, shortcut resolution, tree reassembly |
 | `reconcile.ts` | Drive file → catalog row identity. Pure |
+| `scripts/authorize.ts` | One-time browser consent for a user identity. Prints a refresh token; writes nothing |
 | `sync.ts` | Orchestration: walk, classify, upsert |
 
 Classification lives in [`packages/grants/src/catalog.ts`](../../packages/grants/src/catalog.ts),

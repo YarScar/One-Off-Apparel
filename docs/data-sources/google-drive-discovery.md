@@ -148,6 +148,7 @@ Discovery was rebuilt as a connector rather than left as a one-off script. The c
 | `connectors/google-drive/src/index.ts` | `sync()` — real, no longer a `noop` stub. Declares `tables: ['grant_documents']` for the integrity guard |
 | `packages/grants/src/catalog.ts` | Path classification, extracted from `build-grants-index.ts` so Drive-discovered and mirror-discovered files classify identically. Was untested; now 24 cases |
 | `packages/grants/scripts/drive-walk-grants.ts` | Reduced to a CLI over the connector — `--dry-run` plus the manifest. Its own copy of the walk is gone |
+| `connectors/google-drive/scripts/authorize.ts` | One-time browser consent for a **user** identity, so the walk can be run by someone who can already open the tree. See §6 Fix 1 |
 
 Three behaviour changes worth knowing:
 
@@ -172,6 +173,27 @@ therefore answers this question as a side effect.
 
 It stopped blocking, but it is still worth one deliberate call — H1 and H2 differ in whether anything
 is ours to fix.
+
+**The cheapest way to make that call, now available.** The service-account route needs the tree's
+owner (`chip@b-21.org`) to share it, which no one here controls. So the connector also accepts a
+*user* identity:
+
+```bash
+# once: Desktop-app OAuth client in the same GCP project, Drive API enabled,
+# redirect URI http://127.0.0.1:5787/callback, client id + secret in .env
+node --env-file=.env --import tsx connectors/google-drive/scripts/authorize.ts
+# then, read-only, writes nothing:
+node --env-file=.env --import tsx packages/grants/scripts/drive-walk-grants.ts --dry-run
+```
+
+This runs **the same human identity the Claude Drive connector failed with**, but with
+`supportsAllDrives` + `includeItemsFromAllDrives` set. That makes it a direct H1/H2 discriminator:
+
+| Result | Reading |
+|---|---|
+| Walk enumerates the tree | **H1 confirmed** — the flags were the bug, and they are ours, and they are fixed |
+| `driveId` non-null but the sweep 403s, and the folder walk then enumerates | Shared Drive, non-member identity. H1 in substance; the fallback path is what carries it |
+| Still empty from a user identity with the flags set | **H2** — the Claude connector's index, not our query. Nothing further for us to fix; the catalog is the answer |
 
 ```bash
 # The service account's identity — this is the address the folder must be shared with

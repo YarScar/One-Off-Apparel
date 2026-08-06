@@ -26,6 +26,15 @@ export const envSchema = z.object({
   GOOGLE_DRIVE_FOLDER_ID: optional,
   /** Root of the shared grant corpus. Defaults to the known "Grants" folder ID. */
   GOOGLE_DRIVE_GRANTS_FOLDER_ID: optional,
+  /**
+   * A human's own Drive identity, for running the Drive walk locally against the
+   * real corpus. Production uses the service account above; these exist because a
+   * service account does not inherit a person's "Shared with me" access. All three
+   * must be set together, and they take precedence when they are.
+   */
+  GOOGLE_OAUTH_CLIENT_ID: optional,
+  GOOGLE_OAUTH_CLIENT_SECRET: optional,
+  GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN: optional,
   GOOGLE_SHEETS_STUDENT_INFO_ID: optional,
   GOOGLE_SHEETS_STUDENT_INFO_V2: optional,
   GOOGLE_SHEETS_DASHBOARD_ID: optional,

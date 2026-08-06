@@ -96,7 +96,13 @@ function statusOf(err: unknown): number | null {
   return n;
 }
 
-/** Retries only what retrying can fix: rate limits and transient server errors. */
+/**
+ * Retries only what retrying can fix: rate limits and transient server errors.
+ *
+ * Anything else is rethrown **unchanged**, status code intact, because callers
+ * branch on it — a 403 or 404 from a drive-scoped sweep is not a failure, it is
+ * the signal to walk the folders instead.
+ */
 async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
@@ -105,15 +111,14 @@ async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
     } catch (err) {
       const status = statusOf(err);
       const retryable = status === 429 || status === 500 || status === 502 || status === 503;
-      if (!retryable || attempt === MAX_ATTEMPTS) {
-        lastError = err;
-        break;
-      }
+      if (!retryable) throw err;
+      lastError = err;
+      if (attempt === MAX_ATTEMPTS) break;
       await new Promise((resolve) => setTimeout(resolve, BASE_DELAY_MS * 2 ** (attempt - 1)));
     }
   }
   throw new Error(
-    `Drive ${label} failed after ${String(MAX_ATTEMPTS)} attempts: ${
+    `Drive ${label} failed after ${String(MAX_ATTEMPTS)} attempts of retryable errors: ${
       lastError instanceof Error ? lastError.message : String(lastError)
     }`,
   );
@@ -226,20 +231,57 @@ export function buildPaths(
 // Client
 // ---------------------------------------------------------------------------
 
-function authenticate(serviceAccountJsonBase64: string): drive_v3.Drive {
+/** The one scope this connector ever asks for. It must never be able to write. */
+const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+
+/** A user's own Google identity, for a local run against real Drive. */
+export interface OAuthUserCredentials {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+}
+
+function serviceAccountAuth(serviceAccountJsonBase64: string): drive_v3.Drive {
   const credentials = JSON.parse(
     Buffer.from(serviceAccountJsonBase64, 'base64').toString('utf-8'),
   ) as object;
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    // Read-only: nothing in this connector may modify the grant corpus.
-    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+  return google.drive({
+    version: 'v3',
+    auth: new google.auth.GoogleAuth({ credentials, scopes: [SCOPE] }),
   });
+}
+
+/**
+ * Authenticates as a human rather than as a service account.
+ *
+ * Why both exist: a service account is a separate identity that does **not**
+ * inherit the "Shared with me" access a person has, so testing the walk against
+ * the real `Grants` tree with one requires the folder's owner to share it —
+ * outside this repository's control. A team member who can already open the tree
+ * can authorize their own account in one browser round trip and prove the walk
+ * works today. Production still runs as the service account: user tokens are
+ * personal, and a scheduled job must not depend on one person's access.
+ */
+function oauthUserAuth(creds: OAuthUserCredentials): drive_v3.Drive {
+  const auth = new google.auth.OAuth2({
+    clientId: creds.clientId,
+    clientSecret: creds.clientSecret,
+  });
+  auth.setCredentials({ refresh_token: creds.refreshToken });
   return google.drive({ version: 'v3', auth });
 }
 
+/** Service-account client. What the scheduled sync uses. */
 export function makeDriveClient(serviceAccountJsonBase64: string): DriveClient {
-  const drive = authenticate(serviceAccountJsonBase64);
+  return makeClient(serviceAccountAuth(serviceAccountJsonBase64));
+}
+
+/** User-identity client, for a local run. See `oauthUserAuth`. */
+export function makeOAuthDriveClient(creds: OAuthUserCredentials): DriveClient {
+  return makeClient(oauthUserAuth(creds));
+}
+
+function makeClient(drive: drive_v3.Drive): DriveClient {
 
   async function listPages(
     params: drive_v3.Params$Resource$Files$List,
@@ -262,6 +304,55 @@ export function makeDriveClient(serviceAccountJsonBase64: string): DriveClient {
       pageToken = res.data.nextPageToken ?? undefined;
     } while (pageToken);
     return calls;
+  }
+
+  async function sweepDrive(
+    root: { id: string; name: string },
+    driveId: string,
+  ): Promise<{ files: DriveFile[]; apiCalls: number; strategy: string }> {
+    const raw: drive_v3.Schema$File[] = [];
+    const apiCalls = await listPages({ q: 'trashed = false', corpora: 'drive', driveId }, (page) =>
+      raw.push(...page),
+    );
+
+    const paths = buildPaths(raw, root);
+    const files: DriveFile[] = [];
+    for (const f of raw) {
+      const path = f.id === undefined || f.id === null ? undefined : paths.get(f.id);
+      if (path === undefined) continue;
+      const mapped = toDriveFile(f, path);
+      if (mapped) files.push(mapped);
+    }
+    return { files, apiCalls, strategy: `shared-drive sweep (${driveId})` };
+  }
+
+  async function walkFolders(
+    root: DriveRoot,
+  ): Promise<{ files: DriveFile[]; apiCalls: number; strategy: string }> {
+    const files: DriveFile[] = [];
+    const queue: { id: string; path: string }[] = [{ id: root.id, path: root.name }];
+    let apiCalls = 0;
+    let folders = 0;
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) break;
+      folders += 1;
+      apiCalls += await listPages({ q: `'${current.id}' in parents and trashed = false` }, (page) => {
+        for (const f of page) {
+          if (!f.id || !f.name) continue;
+          const path = `${current.path}/${f.name}`;
+          if (f.mimeType === FOLDER_MIME) {
+            queue.push({ id: f.id, path });
+            continue;
+          }
+          const mapped = toDriveFile(f, path);
+          if (mapped) files.push(mapped);
+        }
+      });
+    }
+
+    return { files, apiCalls, strategy: `folder walk (${String(folders)} folders)` };
   }
 
   return {
@@ -294,54 +385,25 @@ export function makeDriveClient(serviceAccountJsonBase64: string): DriveClient {
       // reassembled locally from `parents`. Same answer, two orders of magnitude
       // fewer calls.
       if (root.driveId !== null) {
-        const raw: drive_v3.Schema$File[] = [];
-        const apiCalls = await listPages(
-          {
-            q: 'trashed = false',
-            corpora: 'drive',
-            driveId: root.driveId,
-          },
-          (files) => raw.push(...files),
-        );
-
-        const paths = buildPaths(raw, root);
-        const files: DriveFile[] = [];
-        for (const f of raw) {
-          const path = f.id === undefined || f.id === null ? undefined : paths.get(f.id);
-          if (path === undefined) continue;
-          const mapped = toDriveFile(f, path);
-          if (mapped) files.push(mapped);
+        try {
+          return await sweepDrive(root, root.driveId);
+        } catch (err) {
+          const status = statusOf(err);
+          // A drive-scoped query needs membership of that drive. An identity with
+          // access to the folder but not the drive — which is exactly what "shared
+          // with me" from another organization looks like — gets 403 or 404 here.
+          // Falling back is the difference between a slower walk and no walk.
+          if (status !== 403 && status !== 404) throw err;
         }
-        return { files, apiCalls, strategy: `shared-drive sweep (${root.driveId})` };
       }
 
-      // Strategy 2 — breadth-first walk, for a My Drive folder where a
-      // drive-scoped sweep is not available. One call per folder, so this is the
-      // expensive path; it is correct, not fast.
-      const files: DriveFile[] = [];
-      const queue: { id: string; path: string }[] = [{ id: root.id, path: root.name }];
-      let apiCalls = 0;
-      let folders = 0;
-
-      while (queue.length > 0) {
-        const current = queue.shift();
-        if (!current) break;
-        folders += 1;
-        apiCalls += await listPages({ q: `'${current.id}' in parents and trashed = false` }, (page) => {
-          for (const f of page) {
-            if (!f.id || !f.name) continue;
-            const path = `${current.path}/${f.name}`;
-            if (f.mimeType === FOLDER_MIME) {
-              queue.push({ id: f.id, path });
-              continue;
-            }
-            const mapped = toDriveFile(f, path);
-            if (mapped) files.push(mapped);
-          }
-        });
-      }
-
-      return { files, apiCalls, strategy: `folder walk (${String(folders)} folders)` };
+      // Strategy 2 — breadth-first walk. One call per folder, so this is the
+      // expensive path; it is correct, not fast. Used for a My Drive root, and
+      // wherever the sweep above was refused.
+      const walked = await walkFolders(root);
+      return root.driveId === null
+        ? walked
+        : { ...walked, strategy: `${walked.strategy}, drive-scoped sweep refused` };
     },
 
     async exportText(fileId, mimeType): Promise<string | null> {

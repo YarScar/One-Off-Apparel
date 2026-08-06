@@ -63,6 +63,32 @@ mirror had already created, which made the ~1243-file gap between the 1.6 GB mir
 corpus permanently invisible. Drive is the discovery source now; the mirror is secondary.
 `data/drive-unmatched.txt` is no longer written — that gap is the run's `created` count.
 
+### Added — a second Drive identity, so the walk can be tested without waiting on the folder's owner
+
+`connectors/google-drive` now authenticates either way:
+
+- **Service account** (`GOOGLE_SERVICE_ACCOUNT_JSON`) — production and the scheduled sync, unchanged.
+- **A person's own Google account** (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+  `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`) — local runs. `connectors/google-drive/scripts/authorize.ts` is
+  a one-time loopback consent flow that prints the refresh token; it writes nothing.
+
+The reason is the access asymmetry that has blocked verification all along: a service account does not
+inherit the "Shared with me" access a human holds, so proving the walk works as one requires the
+`Grants` tree's owner (`chip@b-21.org`) to share it. A team member who can already open the tree can
+authorize in one browser round trip. A fully configured user identity takes precedence when present;
+a half-configured one is ignored rather than used to build a client that cannot authenticate.
+
+This is also the cleanest test of H1 vs H2 in `docs/data-sources/google-drive-discovery.md` §4 — it
+runs the same human identity the Claude Drive connector failed with, but with the shared-drive flags
+set. Success implicates the missing flags (H1, ours, fixed); continued empty listings implicate that
+connector's index (H2, not ours).
+
+**A drive-scoped sweep is no longer fatal when refused.** `corpora: 'drive'` requires membership of
+the drive, so an identity holding the folder by direct share gets 403/404 — which is the likely shape
+of a user-identity run here. That now falls back to the per-folder walk and says so in the strategy
+string, rather than failing the run. `withRetry` was changed to rethrow non-retryable errors
+unchanged so the status code survives for that branch to read.
+
 ### Fixed — `parseYear` returned null for underscore-dated filenames it documented as handled
 
 `8_7_2026 GSK Grant` parsed to no year: underscores are word characters, so `\b(20\d{2})\b` never
