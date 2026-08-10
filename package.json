@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "dev": "pnpm --filter @lp-ai/hq dev",
     "db:generate": "pnpm --filter @lp-ai/lib-db generate",
     "db:migrate": "pnpm --filter @lp-ai/lib-db migrate",
     "db:studio": "pnpm --filter @lp-ai/lib-db studio",
