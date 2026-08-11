@@ -64,3 +64,12 @@ packages/grants/data/
 
 # Python bytecode from the parity regeneration scripts in packages/grants/scripts/
 __pycache__/
+
+# Local mirror of the Grants Shared Drive (1,234 files). Same reason as
+# packages/grants/data/ above: funder correspondence, unredacted student data,
+# and — per the H2.5 sweep — portal credentials in 60 of the .docx files.
+data/
+
+# Local agent tooling, not shared with the team
+.opencode/
+EchoesVault/
