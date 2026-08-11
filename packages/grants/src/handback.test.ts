@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DERIVE_RULES, RESIZE_RULES, buildHandback } from './handback.js';
+import { DERIVE_RULES, EXPAND_RULES, RESIZE_RULES, buildHandback, type Handback } from './handback.js';
 import { measure } from './limits.js';
 
 // This module is the contract between the deterministic layer and the model that calls it, and
@@ -108,5 +108,72 @@ describe('buildHandback', () => {
       context,
     });
     expect(h.instruction).toContain('30 characters');
+  });
+});
+
+/**
+ * The `expand` task (board `grant-h32`, DECISIONS.md D1e). This is the riskiest handback in the
+ * layer: it hands a model a short confirmed fact and a large empty field, which is the exact
+ * situation that produces invented grant content. The rules are pinned by CONTENT, like the others,
+ * so an edit that softens either load-bearing clause fails here rather than on a funder's desk.
+ */
+describe('the expand task', () => {
+  const context = { funder: 'ACME Fund', emphasis: 'workforce', answers: 'Who we serve' };
+
+  const built = (): Handback =>
+    buildHandback({
+      task: 'expand',
+      sourceText: 'Launchpad serves Philadelphia young people ages 16-24, recruited from more than 30 schools.',
+      limit: { unit: 'words', max: 200 },
+      measurement: measure({ text: 'Philadelphia young people ages 16-24', unit: 'words', max: 200 }),
+      context,
+      anchorValue: 'Philadelphia young people ages 16-24',
+    });
+
+  it('forbids padding to the limit, which is the failure this task invites', () => {
+    // Without this rule the guard would trade a silent under-answer for a padded, invented one —
+    // strictly worse, because the first is visible to a reviewer and the second reads as finished.
+    expect(EXPAND_RULES.join(' ')).toMatch(/CEILING, NOT A TARGET/);
+    expect(EXPAND_RULES.join(' ')).toMatch(/Do not pad/i);
+  });
+
+  it('forbids inventing, like every other task', () => {
+    expect(EXPAND_RULES.join(' ')).toMatch(/NEVER invent/);
+  });
+
+  it('requires the confirmed value to survive verbatim', () => {
+    // The anchor is the one part already checked against filed material. A paraphrase silently
+    // swaps a verified fact for an unverified one while looking like it did the work.
+    expect(EXPAND_RULES.join(' ')).toMatch(/MUST appear in your answer unchanged/);
+  });
+
+  it('carries the anchor separately from the source material', () => {
+    const h = built();
+    // Two different kinds of material: one must be preserved, the other may be drawn on. A caller
+    // that concatenated them would lose the distinction every rule above depends on.
+    expect(h.anchor_value).toBe('Philadelphia young people ages 16-24');
+    expect(h.source_text).toContain('more than 30 schools');
+    expect(h.source_text).not.toBe(h.anchor_value);
+    expect(h.rules).toEqual(EXPAND_RULES);
+  });
+
+  it('names the value and the ceiling in the instruction, and says less is allowed', () => {
+    const h = built();
+    expect(h.instruction).toContain('Philadelphia young people ages 16-24');
+    expect(h.instruction).toContain('200 words');
+    expect(h.instruction).toMatch(/Use less/);
+  });
+
+  it('carries no anchor on the other two tasks', () => {
+    const resize = buildHandback({
+      task: 'resize',
+      sourceText: 'some prose',
+      limit: { unit: 'words', max: 3 },
+      measurement: measure({ text: 'some prose', unit: 'words', max: 3 }),
+      context,
+      anchorValue: 'ignored',
+    });
+    expect(resize.anchor_value).toBeUndefined();
+    expect(resize.rules).toEqual(RESIZE_RULES);
   });
 });

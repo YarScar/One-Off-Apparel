@@ -684,8 +684,19 @@ Resolve a captured funder form into a reviewable draft package: match each quest
 | Actor | Statuses | Meaning |
 |---|---|---|
 | `none` | `fits`, `ready` | Text is ready for staff review. |
-| `llm` | `needs_resize`, `compression_infeasible`, `derive_from_reference` | **Yours to finish.** The result carries a `handback` with the source text, the limit, the measurement, and the rules. |
-| `staff` | `needs_attachment`, `per_application`, `needs_review`, `kb_gap`, `kb_placeholder` | Needs a fact or a decision this layer does not hold. |
+| `llm` | `needs_resize`, `needs_expand`, `compression_infeasible`, `derive_from_reference`, `fetch_figure` | **Yours to finish.** See the payload rule below. |
+| `staff` | `needs_attachment`, `per_application`, `needs_review`, `kb_gap`, `kb_placeholder`, `figure_definitional` | Needs a fact or a decision this layer does not hold. |
+
+**Every `llm` result carries exactly one of two payloads**, and a caller that reads only the first
+will silently skip work:
+
+- **`handback`** — the shaping tasks (`needs_resize`, `needs_expand`, `compression_infeasible`,
+  `derive_from_reference`). Carries the source text, the limit, the measurement, and the rules. On a
+  `needs_expand` task it also carries **`anchor_value`**: a confirmed short value that must appear in
+  your answer unchanged, with `source_text` as material to build around it. That task's limit is a
+  **ceiling, not a target** — writing less than the limit is correct when the source supports no more.
+- **`figure_call`** — `fetch_figure` only. The work is running the named `query_*` call under your own
+  identity and writing the live number, not reshaping text, so there is nothing to hand back.
 
 **Three contracts worth knowing before you call it:**
 

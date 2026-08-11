@@ -15,8 +15,11 @@ decision rather than a task. **Everything blocking this workstream is a decision
 the single most useful thing to know starting a session here.
 
 Of the two decisions D1 opened, **the G3 gate count is settled** (2026-08-04 — restated as 20, the 5
-resizer cases moved onto G4, both gates then passed). **The knowledge-base content gap is not** — it is
-`bd` issue `grant-miy`, assigned to Sean, and it is content work no code can close.
+resizer cases moved onto G4, both gates then passed). **The knowledge-base content gap has its
+mechanism now and its content remaining** — the pipeline half of `grant-miy` shipped 2026-08-10
+(per-question `structured` values plus the `fetch_figure` live-number path, `DECISIONS.md` D1a/D1b);
+what remains is Sean's content work — the ~14 values still to extract and the ~7 accepted-manual-fill
+decisions.
 
 ---
 
@@ -313,9 +316,11 @@ Struck-through items record what was done, so the next session does not redo the
    guardrail is **not** the resize guardrail reworded, because the two tasks fail in opposite
    directions. Unreachability is asserted structurally over the real import graph, not by a spy.
 5. **D5 / G5 is BLOCKED, and not on Phase C.** Its pass condition is an open decision — `bd`
-   `grant-k4i`, raised 2026-08-06 — and the blocker is `grant-miy`: Chip and Iman cannot judge a draft
-   against the prototype while roughly 40% of a form comes back `reference_only`. **Refine the
-   knowledge bank first.** `SPEC.md` §1 holds the three decisions inside that one sentence. When it
+   `grant-k4i`, raised 2026-08-06. The pipeline half of the knowledge-bank blocker shipped 2026-08-10
+   (`DECISIONS.md` D1a/D1b: per-question `structured` values, `fetch_figure` live numbers) — the 
+   content half (`grant-miy`, Sean) still decides how many of the remaining ~14 values land as
+   structured entries versus accepted-manual-fill. **Refine the knowledge bank first.**
+   `SPEC.md` §1 holds the three decisions inside that one sentence. When it
    does start: the last gate, no parity fixture to check itself against, and do not read its estimate
    as soft the way D1's, D3's and D4's turned out to be — those landed short because earlier gates had
    already built their parts, and G5 has nothing underneath it.

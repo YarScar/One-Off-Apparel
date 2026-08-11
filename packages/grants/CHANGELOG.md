@@ -25,7 +25,236 @@ entry can be verified rather than trusted.
 
 ---
 
-## 2026-08-06
+## 2026-08-11
+
+### Added — `needs_expand`, guarding D1a's mechanism against answering a field it has only filled
+
+Closes the general shape left open when `grant-h32` was fixed. The bank split fixed the one *instance*
+where a 9-word structured value was returned into a 200-word narrative field as `fits` / `actor: none`;
+nothing stopped the next one. `grant-miy` is about to add roughly fourteen more structured values, so
+the guard is worth having before them rather than after.
+
+**The principle: fitting is not answering.** The layer measured whether a value was *inside* a
+funder's cap and treated that as done. A caller reading `actor` therefore saw the outstanding-work
+count go *down* on a question the draft had barely touched — the worst shape a defect can take in a
+tool whose whole job is telling a caller what is left to do.
+
+**What it does.** `limits.ts::underfillsProseField` is the test; `pipeline.ts` returns the new
+`needs_expand` status (`actor: llm`) with a handback carrying **both** the confirmed value as an
+`anchor_value` that must survive verbatim **and** the KB slot's prose as material to draw on. The two
+travel separately on purpose: one is checked and must be preserved, the other is context that may be
+used, and a caller that concatenated them would lose the distinction every rule depends on.
+
+**The value is deliberately not returned as `answer`.** Present, it renders as a finished answer in
+the Markdown package and to anything else walking `results` — which is exactly the appearance that let
+the original defect through.
+
+**`EXPAND_RULES` is the riskiest guardrail in the layer, and it is written that way.** The other two
+tasks constrain a model with *too much* material: resizing chooses what to drop, deriving picks one
+value out of prose. This one hands a model a short fact and a large empty field, which is the precise
+situation that produces invented grant content. Two clauses carry the weight:
+
+- **"The limit is a CEILING, NOT A TARGET. Do not pad to reach it."** Without this the guard would
+  trade a silent under-answer for a padded, invented one — strictly worse, because a reviewer can see
+  the first and the second reads as finished work.
+- **The anchor must appear unchanged.** It is the one part already checked against filed material; a
+  paraphrase swaps a verified fact for an unverified one while looking like it did the work.
+
+**Three tests, all required — and the third was added because the guard shipped a false positive.**
+A first cut used only the size of the field and the fill ratio. Run across all ten seeded forms before
+being trusted, it fired on Hamilton's LOI: "Project/ Program/ Campaign Name", a **250-character** box
+holding `Launchpad`, which fills 3.6% of it and is the complete correct answer. The guard would have
+instructed the model to pad a title to 250 characters — causing the exact harm its own rules forbid.
+The missing test was `answer_type`: a `field` is a name however large the box.
+`EXPANDABLE_ANSWER_TYPES` (`schemas.ts`) is `narrative` and `demographic` only, and is deliberately
+**not** the complement of `NON_NARRATIVE_ANSWER_TYPES` — `demographic` is in both, because "who do you
+serve, and how many?" takes a value or a paragraph depending on the room given.
+
+| Test | Question it asks | What it alone would get wrong |
+|---|---|---|
+| `EXPANDABLE_ANSWER_TYPES` | Could this field want prose at all? | — |
+| `PROSE_LIMIT_FLOOR` (50 words / 250 chars / 3 sentences) | Is the cap big enough to hold prose? | fires on a 190-word answer in a 200-word field |
+| `MIN_STRUCTURED_FILL_RATIO` (0.25) | Is most of the room unused? | the Hamilton false positive |
+
+**Current effect: none, and that is the intended state.** All ten seeded forms come back clean — the
+one real instance was fixed at the bank level, so this is a regression guard for the structured values
+`grant-miy` will add, not something catching live defects today.
+
+**Known gap, recorded rather than papered over.** The guard cannot fire when a form states **no**
+limit. With no cap there is no evidence the field is large, and asserting one would be inventing. The
+no-limit path still returns the value as `ready`. `admin/DECISIONS.md` D1e holds this.
+
+Suite: 192 → **217 in `packages/grants`**, 237 → **262 repo-wide** across 14 files. 25 new cases,
+weighted toward what the guard must *not* do.
+
+### Fixed — `fetch_figure` broke the `actor: llm` ⇒ `handback` contract, and the full suite was red
+
+**Found by accident** while re-diagnosing `grant-h32`, which is the part worth recording: nobody was
+looking for it, and nothing in the grant workstream's own habits would have surfaced it.
+
+D1b added the `fetch_figure` status with `actor: 'llm'` and a `figure_call` payload, but no
+`handback`. `pipeline.ts` documented `handback` as "present **exactly when** `actor` is `llm`, so a
+caller can drive every outstanding rewrite off this field alone", and
+`apps/mcp-server/src/__tests__/tools.test.ts` asserted it. So a caller walking `results`, filtering to
+`actor: 'llm'`, and reading `handback` **silently skipped every figure question** — the tool reported
+work owed and handed over nothing to do it with.
+
+**The full suite had been red since D1b landed.** It was not noticed because the grant workstream
+verifies with `vitest run packages/grants`, and that package contains no test that goes through
+`apps/mcp-server`. The 2026-08-10 and 2026-08-11 sessions both recorded "187 of 187 pass" truthfully
+and both were reading a suite that structurally cannot see this class of defect. `CLAUDE.md` §3 gains
+the rule that follows from it.
+
+**Resolution: the contract was widened, not the code bent to fit it.** `fetch_figure` is a genuinely
+second kind of model work — the task is running a `query_*` call, not reshaping prose — and forcing it
+into a `Handback` would have meant a `verify_with` naming `grant_resize_answer` for a question with
+nothing to resize. The invariant is now:
+
+> Every `actor: 'llm'` result carries **exactly one of `handback` or `figure_call`**.
+
+That preserves the property a caller actually depends on — outstanding work is drivable off the result
+alone — without pretending the two kinds of work are one. `pipeline.ts`'s doc comment on `handback`
+records why it changed, and `tools.test.ts` gains a case asserting the invariant directly rather than
+only checking each payload's shape.
+
+**A second, quieter gap.** `pnpm test` does **not** typecheck. The integration test declares its own
+narrow shape for the tool's result, that declaration had no `figure_call`, and every case passed at
+runtime while `tsc` rejected the file. `pnpm -r typecheck` is what caught it. Neither command alone is
+a green light.
+
+**If you have a local clone:** run `pnpm --filter @lp-ai/mcp-server build` before `pnpm test` — the
+integration suite spawns the compiled server, so a stale `dist/` tests the old contract.
+
+### Fixed — question bank at v0.4.3: two canonicals split, closing board `grant-h32`
+
+`grant-h32` recorded three funder wordings matching at confidence **1.000** to canonicals of the
+wrong `answer_type`. That is not a recall failure — all three were *recorded variants*, which is why
+they scored 1.000 — so no amount of variant-adding could have found or fixed them. It is the B6
+defect class reached from the other side: B6 was a coverage gap surfacing as a confident wrong match,
+this is a **typing** error surfacing the same way.
+
+**Re-diagnosed against the code before fixing, and two of the three had moved since the board wrote
+them.** D1a/D1b landed in between and changed the symptom without changing the cause:
+
+| Wording | `grant-h32` recorded | Actual behaviour on 2026-08-11 |
+|---|---|---|
+| "Who does your solution serve, and in what ways will the solution impact their lives?" | `derive_from_reference` | `fits`, `actor: none`, **9 words into a 200-word field** |
+| "How is your current budget allocated?" | `derive_from_reference` | `fetch_figure` → `get_finance_brief {period:"ytd"}` |
+| "What was your organizational budget for fiscal year 2025 and 2026?" | `derive_from_reference` | `fetch_figure` — **now the right shape**; h32's diagnosis is superseded here |
+
+The first is the one worth reading twice. D1a's structured-value branch gave it a real answer —
+`Philadelphia young people ages 16–24 (101: 16–18; LiftOff/Inc: 18–24)` — and marked it `fits` with
+`actor: none`, meaning **no work owed**. Against a 200-word narrative field that answers half the
+question in 9 words and reports done. D1a converted a visible defect into an invisible one; the
+outstanding-work count went down while the draft got worse. Recorded here because the failure is
+structural, not specific to this question: any short structured value on a long narrative field
+does the same thing.
+
+**The fix, under growth rule 1.** `answer_type` belongs to the ENTRY, not the variant
+(`seed/QUESTIONS-SCHEMA.md`), so retyping was never available — `program.target_population` is
+genuinely `demographic` and `financials.operating_budget` is genuinely a `number`. Two new canonicals
+take the misplaced wordings:
+
+- **`program.population_impact`** (`narrative` → `kb.target_population`, 200-word limit from Truist) —
+  takes the Truist and JFF two-part who-and-how wordings.
+- **`financials.budget_allocation`** (`narrative` → `kb.budget_narrative`, 150-word limit from Truist) —
+  takes "How is your current budget allocated?". `kb.budget_narrative` already holds allocation prose
+  and is `verified: true`, so this needed no KB writing.
+
+Bank **90 → 92 questions, 265 wordings unchanged, v0.4.2 → v0.4.3**. The unchanged wording count is
+the point and is asserted by `data.test.ts`: this release **moved** three variants and invented no
+funder source. A split that fabricated a wording would fail the suite.
+
+**Effect on the real form** (`seed/forms/aug7_truist.json`): `fits` 10 → 11, `fetch_figure` 2 → 1.
+The two-part question now returns **86/200 words** of narrative instead of 9, and the allocation
+question returns **99/150 words** of budget prose instead of an instruction to write a number into a
+prose field.
+
+**Parity: both fixtures regenerated, control pass first.**
+
+| Fixture | Control | Result |
+|---|---|---|
+| `matcher-parity.json` | 0 regression differences | 404 → **406 cases**. **Exactly 5 changed**, and all 5 are the intended ones: 3 moved wordings plus the 2 new canonical self-matches (0.334 → 1.00 and 0.385 → 1.00). Nothing else moved. |
+| `seq-ratio-parity.json` | 71,001 overlapping pairs, 0 regression differences, 1,104 pairs not yet covered | **72,105 pairs** over 380 strings, CPython 3.14.6, all reproducing exactly |
+
+Five regression cases added to `src/matcher.test.ts` under an `h32` describe block, pinning both new
+routings **and** that the split did not drag the canonicals it was split from. Suite: 187 → **192 of
+192** across 9 files.
+
+**Unresolved, and deliberately not guessed.** The FY2025/2026 budget question carries
+`get_finance_brief {period: "ytd"}`, which cannot express a fiscal year — `apps/mcp-server/src/tools/get-finance-brief.ts:13`
+accepts only `period: 'ytd' | 'last_30_days' | 'last_quarter'`. So the args cannot be widened; the
+tool that can answer it is `query_finances`, whose enum includes `annual` and `budget_actuals`
+(`apps/mcp-server/src/tools/query-finances.ts:13`). Changing the `annual_budget` FIGURE_CHECK would
+also move the figure work order for every KB slot referencing it, so this is left open on `grant-h32`
+rather than changed under a bank release.
+
+**If you have a local clone:** nothing is required — no schema, tool surface, or migration moved.
+The prototype bank at `~/Projects/Grants/question-bank/questions.json` was re-synced as part of the
+regeneration procedure and is byte-identical to `seed/questions.json`.
+
+### Changed — question bank at v0.4.2: three real unfilled forms transcribed and routed
+
+Multi-grant coverage test against grants in `data/Grants/` with no filed response surfaced three
+forms whose questions the bank could not route confidently: **JFF & Google Advancing AI Resilient
+Early Career Pathways RFP (2026)** (all 8 questions under the 0.42 floor), **Allen Hiles Fund** (8
+of 11), and **Dolfinger-McMahon Foundation** (1 of 4).
+
+15 real wordings appended to existing canonicals, two new canonical questions added, all under the
+growth rules in `seed/QUESTIONS-SCHEMA.md`:
+
+- `organization.community_voice` (narrative → `kb.dei`) — "How does your organization include the
+  people it serves in its decision-making process?" Previously routed to `attachments.org_chart` at
+  0.37 — a confident-shape trap of the same class board B6 pinned in v0.4.1.
+- `program.operations` (narrative → `kb.program_desc`) — "Describe how the project will operate,
+  including hours of operation, staffing, and volunteers." Previously landed on
+  `program.team_qualifications` at 0.20, which answers only the staffing half.
+
+The three forms are now committed as fixtures (`forms/allen_hiles_2024.json`,
+`forms/jff_ai_pathways_2026.json`, `forms/dolfinger_mcmahon_2023.json`) so their question texts
+enter both parity fixtures. Bank: 88 → **90 questions**, 248 → **265 wordings**, `kb_entries`
+unchanged at 29 (no new KB slots — the other agent is gap-filling answers). `meta.version`
+0.4.1 → **0.4.2**, three new `meta.sources`.
+
+**Parity:** both fixtures regenerated with control passes clean — `regenerate-matcher-parity.py`
+reported 0 shared-case changes (337 → 404 cases; the JFF form now matches all 8 questions at 1.00)
+and `regenerate-seq-ratio-parity.py` 0 regressions (59,616 → 71,001 pairs). Suite: **187 of 187
+pass, 9 files, zero skipped** after the count assertions in `data.test.ts` moved with the bank.
+
+**If you have a local clone:** nothing is required — no schema or tool surface moved. The prototype
+bank at `~/Projects/Grants/question-bank/questions.json` was synced to the repo seed (byte-identical
+sha256) as part of the regeneration.
+
+## 2026-08-10
+
+### Added — per-question structured values and the live-figure path (D1a + D1b, grant-miy)
+
+`kb_launchpad.json` answer objects can now carry `structured: { "<question id>": { value, verified } }`.
+Slots are shared — `kb.eligibility` answers eight questions — so the value is keyed by question id,
+not by slot. `buildAnswer` returns a stored value as a real answer (`fits`/`ready`, `actor: none`)
+ahead of the `derive_from_reference` branch, with `from_structured: true` in the provenance footline.
+Per-value `verified` overrides the entry-level flag. `computeIntegrityReport` gained
+`structured_key_dangling`, which fires when a structured key names a question id that no longer
+exists in `questions.json` — a renamed question silently falling through to `derive_from_reference`
+was the failure mode this check exists to prevent.
+
+The three number questions whose answer is a live figure (`cover.budget_totals`,
+`financials.operating_budget`, `program.jobs_and_participants`) no longer derive from frozen prose.
+They return a new status carrying the exact `query_*` call from `FIGURE_CHECKS`: **`fetch_figure`**
+(`actor: 'llm'` — run the call, write the live number) or **`figure_definitional`** (`actor: 'staff'`
+— the number depends on which population the funder means, so a person confirms first). Two statuses
+so `STATUS_ACTOR` stays a clean mapping. `renderMarkdown` shows the named call for both.
+
+`figures.ts`: `students_served_total.appears_in` gained `kb.metrics`, because
+`program.jobs_and_participants` routes there and a metrics-only draft otherwise lost the live
+`query_enrollment` call, leaving only the definitional flag.
+
+Seed: 11 structured values landed across five slots (`kb.program_desc`, `kb.profile.identity`,
+`kb.profile.contacts`, `kb.target_population`, `kb.eligibility`), including the sharp case —
+Truist `cover.project_title` now answers **"Launchpad"** instead of a 199-word program description
+flagged over limit. Suite: 177 → **187 across 9 files**. No `meta.version` bump, no matcher-parity
+regeneration (matching is untouched). Design and decisions: `packages/grants/admin/DECISIONS.md` D1.
+
 
 ### Verified — all three grant tools resolve in the ACL, not just `grant_match_question`
 

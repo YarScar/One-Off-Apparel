@@ -185,6 +185,8 @@ describeLocal('MCP tool handlers (integration)', () => {
         actor: string;
         action: string;
         handback?: { task: string; source_text: string; rules: string[]; verify_with: string };
+        /** The other half of the llm payload: a `fetch_figure` result owes a lookup, not a rewrite. */
+        figure_call?: { tool: string; args: Record<string, string> };
       }>;
       kb_refs_used: string[];
       figure_work_order: {
@@ -223,6 +225,15 @@ describeLocal('MCP tool handlers (integration)', () => {
 
     for (const r of result.results) {
       if (r.actor !== 'llm') continue;
+      // Two kinds of model work, and they carry different payloads. A `fetch_figure` result owes a
+      // LOOKUP, not a rewrite: there is no source text to shape and nothing to resize, so it carries
+      // the exact `query_*` call instead of a handback. Asserting a handback here is what broke when
+      // D1b added the status — the contract was written when shaping was the only model work there was.
+      if (r.figure_call !== undefined) {
+        expect(r.figure_call.tool.length).toBeGreaterThan(0);
+        expect(r.handback).toBeUndefined();
+        continue;
+      }
       expect(r.handback?.source_text.length).toBeGreaterThan(0);
       expect(r.handback?.rules.join(' ')).toMatch(/NEVER invent|ONLY from the source material/);
       // The re-measure step must name a REGISTERED tool. G4 registered grant_resize_answer, so this
@@ -234,6 +245,19 @@ describeLocal('MCP tool handlers (integration)', () => {
     }
 
     expect(result.markdown).toContain('not submittable as-is');
+
+    // THE INVARIANT, stated once and directly. The loop above checks each payload's shape; this
+    // checks that a payload exists at all and that there is never more than one, which is the
+    // property a caller actually depends on: it can walk `results`, filter to actor `llm`, and know
+    // every remaining item tells it what to do. D1b's `fetch_figure` broke the old form of this
+    // ("actor llm implies handback") by adding a second kind of model work; the fix was to widen the
+    // contract rather than to force a lookup into a handback shaped for rewriting text.
+    const llm = result.results.filter((r) => r.actor === 'llm');
+    expect(llm.length).toBeGreaterThan(0);
+    for (const r of llm) {
+      const payloads = [r.handback, r.figure_call].filter((p) => p !== undefined);
+      expect(payloads).toHaveLength(1);
+    }
   });
 
   // grant_resize_answer, gate G4. Two calls, because the loop is the point: the tool measures and the

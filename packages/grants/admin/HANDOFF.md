@@ -129,3 +129,136 @@ What is genuinely unverified today, and it is narrower:
 ## On process
 
 We have not defined a process for this kind of document, so treat the split as a first proposal for one rather than a finished standard. If the shape is wrong — different documents, different boundaries, a gate review you want to own — say so and I will restructure. A tune-up is cheap at this stage.
+
+---
+
+## Session of 2026-08-11 — multi-grant test, bank v0.4.2 → v0.4.3, triage review, MCP-first skill
+
+*(Items 1–5 are the morning's work and took the bank to v0.4.2; items 6–7 are the afternoon's and
+took it to v0.4.3. Counts inside items 1–5 are the record as at v0.4.2 and are left as written —
+the current figures are in "Where the project is now".)*
+
+### What was done
+
+**1. Tested the implementation against three grants with no filed response** (from `data/Grants/`):
+JFF & Google Advancing AI Resilient Early Career Pathways RFP (2026), Allen Hiles Fund (blank
+template), and Dolfinger-McMahon Foundation. Before the session, the matcher routed JFF **0 of 8**
+questions confidently, Allen Hiles 3 of 11, Dolfinger 3 of 4.
+
+**2. Grew the question bank to v0.4.2** (`seed/questions.json`) to fix those routes:
+- 15 real funder wordings appended to existing canonicals (all from the three forms).
+- 2 new canonical questions: `organization.community_voice` → `kb.dei` and `program.operations` →
+  `kb.program_desc`. Both reuse existing KB slots — no KB answers were created (gap-fill agent's lane).
+- 3 new form fixtures committed: `forms/allen_hiles_2024.json`, `forms/jff_ai_pathways_2026.json`,
+  `forms/dolfinger_mcmahon_2023.json`.
+- Both parity fixtures regenerated from the prototype (control passes clean, zero shared-case
+  regressions): matcher parity 337 → **404 cases**, seq-ratio 59,616 → **71,001 pairs**.
+- Bank counts: 88 → **90 questions**, 248 → **265 wordings**, 25 sources, `kb_entries` unchanged (29).
+- Suite: **187 of 187 pass** across 9 files in `packages/grants`.
+- After: **all three grants route 100% of questions confidently** (JFF 8/8, Allen Hiles 11/11,
+  Dolfinger 4/4).
+
+**3. Reviewed the grant-data triage** (`docs/grant-data-triage.md` + seven H2 reports in
+`docs/grant-data-triage/`). Findings: the five H2 extraction reports and the redaction execution are
+evidence-only; they changed nothing under `packages/`. The redaction is done (63 copies in
+`/tmp/opencode/redacted/`, originals untouched); the credential swap-in and ~30 password rotations are
+staff-gated.
+
+**4. Made the grant-writing skill MCP-first** (`.claude/skills/grant-writing/`), per the architectural
+decision that the server has **no local `data/Grants` mirror** — everything is reachable through the
+Drive MCP / internal MCP chain:
+- Source-ladder rung 3 (prior filed applications) now routes through `search_documents({source})` via
+  the Drive chain; `corpus_search.py` is demoted to a dev-only fallback and its dead default root
+  (`/tmp/opencode/grants-zip/Grants`) was repointed at `data/Grants`.
+- Figure-claims guidance now states explicitly that the work order's claim strings are **snapshots,
+  not facts** — the live `query_*` call wins, and "fixing a stale claim" in `figures.ts` is drift
+  working as intended, not a bug. No `figures.ts` claims were edited.
+
+**5. `.gitignore`** — added `data` (the 1,234-file untracked Grants mirror; matches the existing
+`packages/grants/data/` rule). Note the edit currently drops the trailing newline.
+
+### Continued, same day — bank v0.4.3 and a red suite nobody had seen
+
+**6. Closed board `grant-h32`** (three funder wordings matching at confidence 1.000 to canonicals of
+the wrong `answer_type`). Re-diagnosed against the code before touching anything, and **two of the
+three had moved** — D1a/D1b landed between the board entry and today, changing the symptom without
+changing the cause. The worst of them was no longer visible at all: D1a's structured branch answered
+Truist's two-part 200-word question with **9 words** and marked it `fits` / `actor: none`, meaning no
+work owed. Fixed under growth rule 1 with two new canonicals, `program.population_impact` and
+`financials.budget_allocation`. Bank **90 → 92 questions, 265 wordings unchanged** — this release
+*moved* three variants and invented no funder source, which `data.test.ts` asserts. Both parity
+fixtures regenerated with control passes first; **exactly 5 of 406 matcher cases changed and all 5
+were intended**. On `aug7_truist`, `fits` 10 → 11 and the two-part question now returns 86/200 words
+of narrative instead of 9.
+
+**7. Found and fixed a defect that had left the full suite red since 2026-08-10.** D1b's
+`fetch_figure` set `actor: 'llm'` with no `handback`, breaking a documented contract and an
+integration assertion — a caller driving off `handback` silently skipped every figure question.
+**This is the part to read.** It went unseen because this workstream verifies with
+`vitest run packages/grants`, and that package contains no test reaching `apps/mcp-server`; sessions
+5 and 6 both recorded "187 of 187 pass" truthfully while the repo suite was failing. A second gap
+underneath it: `pnpm test` does not typecheck, and `pnpm -r typecheck` caught a stale local type in
+the same file that every runtime case passed. Contract widened to "every `llm` result carries exactly
+one of `handback` or `figure_call`". Boards `grant-gab` (closed) and `grant-h32.1`/`grant-a54` (the
+carved-out figure-args question).
+
+**8. Guarded D1a's mechanism — the general shape behind item 6, not just its one instance.** New
+`needs_expand` status (`actor: llm`) fires when a stored structured value *fits* a funder's field but
+does not *answer* it. The handback carries the confirmed value as an `anchor_value` that must survive
+verbatim plus the KB slot prose as material, under new `EXPAND_RULES`.
+
+This is the highest-risk handback in the layer and it is written that way: a short fact plus a large
+empty field is exactly what produces invented grant content, so the rules state that **the limit is a
+ceiling, not a target**. A guard that provoked padding would be worse than the defect it replaced — a
+reviewer can see an under-answer; a padded one reads as finished.
+
+**The guard shipped a false positive and it was caught before it mattered**, by running all ten seeded
+forms rather than trusting the design. Sized on field-size and fill-ratio alone, it fired on Hamilton's
+"Project/ Program/ Campaign Name" — a 250-character box holding `Launchpad` — and would have told the
+model to pad a title to 250 characters. The missing test was `answer_type`; a `field` is a name however
+large the box. All ten forms now come back clean.
+
+**It catches nothing today, and that is intended.** The one real instance was fixed at the bank level,
+so this is a regression guard for the ~14 structured values `grant-miy` will add. One gap is recorded
+rather than papered over: it cannot fire on a form that states **no** limit, because with no cap there
+is no evidence the field is large and asserting one would be inventing. Board `grant-lyy`;
+`DECISIONS.md` D1e.
+
+**Verified state now: 217 of 217 in `packages/grants`, 262 of 262 across 14 files repo-wide, 14
+packages typecheck clean.**
+
+Board movement: `grant-h32` closed, `grant-0ov` closed against verified criteria, `grant-afb` closed
+as a byte-identical duplicate created 6 seconds after `grant-0ov`; `grant-gab` (D1b contract defect,
+closed), `grant-a54` (figure-args carve-out) and `grant-lyy` (the D1e no-limit gap) opened.
+
+### Where the project is now
+
+- **Deterministic layer is green and route-complete** on the three grants that previously exposed its
+  coverage gaps. The bank grows by real wordings only; parity is asserted field-for-field.
+- **The full suite is green for the first time since D1b landed**, and the reason it was not is now a
+  written rule in `../CLAUDE.md` §3: run `pnpm test` *and* `pnpm -r typecheck`, never the package
+  suite alone, before claiming green.
+- **Nothing from this session is committed.** Working tree holds the bank edit, both parity fixtures,
+  three form fixtures, the test count updates, `CHANGELOG.md`, `QUESTIONS-SCHEMA.md`, the skill edits,
+  and the `.gitignore` change, alongside the pre-existing D1a/D1b working-tree edits (data/pipeline/
+  figures/schemas/KB/CHANGELOG/CLAUDE/NEXT-SESSION/DECISIONS). Branch `writing/dev` is 5 commits ahead
+  of origin.
+- **Triage is complete on the executable side.** `grant-19o` children H2.1–H2.6 + redaction execution
+  all delivered. What remains is staff-gated.
+
+### What to do next
+
+1. **Staff-gated (no code):** password rotation at ~30 portals + swap redacted copies into the tree
+   (`grant-19o.7`); approve H2.1 structured-value candidates → the gap-fill agent applies the D1b KB
+   edit; `kb.docs` reference text; apply the H2.6 Siegel framing replacement to the docx + re-export.
+2. **Open, in-lane:** `grant-kmi.3` — verify the Drive sync under the **production** identity (the
+   service account cannot see the Grants Shared Drive, so the MCP-first `search_documents` path has no
+   corpus on the server until this lands).
+3. **Open, content:** `grant-miy` (Sean) — the remaining ~14 structured KB values; ~7
+   accepted-manual-fill decisions recorded in `DECISIONS.md`.
+4. **When the KB content lands:** re-run `prep.mjs` on the three test grants to confirm the
+   `no_kb_answer` / `kb_unverified` gaps shrink. Do **not** chase `figures.ts` claim strings as the KB
+   changes — that is drift working as intended.
+5. **Commit decision:** this session's change set is ready to commit on `writing/dev` once the
+   pre-existing D1a/D1b edits are reconciled with it.
+

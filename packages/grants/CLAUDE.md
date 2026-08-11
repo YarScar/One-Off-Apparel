@@ -84,9 +84,12 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **222 tests across 14
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **262 tests across 14
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
-over stdio. `packages/grants` alone is **177 in 9 files**, with no database and no network. (207 across
+over stdio. `packages/grants` alone is **217 in 9 files**, with no database and no network. (192 in 9
+before the `needs_expand` guard landed on 2026-08-11; 187 in 9
+before earlier the same day, when board `grant-h32` split two canonicals at bank v0.4.3; 177 in 9
+before 2026-08-10, when D1a/D1b added the structured-value and fetch_figure branches; 207 across
 13 before 2026-08-06, when D4 added `reframe.test.ts`; 183 across 12 before G4 added `resize.test.ts`
 and three integration cases; 131 across 10 before G3 added `pipeline.test.ts` and `handback.test.ts`;
 82 across 8 before 2026-08-03, when the code review added suites for `limits.ts` and `py.ts`, which
@@ -95,6 +98,15 @@ had none.)
 Use `pnpm db:migrate`, never `db:push`, for local setup. `db push` writes no migration SQL, so the
 `tool_permissions` rows never land and every tool call fails closed. This is not a preference — it is
 the difference between a working environment and a silently broken one.
+
+**Run `pnpm test`, not the package suite, before claiming green.** A `vitest run packages/grants`
+pass says nothing about the tool surface: `packages/grants` has no test that goes through
+`apps/mcp-server`, so a library change that breaks a tool's output contract leaves it green. This is
+not hypothetical — D1b's `fetch_figure` broke the `actor: llm` ⇒ `handback` invariant, the grants
+suite passed 187/187 throughout, and the break sat undetected in the working tree until 2026-08-11.
+**And `pnpm test` is itself not enough**: it does not typecheck, so a test file's own local type
+declarations can go stale while every case passes. `pnpm -r typecheck` caught exactly that on the
+same fix. The pairing is the check; neither half is.
 
 **MCP server: 23 tools registered** — 16 data, `grant_match_question`, `grant_build_draft`,
 `grant_resize_answer`, 4 `skill_*`. Every one has a `tool_permissions` row, so nothing currently fails
@@ -206,7 +218,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 222 passed, 0 skipped, 14 files.
+# Full suite — expect 232 passed, 0 skipped, 14 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

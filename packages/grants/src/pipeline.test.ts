@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { listFormIds, loadBank, loadForm, loadKnowledgeBase } from './data.js';
-import { DERIVE_RULES, RESIZE_RULES } from './handback.js';
+import { DERIVE_RULES, EXPAND_RULES, RESIZE_RULES } from './handback.js';
 import {
   STATUS_ACTOR,
   STATUS_NOTE,
@@ -187,12 +187,21 @@ describe('the handback — outstanding text work goes to the calling model, not 
   const over = (): AnswerPlan =>
     buildAnswer(match(), WORDS(3), kbWith('kb.mission', 'one two three four five six', true));
 
-  it('routes every llm-actor status through a handback, and no staff status through one', () => {
+  it('routes every llm-actor status through a handback or a figure_call, and no staff status through one', () => {
     const pkg = runPipeline(loadForm('aug7_truist'));
     for (const r of pkg.results) {
       expect(r.actor).toBe(STATUS_ACTOR[r.status]);
-      if (r.actor === 'llm') expect(r.handback).toBeDefined();
-      else expect(r.handback).toBeUndefined();
+      if (r.actor === 'llm') {
+        // A live-figure question has no prose to shape — the work is the query_* call instead.
+        if (r.status === 'fetch_figure') expect(r.figure_call).toBeDefined();
+        else expect(r.handback).toBeDefined();
+      } else {
+        expect(r.handback).toBeUndefined();
+        // A definitional figure is staff work, but the query call still travels with it so staff
+        // knows what to run before deciding which population the funder means.
+        if (r.status === 'figure_definitional') expect(r.figure_call).toBeDefined();
+        else expect(r.figure_call).toBeUndefined();
+      }
     }
     // Both kinds of outstanding work exist in this fixture, or the assertion above proves nothing.
     expect(pkg.summary.by_actor.llm).toBeGreaterThan(0);
@@ -372,6 +381,93 @@ describe('the draft package', () => {
   });
 });
 
+// --------------------------------------------------------------------------- D1: structured values and live figures
+
+describe('structured values — a stored short value is the answer, keyed by question id', () => {
+  it('returns the value as a real answer, ahead of derive_from_reference', () => {
+    const out = buildAnswer(
+      match({ answer_type: 'field', kb_ref: 'kb.program_desc', matched_id: 'cover.project_title' }),
+      null,
+      { ...kbWith('kb.program_desc', 'long narrative', true), answers: { 'kb.program_desc': { label: 'L', verified: true, text: 'long narrative', structured: { 'cover.project_title': { value: 'Launchpad', verified: true } } } } },
+    );
+    expect(out.status).toBe<AnswerStatus>('ready');
+    expect(out.actor).toBe('none');
+    expect(out.answer).toBe('Launchpad');
+    expect(out.handback).toBeUndefined();
+    // The provenance must mark it as structured, so a reviewer can tell it apart from a derived one.
+    expect(out.from_structured).toBe(true);
+  });
+
+  it('measures a structured value against the funder limit', () => {
+    const out = buildAnswer(
+      match({ answer_type: 'field', kb_ref: 'kb.program_desc', matched_id: 'cover.project_title' }),
+      { unit: 'characters', max: 30 },
+      { ...kbWith('kb.program_desc', 'long narrative', true), answers: { 'kb.program_desc': { label: 'L', verified: true, text: 'long narrative', structured: { 'cover.project_title': { value: 'Launchpad', verified: true } } } } },
+    );
+    expect(out.status).toBe<AnswerStatus>('fits');
+    expect(out.answer).toBe('Launchpad');
+    expect(out.measurement?.count).toBe(9);
+  });
+
+  it('does not fire for a question with no structured value on the same slot', () => {
+    // kb.eligibility answers eight questions; the one without a value must still derive.
+    const out = buildAnswer(
+      match({ answer_type: 'single_select', kb_ref: 'kb.eligibility', matched_id: 'eligibility.minority_owned' }),
+      null,
+      { ...kbWith('kb.eligibility', 'narrative', true), answers: { 'kb.eligibility': { label: 'L', verified: true, text: 'narrative', structured: { 'cover.fiscal_sponsor': { value: 'yes', verified: true } } } } },
+    );
+    expect(out.status).toBe<AnswerStatus>('derive_from_reference');
+    expect(out.actor).toBe('llm');
+  });
+
+  it('lets a per-value verified flag override the entry-level one', () => {
+    const out = buildAnswer(
+      match({ answer_type: 'field', kb_ref: 'kb.profile.identity', matched_id: 'cover.fiscal_year' }),
+      null,
+      { ...kbWith('kb.profile.identity', 'narrative', true), answers: { 'kb.profile.identity': { label: 'L', verified: true, text: 'narrative', structured: { 'cover.fiscal_year': { value: 'July', verified: false } } } } },
+    );
+    expect(out.verified).toBe(false);
+  });
+});
+
+describe('fetch_figure — a number question whose answer is a live figure, never a frozen one', () => {
+  it('returns the exact query_* call for a drifting number', () => {
+    const out = buildAnswer(
+      match({ answer_type: 'number', kb_ref: 'kb.financials', matched_id: 'financials.operating_budget' }),
+      null,
+      kbWith('kb.financials', 'FY2025 expenses were about $1.34M', true),
+    );
+    expect(out.status).toBe<AnswerStatus>('fetch_figure');
+    expect(out.actor).toBe('llm');
+    expect(out.figure_call).toEqual({ tool: 'get_finance_brief', args: { period: 'ytd' } });
+    expect(out.answer).toBeUndefined();
+    expect(out.handback).toBeUndefined();
+  });
+
+  it('escalates a definitional number check to staff, keeping the query call', () => {
+    // jobs_and_participants -> students_served_total is definitional: 145 served vs 301 records are
+    // both true of different populations. The number is only written after a person confirms which
+    // one the funder means, so the actor must be staff — not the model.
+    const out = buildAnswer(
+      match({ answer_type: 'number', kb_ref: 'kb.metrics', matched_id: 'program.jobs_and_participants' }),
+      null,
+      kbWith('kb.metrics', 'Served ~145 students', true),
+    );
+    expect(out.status).toBe<AnswerStatus>('figure_definitional');
+    expect(out.actor).toBe('staff');
+    expect(out.figure_call?.tool).toBe('query_enrollment');
+  });
+
+  it('leaves an unmapped number question on the derive path', () => {
+    const out = buildAnswer(
+      match({ answer_type: 'number', kb_ref: 'kb.financials', matched_id: 'cover.request_amount' }),
+      null,
+      kbWith('kb.financials', 'narrative', true),
+    );
+    expect(out.status).toBe<AnswerStatus>('derive_from_reference');
+  });
+});
+
 describe('renderMarkdown', () => {
   const pkg = runPipeline(loadForm('aug7_truist'));
   const md = renderMarkdown(pkg);
@@ -445,3 +541,133 @@ function sectionFor(md: string, index: number): string {
   const next = md.indexOf(`## ${String(index + 2)}. `, start);
   return next === -1 ? md.slice(start) : md.slice(start, next);
 }
+
+// --------------------------------------------------------------------------- D1e: the needs_expand guard
+
+/**
+ * Board `grant-h32` / DECISIONS.md D1e. The `structured` branch above fixed one defect and created
+ * another: a stored value can measure *inside* a funder's cap and still not answer the field, and the
+ * layer returned that as `fits` with `actor: none` — no work owed. The outstanding-work count went
+ * down while the draft got worse, which is the worst shape a defect can take in a tool whose entire
+ * job is telling a caller what is left to do.
+ *
+ * These cases are deliberately weighted toward what the guard must NOT do. Over-firing here tells a
+ * model to pad a grant answer to fill a box, and padding is how invented facts reach a funder — so a
+ * guard that over-fires is worse than the bug it replaced.
+ */
+describe('needs_expand — a stored value that fits a field but does not answer it', () => {
+  const SHORT = 'Philadelphia young people ages 16-24';
+
+  const kbStructured = (slot: string, prose: string, qid: string, value: string): KnowledgeBase => ({
+    ...kbWith(slot, prose, true),
+    answers: {
+      [slot]: {
+        label: 'L',
+        verified: true,
+        text: prose,
+        structured: { [qid]: { value, verified: true } },
+      },
+    },
+  });
+
+  const run = (answerType: AnswerType, limit: FormLimit): AnswerPlan =>
+    buildAnswer(
+      match({ matched_id: 'program.target_population', kb_ref: 'kb.target_population', answer_type: answerType }),
+      limit,
+      kbStructured('kb.target_population', 'Launchpad recruits from more than 30 schools.', 'program.target_population', SHORT),
+    );
+
+  it('routes to the calling model instead of reporting the field done', () => {
+    const out = run('demographic', WORDS(200));
+    expect(out.status).toBe('needs_expand');
+    expect(out.actor).toBe('llm');
+    expect(out.actor).toBe(STATUS_ACTOR.needs_expand);
+  });
+
+  it('withholds the value as `answer`, because it is not one yet', () => {
+    // THE LOAD-BEARING ASSERTION. Present as `answer`, the value renders as a finished answer in the
+    // Markdown package and in anything else walking `results` — which is precisely the appearance
+    // that let the original defect through. It travels as the handback's anchor instead.
+    const out = run('demographic', WORDS(200));
+    expect(out.answer).toBeUndefined();
+    expect(out.handback?.anchor_value).toBe(SHORT);
+  });
+
+  it('hands back the confirmed value AND the slot prose, under the expand rules', () => {
+    const out = run('demographic', WORDS(200));
+    expect(out.handback?.task).toBe('expand');
+    expect(out.handback?.rules).toEqual(EXPAND_RULES);
+    expect(out.handback?.source_text).toContain('more than 30 schools');
+    // The measurement travels too, so the model knows the room it has without recounting.
+    expect(out.measurement?.max).toBe(200);
+  });
+
+  it('still marks it as coming from a structured value', () => {
+    expect(run('demographic', WORDS(200)).from_structured).toBe(true);
+  });
+
+  it('names the shortfall in the action, in the funder’s own units', () => {
+    const out = run('narrative', WORDS(200));
+    expect(out.action).toContain('/200 words');
+    expect(out.action).toMatch(/verbatim/);
+  });
+
+  // ---- what it must NOT do ------------------------------------------------------------------
+
+  it('leaves a title field alone however generous the box', () => {
+    // The real false positive this guard shipped with for about ten minutes: Hamilton's LOI asks
+    // "Project/ Program/ Campaign Name" in a 250-CHARACTER box. `Launchpad` is the complete answer.
+    const out = buildAnswer(
+      match({ matched_id: 'cover.project_title', kb_ref: 'kb.program_desc', answer_type: 'field' }),
+      { unit: 'characters', max: 250 },
+      kbStructured('kb.program_desc', 'long narrative', 'cover.project_title', 'Launchpad'),
+    );
+    expect(out.status).toBe('fits');
+    expect(out.actor).toBe('none');
+    expect(out.answer).toBe('Launchpad');
+  });
+
+  it('leaves a field below the prose floor alone even when the type could want prose', () => {
+    // 36 characters into a 200-character box: the type test passes and the RATIO test passes
+    // (0.18, under 0.25), so the floor is the only thing holding this back. 200 < PROSE_LIMIT_FLOOR
+    // .characters, and a box that small is a roomy input rather than a request for narrative.
+    const out = run('narrative', { unit: 'characters', max: 200 });
+    expect(out.status).toBe('fits');
+    expect(out.answer).toBe(SHORT);
+    const m = out.measurement;
+    if (m === undefined) throw new Error('expected a measurement');
+    expect(m.count / m.max).toBeLessThan(0.25);
+  });
+
+  it('leaves a value that already fills the field alone', () => {
+    const out = buildAnswer(
+      match({ matched_id: 'program.target_population', kb_ref: 'kb.target_population', answer_type: 'narrative' }),
+      WORDS(6),
+      kbStructured('kb.target_population', 'prose', 'program.target_population', SHORT),
+    );
+    expect(out.status).toBe('fits');
+  });
+
+  it('does not touch the no-limit path, where there is no evidence either way', () => {
+    // With no stated limit the layer cannot know the field is big, and saying so would be inventing.
+    // Recorded as a known gap rather than papered over — see DECISIONS.md D1e.
+    const out = buildAnswer(
+      match({ matched_id: 'program.target_population', kb_ref: 'kb.target_population', answer_type: 'demographic' }),
+      null,
+      kbStructured('kb.target_population', 'prose', 'program.target_population', SHORT),
+    );
+    expect(out.status).toBe('ready');
+    expect(out.answer).toBe(SHORT);
+  });
+
+  it('leaves an over-limit value on the resize path', () => {
+    const long = Array.from({ length: 300 }, () => 'word').join(' ');
+    const out = buildAnswer(
+      match({ matched_id: 'program.target_population', kb_ref: 'kb.target_population', answer_type: 'narrative' }),
+      WORDS(200),
+      kbStructured('kb.target_population', 'prose', 'program.target_population', long),
+    );
+    expect(out.status).toBe('needs_resize');
+    expect(out.handback?.task).toBe('resize');
+  });
+});

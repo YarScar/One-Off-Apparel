@@ -41,21 +41,41 @@
  *    narrative slot, the shortest being 30 words: Truist's 30-*character* "name of your solution"
  *    field points at the 199-word `kb.program_desc`. The prototype returns that prose as the answer.
  *    This hands it back as source material to derive "Launchpad" from.
- * 2. **`needs_attachment`** — split out of the above, because an upload is the one case the calling
+ * 2. **`structured` short values** — the fix for the case above when the value is actually known.
+ *    A KB entry carries `structured[question_id] = { value, verified }`, keyed by question because
+ *    slots are shared (`kb.eligibility` answers eight). The branch returns the value as a real
+ *    answer before `derive_from_reference` can run. DECISIONS.md D1.
+ * 2a. **`needs_expand`** — the guard on the branch above, and the reason it is numbered with it: the
+ *    fix in 2 created this defect. A stored value can *fit* a funder's field and still not *answer*
+ *    it, and until this existed the layer only asked the first question — 9 words returned into a
+ *    200-word narrative box as `fits` with `actor: none`, so the outstanding-work count went down
+ *    while the draft got worse. `limits.ts::underfillsProseField` is the test. The handback carries
+ *    the confirmed value as an anchor that must survive verbatim *and* the slot prose as material,
+ *    under `EXPAND_RULES`, whose ceiling-not-a-target rule is what stops the guard from trading a
+ *    silent under-answer for a padded invented one. Board `grant-h32`; DECISIONS.md D1e.
+ * 3. **`fetch_figure`** — a number question whose answer is a live figure, never a frozen one.
+ *    `figures.ts` names the exact `query_*` call; the caller runs it and writes the live number.
+ *    DECISIONS.md D1b.
+ * 4. **`needs_attachment`** — split out of the above, because an upload is the one case the calling
  *    model cannot do. A document is not text it can write.
- * 3. **`compression_infeasible`** — over the limit by more than {@link MAX_COMPRESSION_RATIO}. Still
+ * 5. **`compression_infeasible`** — over the limit by more than {@link MAX_COMPRESSION_RATIO}. Still
  *    handed back for shaping, but carrying the warning that facts will have to be dropped and that
  *    the reply must say which. The prototype reports a 46x overrun identically to a 1.2x one.
- * 4. **`carries_figures`** — set from {@link containsNumericClaim}, independently of the KB's own
+ * 6. **`carries_figures`** — set from {@link containsNumericClaim}, independently of the KB's own
  *    `verified` flag. `figures.ts` shows `verified` is the wrong axis for staleness: it fires on
  *    `kb.docs`, which contains no figures at all, and stays silent on `kb.metrics`, which contains
  *    five, and whose wage figure drifts by ~$1,500 every four days.
  */
 
 import { loadBank, loadKnowledgeBase, loadIntegrityReport, type IntegrityWarning } from './data.js';
-import { buildFigureWorkOrder, containsNumericClaim, type FigureWorkOrder } from './figures.js';
+import {
+  buildFigureWorkOrder,
+  containsNumericClaim,
+  figureCheckForQuestion,
+  type FigureWorkOrder,
+} from './figures.js';
 import { buildHandback, type Handback, type HandbackContext } from './handback.js';
-import { MAX_COMPRESSION_RATIO, measure, type Measurement } from './limits.js';
+import { MAX_COMPRESSION_RATIO, measure, underfillsProseField, type Measurement } from './limits.js';
 import { DEFAULT_THRESHOLD, matchQuestion, type MatchResult } from './matcher.js';
 import {
   NON_NARRATIVE_ANSWER_TYPES,
@@ -89,21 +109,27 @@ export type AnswerStatus =
   | 'fits'
   | 'ready'
   | 'needs_resize'
+  | 'needs_expand'
   | 'compression_infeasible'
   | 'derive_from_reference'
   | 'needs_attachment'
   | 'needs_review'
   | 'per_application'
   | 'kb_gap'
-  | 'kb_placeholder';
+  | 'kb_placeholder'
+  | 'fetch_figure'
+  | 'figure_definitional';
 
 /** Which actor each status routes to. Exported so a caller can group without restating the mapping. */
 export const STATUS_ACTOR: Readonly<Record<AnswerStatus, Actor>> = {
   fits: 'none',
   ready: 'none',
   needs_resize: 'llm',
+  needs_expand: 'llm',
   compression_infeasible: 'llm',
   derive_from_reference: 'llm',
+  fetch_figure: 'llm',
+  figure_definitional: 'staff',
   needs_attachment: 'staff',
   needs_review: 'staff',
   per_application: 'staff',
@@ -136,14 +162,25 @@ export interface AnswerPlan {
   /** Text ready for review. Absent whenever shaping is still owed — see `handback`. */
   readonly answer?: string;
   /**
-   * The work owed to the calling model, with everything needed to do it. Present exactly when
-   * `actor` is `llm`, so a caller can drive every outstanding rewrite off this field alone.
+   * The work owed to the calling model when that work is **shaping text**, with everything needed to
+   * do it.
+   *
+   * This once read "present exactly when `actor` is `llm`", which stopped being true when D1b added
+   * `fetch_figure` — a second kind of model work, where the task is running a `query_*` call rather
+   * than rewriting prose, and so carries {@link AnswerPlan.figure_call} instead. The invariant a
+   * caller can still rely on is the one that matters: **every `llm` result carries exactly one of
+   * `handback` or `figure_call`**, so the outstanding work is still drivable off the result alone.
+   * `apps/mcp-server/src/__tests__/tools.test.ts` asserts that form.
    */
   readonly handback?: Handback;
   /** Present whenever the form stated a limit and there was text to measure against it. */
   readonly measurement?: Measurement;
   /** The text carries a currency, percentage, or multi-digit figure that must be verified live. */
   readonly carries_figures?: boolean;
+  /** Present on a `fetch_figure` result: the exact `query_*` call the caller must run. */
+  readonly figure_call?: { readonly tool: string; readonly args: Readonly<Record<string, string>> };
+  /** Present when the answer came from a per-question structured value, not the slot's narrative. */
+  readonly from_structured?: boolean;
 }
 
 /**
@@ -234,6 +271,130 @@ export function buildAnswer(
         `This question wants a document upload, not text. ${match.kb_ref} holds the checklist of ` +
         `what to attach — a person has to gather and upload the files.`,
       answer: text,
+    };
+  }
+
+  // A number question whose answer is a live figure, never a frozen KB value. figures.ts names the
+  // exact query_* call; the caller runs it under its own name (TAD decision 3) and writes the live
+  // number. A definitional check escalates to staff — the number depends on which population the
+  // funder means, and a person confirms that before it is written. Two statuses, not one, so the
+  // actor invariant holds: a caller groups by STATUS_ACTOR without restating the mapping.
+  if (match.answer_type === 'number' && match.matched_id !== null) {
+    const figure = figureCheckForQuestion(match.matched_id);
+    if (figure !== undefined) {
+      const definitional = figure.conflict_kind === 'definitional';
+      return {
+        ...withEntry,
+        status: definitional ? 'figure_definitional' : 'fetch_figure',
+        actor: definitional ? STATUS_ACTOR.figure_definitional : STATUS_ACTOR.fetch_figure,
+        action: definitional
+          ? `This question wants a live ${figure.tool} figure, but the check is definitional ` +
+            `(${figure.claim}). Run the call, then have staff confirm which population the funder ` +
+            `means before writing the number.`
+          : `This question wants a live ${figure.tool} figure. Run it with ` +
+            `${JSON.stringify(figure.args)} and write the returned number — do not quote a frozen ` +
+            `KB figure.`,
+        figure_call: { tool: figure.tool, args: figure.args },
+      };
+    }
+  }
+
+  // A per-question structured value is the answer, not source material. Slots are shared — one slot
+  // answers many questions — so the key is the question id, not the slot. Returns before the
+  // derive_from_reference branch so a stored short value never becomes prose to derive from.
+  const structured = match.matched_id === null ? undefined : entry.structured?.[match.matched_id];
+  if (structured !== undefined) {
+    const structuredVerified = structured.verified ?? entry.verified;
+    const structuredFigures = containsNumericClaim(structured.value);
+    const withStructured = {
+      ...withEntry,
+      verified: structuredVerified,
+      carries_figures: structuredFigures,
+      from_structured: true,
+    };
+    if (limit === null) {
+      return {
+        ...withStructured,
+        status: 'ready',
+        actor: STATUS_ACTOR.ready,
+        action: addWarnings(
+          'No stated limit — use the stored structured value, edited for this funder’s voice.',
+          structuredVerified,
+          structuredFigures,
+        ),
+        answer: structured.value,
+      };
+    }
+    const measurement = measureAgainst(structured.value, limit, match.kb_ref);
+    if (measurement.fits) {
+      // FITTING IS NOT ANSWERING. A stored value can measure inside a funder's cap and still leave
+      // most of the field unanswered — `underfillsProseField` is the test, and board `grant-h32` is
+      // why it exists: 9 words returned into a 200-word narrative box as `fits` / `actor: none`, so
+      // the tool reported no work owed on a question it had barely touched.
+      //
+      // The handback carries BOTH kinds of material, because they are not interchangeable: the
+      // structured value is confirmed and must survive verbatim, and the slot's prose is context the
+      // model may draw on. EXPAND_RULES states the ceiling-not-a-target rule, without which this
+      // guard would trade a silent under-answer for a padded, invented one.
+      if (underfillsProseField(measurement, match.answer_type)) {
+        return {
+          ...withStructured,
+          status: 'needs_expand',
+          actor: STATUS_ACTOR.needs_expand,
+          action: addWarnings(
+            `The stored value fits (${String(measurement.count)}/${String(measurement.max)} ` +
+              `${measurement.unit}) but answers only a fraction of a field this size. Keep the value ` +
+              `verbatim and write the rest of the answer around it from ${match.kb_ref} — up to the ` +
+              `limit, and no further than the source material supports.`,
+            structuredVerified,
+            structuredFigures,
+          ),
+          // The value is deliberately NOT returned as `answer`. Present, it reads as a finished
+          // answer to anything rendering the package; the whole point of this branch is that it
+          // is not one yet. It travels as the handback's anchor instead.
+          handback: buildHandback({
+            task: 'expand',
+            sourceText: text,
+            limit,
+            measurement,
+            context,
+            anchorValue: structured.value,
+          }),
+          measurement,
+        };
+      }
+      return {
+        ...withStructured,
+        status: 'fits',
+        actor: STATUS_ACTOR.fits,
+        action: addWarnings(measurement.guidance, structuredVerified, structuredFigures),
+        answer: structured.value,
+        measurement,
+      };
+    }
+    // Over the limit: the same resize path as a narrative answer — the value is still the answer,
+    // it just needs shortening to the funder's cap.
+    const infeasible = measurement.verdict === 'compression_infeasible';
+    return {
+      ...withStructured,
+      status: infeasible ? 'compression_infeasible' : 'needs_resize',
+      actor: infeasible ? STATUS_ACTOR.compression_infeasible : STATUS_ACTOR.needs_resize,
+      action: addWarnings(
+        infeasible
+          ? `${measurement.guidance} Shorten the stored value, and state which facts you dropped ` +
+            `so a reviewer can put them back if the funder wants them.`
+          : `${measurement.guidance} Shorten the stored value, then re-measure.`,
+        structuredVerified,
+        structuredFigures,
+      ),
+      handback: buildHandback({
+        task: 'resize',
+        sourceText: structured.value,
+        limit,
+        measurement,
+        context,
+      }),
+      measurement,
     };
   }
 
@@ -441,10 +602,16 @@ export const STATUS_NOTE: Readonly<Record<AnswerStatus, string>> = {
   fits: 'Ready to review — within the funder’s limit.',
   ready: 'Ready to review — no stated limit.',
   needs_resize: 'OVER LIMIT — hand back for shortening.',
+  needs_expand:
+    'UNDER-ANSWERED — the stored value fits the field but does not fill it. Keep the value verbatim and write the answer around it from the source material, no further than that material supports.',
   compression_infeasible:
     'OVER LIMIT by more than compression can cover — shortening this means dropping facts, and the rewrite must say which.',
   derive_from_reference:
     'NEEDS A SHORT VALUE — the stored answer is narrative; derive the value from it rather than pasting it.',
+  fetch_figure:
+    'NEEDS A LIVE FIGURE — run the named query_* call and write its result; a frozen KB number is not an acceptable answer.',
+  figure_definitional:
+    'NEEDS A LIVE FIGURE + STAFF — the check is definitional; run the named query_* call, then staff confirm which population the funder means before the number is written.',
   needs_attachment: 'STAFF — this field wants a document upload. The text below is the checklist.',
   per_application: 'STAFF — application-specific value. No stored answer exists.',
   needs_review: 'STAFF — low match confidence. Confirm the question or add a variant.',
@@ -455,8 +622,8 @@ export const STATUS_NOTE: Readonly<Record<AnswerStatus, string>> = {
 const BANNER =
   '> **Draft for staff review — not submittable as-is.** Answers come from LaunchPad’s knowledge ' +
   'base, which is a frozen snapshot. Verify every figure against live data before submitting, and ' +
-  'edit for this funder’s voice. Sections marked **OVER LIMIT** or **NEEDS A SHORT VALUE** still owe ' +
-  'a rewrite; sections marked **STAFF** need a person.';
+  'edit for this funder’s voice. Sections marked **OVER LIMIT**, **UNDER-ANSWERED** or **NEEDS A ' +
+  'SHORT VALUE** still owe a rewrite; sections marked **STAFF** need a person.';
 
 /**
  * Render one draft package as Markdown: question, answer, provenance footline, outstanding work.
@@ -515,6 +682,18 @@ export function renderMarkdown(pkg: DraftPackage): string {
       L.push('');
     }
 
+    // A live-figure field has no stored answer to show; the work is the named call.
+    if (r.figure_call !== undefined) {
+      const args = Object.entries(r.figure_call.args)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      L.push(
+        `Run \`${r.figure_call.tool}\` with (${args}) and write the returned figure. ` +
+          `Do NOT quote a frozen KB number.`,
+      );
+      L.push('');
+    }
+
     const preview = r.measurement?.truncated_preview;
     if (preview !== undefined) {
       L.push(
@@ -542,6 +721,7 @@ function provenance(r: AnswerPlan): string {
   if (r.matched_id !== null) bits.push(`canonical \`${r.matched_id}\``);
   if (r.kb_ref !== null) bits.push(`KB \`${r.kb_ref}\``);
   if (r.matched_via !== null) bits.push(`via ${r.matched_via}`);
+  if (r.from_structured === true) bits.push('from structured value');
   bits.push(`match ${r.confidence.toFixed(2)}`);
   if (r.measurement !== undefined) {
     const m = r.measurement;

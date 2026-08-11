@@ -46,6 +46,23 @@ export const NON_NARRATIVE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set([
   'attachment',
 ]);
 
+/**
+ * Answer types where a funder's generous box might be a request for **prose**, rather than just a
+ * roomy input for a short value. The gate on `needs_expand` — see `limits.ts::underfillsProseField`.
+ *
+ * Deliberately not the complement of {@link NON_NARRATIVE_ANSWER_TYPES}: `demographic` appears in
+ * both. A demographic question ("who do you serve, and how many?") can be answered by a value *or*
+ * by a paragraph depending on how much room the funder gives it, which is the whole ambiguity that
+ * produced board `grant-h32`.
+ *
+ * The exclusions are what matter, and a real false positive is why this set exists at all. Hamilton's
+ * LOI asks "Project/ Program/ Campaign Name" in a **250-character** box. Measured on size alone,
+ * `Launchpad` fills 3.6% of it and looks badly under-answered; it is in fact the complete and correct
+ * answer. A `field` is a name however large the box, and a guard that told the model to write 250
+ * characters of prose into a title would cause the exact padding the expansion rules exist to forbid.
+ */
+export const EXPANDABLE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set(['narrative', 'demographic']);
+
 export const FREQUENCIES = ['low', 'medium', 'high', 'very_high'] as const;
 export const frequencySchema = z.enum(FREQUENCIES);
 export type Frequency = z.infer<typeof frequencySchema>;
@@ -118,6 +135,24 @@ export type KbEntry = QuestionBank['kb_entries'][number];
 
 // --------------------------------------------------------------------------- kb_launchpad.json
 
+/**
+ * A short structured value that IS the answer to one question, keyed by question id.
+ *
+ * Slots are shared — `kb.eligibility` answers eight questions, `kb.profile.identity` answers five —
+ * so a single per-slot value cannot serve them. Keying by question id disambiguates. The branch in
+ * `buildAnswer` returns this as the answer before the `derive_from_reference` branch runs.
+ *
+ * Per-value `verified` overrides the entry-level flag; absent, the entry-level flag is the default.
+ * DECISIONS.md D1 records the rule.
+ */
+export const kbStructuredValueSchema = z.object({
+  /** The short value to drop into the field. NOT a narrative. */
+  value: z.string(),
+  /** Grounded in filed material, for THIS value. Defaults to the entry-level `verified`. */
+  verified: z.boolean().optional(),
+});
+export type KbStructuredValue = z.infer<typeof kbStructuredValueSchema>;
+
 export const kbAnswerSchema = z
   .object({
     label: z.string(),
@@ -128,6 +163,8 @@ export const kbAnswerSchema = z
     verified: z.boolean(),
     /** The longest canonical version; callers compress it to a funder's stated limit. */
     text: z.string(),
+    /** Short structured values, keyed by question id. Optional: only questions that need one. */
+    structured: z.record(z.string(), kbStructuredValueSchema).optional(),
   })
   .passthrough();
 

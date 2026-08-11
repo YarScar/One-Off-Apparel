@@ -316,3 +316,75 @@ describe('matchQuestion — B6: a confident match must not be the wrong SHAPE of
     expect(m.is_confident).toBe(true);
   });
 });
+
+/**
+ * Board `grant-h32`, bank v0.4.3 — the same defect class as B6 above, but reached from the other
+ * side. Here the entry was right and the VARIANT was on the wrong entry: three real funder wordings
+ * asking for narrative sat on canonicals typed `demographic` and `number`, and matched at confidence
+ * 1.000 precisely BECAUSE they were recorded. A confident match to the wrong answer_type is not a
+ * recall problem, so no amount of variant-adding could have found it.
+ *
+ * `answer_type` is a property of the ENTRY, not of the variant (`seed/QUESTIONS-SCHEMA.md`), so
+ * retyping was never available: `program.target_population` is genuinely demographic and
+ * `financials.operating_budget` is genuinely a number. The fix is growth rule 1 — a new canonical
+ * with the right type, taking the misplaced wording as its first variant.
+ */
+describe('matchQuestion — h32: a narrative wording must not sit on a non-narrative canonical', () => {
+  const bank = loadBank();
+
+  it('routes the two-part "who do you serve, and how does it change them" to narrative', () => {
+    // Truist asks two things against a 200-WORD cap: who (demographic) and impact (narrative). On the
+    // demographic canonical it drew a 9-word structured value and reported `fits` with no work owed.
+    const m = matchQuestion(
+      'Who does your solution serve, and in what ways will the solution impact their lives?',
+      bank,
+    );
+    expect(m.is_confident).toBe(true);
+    expect(m.matched_id).toBe('program.population_impact');
+    expect(m.answer_type).toBe('narrative');
+    expect(m.answer_type).not.toBe('demographic');
+  });
+
+  it('routes JFF’s early-career impact question the same way', () => {
+    const m = matchQuestion(
+      'Early-Career Impact: Who are the early-career workers your idea seeks to benefit? How does ' +
+        'your proposed work aim to improve access, job quality, skill development, or career ' +
+        'mobility in an AI-transformed economy?',
+      bank,
+    );
+    expect(m.is_confident).toBe(true);
+    expect(m.matched_id).toBe('program.population_impact');
+    expect(m.answer_type).toBe('narrative');
+  });
+
+  it('routes budget ALLOCATION to the budget narrative, not to a live figure', () => {
+    // 150 words of allocation prose. On `financials.operating_budget` this became `fetch_figure`,
+    // telling the caller to run get_finance_brief and write the returned number into a prose field.
+    const m = matchQuestion('How is your current budget allocated?', bank);
+    expect(m.is_confident).toBe(true);
+    expect(m.matched_id).toBe('financials.budget_allocation');
+    expect(m.answer_type).toBe('narrative');
+    expect(m.kb_ref).toBe('kb.budget_narrative');
+  });
+
+  it('left the genuinely demographic question demographic', () => {
+    // The split must not drag the canonical it was split FROM. This wording wants counts and
+    // categories, and `demographic` is the correct type for it.
+    const m = matchQuestion(
+      'Target population (race/ethnicity, gender, age group, additional populations).',
+      bank,
+    );
+    expect(m.matched_id).toBe('program.target_population');
+    expect(m.answer_type).toBe('demographic');
+    expect(m.is_confident).toBe(true);
+  });
+
+  it('left the genuinely numeric budget question numeric', () => {
+    // h32 filed this one alongside the allocation question, but a fiscal-year budget IS a number.
+    // D1b routes it to a live figure, which is right; only the allocation wording had to move.
+    const m = matchQuestion('What was your organizational budget for fiscal year 2025 and 2026?', bank);
+    expect(m.matched_id).toBe('financials.operating_budget');
+    expect(m.answer_type).toBe('number');
+    expect(m.is_confident).toBe(true);
+  });
+});

@@ -1,8 +1,8 @@
 {
   "meta": {
     "name": "Canonical Grant Question Bank",
-    "version": "0.4.1",
-    "updated": "2026-08-04",
+    "version": "0.4.3",
+    "updated": "2026-08-11",
     "description": "Normalized, deduplicated grant application questions synthesized from real, publicly published funder forms. Each canonical question aggregates the real-world variants that map to it, so an incoming funder question can be matched to one canonical entry and routed to the Knowledge Base answer that satisfies it. v0.2 extends the bank with the Philadelphia/regional, corporate, federal, and PA-state forms captured in sources/philadelphia-regional-and-sector-forms.md, adding eligibility-gate, innovation, risk, capacity, and federal/state structured-field questions. v0.3 adds the two Aug-7 pilot forms (GSK STEM Access, Truist Foundation Inspire Awards) as variants; see sources/aug7-pilot-forms.md.",
     "sources": [
       {
@@ -92,6 +92,18 @@
       {
         "id": "Hamilton-2025",
         "name": "Hamilton Family Charitable Trust LOI (2025)"
+      },
+      {
+        "id": "JFF-AI-2026",
+        "name": "JFF & Google Advancing AI Resilient Early Career Pathways RFP (2026)"
+      },
+      {
+        "id": "AllenHiles-2024",
+        "name": "Allen Hiles Fund grant application (2024)"
+      },
+      {
+        "id": "DolfMcM-2023",
+        "name": "Dolfinger-McMahon Foundation grant application (2023)"
       }
     ],
     "answer_types": [
@@ -726,6 +738,10 @@
         {
           "text": "Describe the organization's qualifications and history of operating youth workforce and education programs, especially to those identified as priority populations by this RFP. Please include specific types of services provided, dates, locations, partnerships, contract values, and related performance outcomes.",
           "source": "JEVS-C2L"
+        },
+        {
+          "text": "Organizational background and history (if a first time applicant)",
+          "source": "AllenHiles-2024"
         }
       ],
       "limits": [
@@ -774,6 +790,10 @@
         {
           "text": "Is this a new program or an existing program?",
           "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Services provided",
+          "source": "AllenHiles-2024"
         }
       ]
     },
@@ -860,6 +880,10 @@
         {
           "text": "What are your short-term (1-5 years) and long-term (5-25 years) organizational goals? How do you plan to achieve them?",
           "source": "Instrumentl"
+        },
+        {
+          "text": "What are your organization's goals and objectives for the year and how will this grant help you implement these goals?",
+          "source": "AllenHiles-2024"
         }
       ]
     },
@@ -940,6 +964,10 @@
         {
           "text": "What specific problem are you solving? What is the scale of the problem in the communities you are working in?",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "What is the need for the project? Who will benefit from it, including number of people served? How will the project help those served? What do you expect to be its impact?",
+          "source": "AllenHiles-2024"
         }
       ]
     },
@@ -1075,10 +1103,31 @@
         {
           "text": "Target age group(s)",
           "source": "GSK-STEM-2026"
-        },
+        }
+      ]
+    },
+    {
+      "id": "program.population_impact",
+      "category": "program",
+      "canonical": "Who does the program serve, and how does it change their lives?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.target_population",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "Truist"
+        }
+      ],
+      "variants": [
         {
           "text": "Who does your solution serve, and in what ways will the solution impact their lives?",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Early-Career Impact: Who are the early-career workers your idea seeks to benefit? How does your proposed work aim to improve access, job quality, skill development, or career mobility in an AI-transformed economy?",
+          "source": "JFF-AI-2026"
         }
       ]
     },
@@ -1160,6 +1209,14 @@
         {
           "text": "How many people work on your solution team (full-time, part-time, contractors)?",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Please briefly describe your team's relevant experience and knowledge in AI and/or early career development. What perspectives or skills does your team bring to this work? If applicable, include the names and responsibilities of your partner organizations.",
+          "source": "JFF-AI-2026"
+        },
+        {
+          "text": "Team Bios: Please include brief bios for key project staff and partners, highlighting relevant experience.",
+          "source": "JFF-AI-2026"
         }
       ]
     },
@@ -1251,6 +1308,10 @@
         {
           "text": "Timeframe of Evaluation Results",
           "source": "Hamilton-2025"
+        },
+        {
+          "text": "How will you measure the impact of this project?",
+          "source": "AllenHiles-2024"
         }
       ]
     },
@@ -1405,7 +1466,24 @@
         {
           "text": "What was your organizational budget for fiscal year 2025 and 2026?",
           "source": "Truist-Inspire-2026"
-        },
+        }
+      ]
+    },
+    {
+      "id": "financials.budget_allocation",
+      "category": "financials",
+      "canonical": "How is your operating budget allocated across program, personnel, and administration?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.budget_narrative",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 150,
+          "source": "Truist"
+        }
+      ],
+      "variants": [
         {
           "text": "How is your current budget allocated?",
           "source": "Truist-Inspire-2026"
@@ -1427,6 +1505,10 @@
         {
           "text": "Upload complete project budget; total project budget.",
           "source": "FFTC"
+        },
+        {
+          "text": "Budget Summary: Please submit a budget and brief narrative describing how funds will be used.",
+          "source": "JFF-AI-2026"
         }
       ]
     },
@@ -1716,6 +1798,10 @@
         {
           "text": "What makes your solution innovative? How is it distinct from others using a similar approach?",
           "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Project Overview and Innovation: Describe the challenge or opportunity facing early-career workers that your proposed project seeks to address. Why is this issue important in the context of an AI-driven economy? What is your proposed idea, and what makes it additive to existing approaches?",
+          "source": "JFF-AI-2026"
         }
       ]
     },
@@ -1755,6 +1841,10 @@
         {
           "text": "Significance: the national significance of the project and its potential contribution to the field, including the strategy to scale to other populations or settings.",
           "source": "ED-75.210"
+        },
+        {
+          "text": "Learning and Scaling Potential: What are the key questions you hope to explore or learn through this project? Please describe how you plan to capture and share measures of impact and/or learnings during or after the grant period. If your pilot is successful, how might you envision scaling it? What key resources or support would help make that possible?",
+          "source": "JFF-AI-2026"
         }
       ]
     },
@@ -1831,6 +1921,10 @@
         {
           "text": "Establish clear, specified, and measurable goals, objectives, and outcomes.",
           "source": "ED-75.210"
+        },
+        {
+          "text": "How will you assess whether your project is making a difference for the early-career workers you aim to serve? What outcomes or indicators would show progress toward your goals?",
+          "source": "JFF-AI-2026"
         }
       ]
     },
@@ -1867,6 +1961,10 @@
         {
           "text": "Project Schedule, Key Milestones and Dates.",
           "source": "DCED"
+        },
+        {
+          "text": "Operational Readiness: Outline your high-level milestones for the grant period. What do you expect to design, test, or learn by the end of the grant period? (Please note: a detailed implementation plan is not required.)",
+          "source": "JFF-AI-2026"
         }
       ]
     },
@@ -2059,6 +2157,10 @@
         {
           "text": "Does your staff and board include current or former program participants or individuals from the community served? (up to 250 words)",
           "source": "Seybert"
+        },
+        {
+          "text": "How does your organization's leadership reflect its constituency?",
+          "source": "AllenHiles-2024"
         }
       ]
     },
@@ -2334,6 +2436,10 @@
         {
           "text": "Applying For (Select One): Year-round (school-year 2024-2025 and summer 2025) or Summer 2025 only.",
           "source": "JEVS-C2L"
+        },
+        {
+          "text": "Term (12 months minimum)",
+          "source": "DolfMcM-2023"
         }
       ]
     },
@@ -2394,6 +2500,34 @@
         {
           "text": "Has the applicant agency and its staff or director ever been barred from entering contracts with City, Federal, or State government agencies?",
           "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "organization.community_voice",
+      "category": "organization",
+      "canonical": "How does your organization include the people it serves in its decision-making and governance?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.dei",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "How does your organization include the people it serves in its decision-making process?",
+          "source": "AllenHiles-2024"
+        }
+      ]
+    },
+    {
+      "id": "program.operations",
+      "category": "program",
+      "canonical": "Describe how the project will operate, including hours of operation, staffing, and how volunteers are recruited and trained.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Describe how the project will operate. Include hours, days and months of operation, full- and part-time staff and their qualifications. If volunteers are used, describe how they are recruited and trained.",
+          "source": "AllenHiles-2024"
         }
       ]
     }

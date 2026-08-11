@@ -80,7 +80,9 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
   {
     key: 'students_served_total',
     claim: '~145 young people served',
-    appears_in: ['kb.capacity', 'kb.history'],
+    // kb.metrics added 2026-08-10: program.jobs_and_participants routes there, and a metrics-only
+    // draft otherwise lost the live query_enrollment call, leaving only the definitional flag.
+    appears_in: ['kb.capacity', 'kb.history', 'kb.metrics'],
     tool: 'query_enrollment',
     args: { query_type: 'total' },
     conflict_kind: 'definitional',
@@ -264,6 +266,28 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
 
 /** Detects a numeric claim: currency, percentage, or a multi-digit / spelled-out quantity. */
 const NUMERIC_CLAIM = /\$[\d,]+|\d+(?:\.\d+)?\s?%|\b\d{2,}\b/;
+
+/**
+ * The three number questions whose answer is a LIVE figure, never a frozen KB value. Each maps to
+ * the FIGURE_CHECK that names the exact `query_*` call. `buildAnswer` returns these as the
+ * `fetch_figure` status, and the caller runs the call under its own name (TAD decision 3). A static
+ * KB number for these would ship a figure that has already drifted — the failure figures.ts exists
+ * to prevent. DECISIONS.md D1b.
+ *
+ * Absence from this map means a number question keeps the normal path.
+ */
+export const QUESTION_FIGURE_CHECKS: Readonly<Record<string, string>> = {
+  'cover.budget_totals': 'annual_budget',
+  'financials.operating_budget': 'annual_budget',
+  'program.jobs_and_participants': 'students_served_total',
+};
+
+/** {@link QUESTION_FIGURE_CHECKS} resolved to the check object, keyed by question id. */
+export function figureCheckForQuestion(questionId: string): FigureCheck | undefined {
+  const key = QUESTION_FIGURE_CHECKS[questionId];
+  if (key === undefined) return undefined;
+  return FIGURE_CHECKS.find((c) => c.key === key);
+}
 
 export function containsNumericClaim(text: string): boolean {
   return NUMERIC_CLAIM.test(text);

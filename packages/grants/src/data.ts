@@ -186,6 +186,29 @@ export function computeIntegrityReport(
     });
   }
 
+  // -- every structured value's key must name a real question ------------------------------
+  // `entry.structured` is keyed by question id (slots are shared — one slot answers many
+  // questions). A key that names no question silently falls through to derive_from_reference:
+  // the value the lane wrote is never returned and nobody is told why. Renaming or deleting a
+  // question in questions.json must not silently orphan its structured value.
+  const questionIds = new Set(bank.questions.map((q) => q.id));
+  const structuredKeys = [
+    ...new Set(
+      Object.values(kb.answers).flatMap((a) => Object.keys(a.structured ?? {})),
+    ),
+  ].sort();
+  const danglingStructuredKeys = structuredKeys.filter((qid) => !questionIds.has(qid));
+  if (danglingStructuredKeys.length > 0) {
+    out.push({
+      severity: 'high',
+      code: 'structured_key_dangling',
+      message:
+        `structured value(s) keyed to question id(s) not in questions.json: ` +
+        `${danglingStructuredKeys.join(', ')}. Those values can never be returned as an answer and ` +
+        `will silently fall through to derive_from_reference. Rename the key or delete the value.`,
+    });
+  }
+
   // -- kb refs named in the reconciliation prose -------------------------------------------
   // `meta.connector_reconciliation` is currently the only machine-readable link between the KB and
   // the live connector. Scraping prose is ugly, but letting that link rot silently is exactly the

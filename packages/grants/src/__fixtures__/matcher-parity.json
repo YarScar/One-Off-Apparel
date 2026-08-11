@@ -1,6 +1,6 @@
 {
   "note": "Generated from pipeline/matcher.py match_question(). Do not hand-edit.",
-  "bank_version": "0.4.1",
+  "bank_version": "0.4.3",
   "cases": [
     {
       "incoming": "What is your organization's legal name?",
@@ -1476,11 +1476,11 @@
       "incoming": "Who does your solution serve, and in what ways will the solution impact their lives?",
       "expected": {
         "incoming": "Who does your solution serve, and in what ways will the solution impact their lives?",
-        "matched_id": "program.target_population",
-        "canonical": "Who is the target population and how many individuals will you serve?",
+        "matched_id": "program.population_impact",
+        "canonical": "Who does the program serve, and how does it change their lives?",
         "category": "program",
         "kb_ref": "kb.target_population",
-        "answer_type": "demographic",
+        "answer_type": "narrative",
         "confidence": 1.0,
         "matched_via": "Truist-Inspire-2026",
         "is_confident": true
@@ -2204,11 +2204,11 @@
       "incoming": "How is your current budget allocated?",
       "expected": {
         "incoming": "How is your current budget allocated?",
-        "matched_id": "financials.operating_budget",
-        "canonical": "Provide your annual operating budget (current and prior year).",
+        "matched_id": "financials.budget_allocation",
+        "canonical": "How is your operating budget allocated across program, personnel, and administration?",
         "category": "financials",
-        "kb_ref": "kb.financials",
-        "answer_type": "number",
+        "kb_ref": "kb.budget_narrative",
+        "answer_type": "narrative",
         "confidence": 1.0,
         "matched_via": "Truist-Inspire-2026",
         "is_confident": true
@@ -5289,6 +5289,398 @@
         "category": "cover",
         "kb_ref": null,
         "answer_type": "boolean",
+        "confidence": 1.0,
+        "matched_via": "canonical",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Organizational background and history (if a first time applicant)",
+      "expected": {
+        "incoming": "Organizational background and history (if a first time applicant)",
+        "matched_id": "organization.history",
+        "canonical": "Describe your organization's history and major accomplishments.",
+        "category": "organization",
+        "kb_ref": "kb.history",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Services provided",
+      "expected": {
+        "incoming": "Services provided",
+        "matched_id": "organization.current_programs",
+        "canonical": "Describe your current programs, activities, and core services.",
+        "category": "organization",
+        "kb_ref": "kb.programs",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "What are your organization's goals and objectives for the year and how will this grant help you implement these goals?",
+      "expected": {
+        "incoming": "What are your organization's goals and objectives for the year and how will this grant help you implement these goals?",
+        "matched_id": "organization.goals",
+        "canonical": "What are your short-term and long-term organizational goals, and how will you achieve them?",
+        "category": "organization",
+        "kb_ref": "kb.goals",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "What is the need for the project? Who will benefit from it, including number of people served? How will the project help those served? What do you expect to be its impact?",
+      "expected": {
+        "incoming": "What is the need for the project? Who will benefit from it, including number of people served? How will the project help those served? What do you expect to be its impact?",
+        "matched_id": "need.problem_statement",
+        "canonical": "What problem, need, or issue does this request address, and who is affected?",
+        "category": "need",
+        "kb_ref": "kb.need",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Early-Career Impact: Who are the early-career workers your idea seeks to benefit? How does your proposed work aim to improve access, job quality, skill development, or career mobility in an AI-transformed economy?",
+      "expected": {
+        "incoming": "Early-Career Impact: Who are the early-career workers your idea seeks to benefit? How does your proposed work aim to improve access, job quality, skill development, or career mobility in an AI-transformed economy?",
+        "matched_id": "program.population_impact",
+        "canonical": "Who does the program serve, and how does it change their lives?",
+        "category": "program",
+        "kb_ref": "kb.target_population",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "JFF-AI-2026",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Please briefly describe your team's relevant experience and knowledge in AI and/or early career development. What perspectives or skills does your team bring to this work? If applicable, include the names and responsibilities of your partner organizations.",
+      "expected": {
+        "incoming": "Please briefly describe your team's relevant experience and knowledge in AI and/or early career development. What perspectives or skills does your team bring to this work? If applicable, include the names and responsibilities of your partner organizations.",
+        "matched_id": "program.team_qualifications",
+        "canonical": "Who will carry out the project, and what are their qualifications?",
+        "category": "program",
+        "kb_ref": "kb.staff_bios",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "JFF-AI-2026",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Team Bios: Please include brief bios for key project staff and partners, highlighting relevant experience.",
+      "expected": {
+        "incoming": "Team Bios: Please include brief bios for key project staff and partners, highlighting relevant experience.",
+        "matched_id": "program.team_qualifications",
+        "canonical": "Who will carry out the project, and what are their qualifications?",
+        "category": "program",
+        "kb_ref": "kb.staff_bios",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "JFF-AI-2026",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "How will you measure the impact of this project?",
+      "expected": {
+        "incoming": "How will you measure the impact of this project?",
+        "matched_id": "outcomes.evaluation_methods",
+        "canonical": "What methods and tools will you use to evaluate success and collect data?",
+        "category": "outcomes",
+        "kb_ref": "kb.evaluation",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Budget Summary: Please submit a budget and brief narrative describing how funds will be used.",
+      "expected": {
+        "incoming": "Budget Summary: Please submit a budget and brief narrative describing how funds will be used.",
+        "matched_id": "financials.project_budget",
+        "canonical": "Provide a project budget detailing income and expenses for this request.",
+        "category": "financials",
+        "kb_ref": "kb.budget_narrative",
+        "answer_type": "attachment",
+        "confidence": 1.0,
+        "matched_via": "JFF-AI-2026",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Project Overview and Innovation: Describe the challenge or opportunity facing early-career workers that your proposed project seeks to address. Why is this issue important in the context of an AI-driven economy? What is your proposed idea, and what makes it additive to existing approaches?",
+      "expected": {
+        "incoming": "Project Overview and Innovation: Describe the challenge or opportunity facing early-career workers that your proposed project seeks to address. Why is this issue important in the context of an AI-driven economy? What is your proposed idea, and what makes it additive to existing approaches?",
+        "matched_id": "innovation.new_different",
+        "canonical": "How is your approach new or different from existing solutions, and why will it be more effective?",
+        "category": "innovation",
+        "kb_ref": "kb.innovation",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "JFF-AI-2026",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Learning and Scaling Potential: What are the key questions you hope to explore or learn through this project? Please describe how you plan to capture and share measures of impact and/or learnings during or after the grant period. If your pilot is successful, how might you envision scaling it? What key resources or support would help make that possible?",
+      "expected": {
+        "incoming": "Learning and Scaling Potential: What are the key questions you hope to explore or learn through this project? Please describe how you plan to capture and share measures of impact and/or learnings during or after the grant period. If your pilot is successful, how might you envision scaling it? What key resources or support would help make that possible?",
+        "matched_id": "innovation.significance_scale",
+        "canonical": "What is the broader significance of this work and its potential to grow, replicate, or scale?",
+        "category": "innovation",
+        "kb_ref": "kb.innovation",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "JFF-AI-2026",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "How will you assess whether your project is making a difference for the early-career workers you aim to serve? What outcomes or indicators would show progress toward your goals?",
+      "expected": {
+        "incoming": "How will you assess whether your project is making a difference for the early-career workers you aim to serve? What outcomes or indicators would show progress toward your goals?",
+        "matched_id": "outcomes.measurable_outcomes",
+        "canonical": "What measurable outcomes will demonstrate progress, and what are your measurable program goals?",
+        "category": "outcomes",
+        "kb_ref": "kb.outcomes",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "JFF-AI-2026",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Operational Readiness: Outline your high-level milestones for the grant period. What do you expect to design, test, or learn by the end of the grant period? (Please note: a detailed implementation plan is not required.)",
+      "expected": {
+        "incoming": "Operational Readiness: Outline your high-level milestones for the grant period. What do you expect to design, test, or learn by the end of the grant period? (Please note: a detailed implementation plan is not required.)",
+        "matched_id": "program.management_plan",
+        "canonical": "Describe your management plan: milestones, timeline, responsibilities, and how you will use data to stay on track.",
+        "category": "program",
+        "kb_ref": "kb.management_plan",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "JFF-AI-2026",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "How does your organization's leadership reflect its constituency?",
+      "expected": {
+        "incoming": "How does your organization's leadership reflect its constituency?",
+        "matched_id": "organization.leadership_lived_experience",
+        "canonical": "How do your leadership, staff, and board reflect the lived experience of the people you serve?",
+        "category": "organization",
+        "kb_ref": "kb.dei",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Term (12 months minimum)",
+      "expected": {
+        "incoming": "Term (12 months minimum)",
+        "matched_id": "cover.grant_period",
+        "canonical": "What are the anticipated start and end dates and duration of the requested grant period?",
+        "category": "cover",
+        "kb_ref": null,
+        "answer_type": "field",
+        "confidence": 1.0,
+        "matched_via": "DolfMcM-2023",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "How does your organization include the people it serves in its decision-making and governance?",
+      "expected": {
+        "incoming": "How does your organization include the people it serves in its decision-making and governance?",
+        "matched_id": "organization.community_voice",
+        "canonical": "How does your organization include the people it serves in its decision-making and governance?",
+        "category": "organization",
+        "kb_ref": "kb.dei",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "canonical",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "How does your organization include the people it serves in its decision-making process?",
+      "expected": {
+        "incoming": "How does your organization include the people it serves in its decision-making process?",
+        "matched_id": "organization.community_voice",
+        "canonical": "How does your organization include the people it serves in its decision-making and governance?",
+        "category": "organization",
+        "kb_ref": "kb.dei",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Describe how the project will operate, including hours of operation, staffing, and how volunteers are recruited and trained.",
+      "expected": {
+        "incoming": "Describe how the project will operate, including hours of operation, staffing, and how volunteers are recruited and trained.",
+        "matched_id": "program.operations",
+        "canonical": "Describe how the project will operate, including hours of operation, staffing, and how volunteers are recruited and trained.",
+        "category": "program",
+        "kb_ref": "kb.program_desc",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "canonical",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Describe how the project will operate. Include hours, days and months of operation, full- and part-time staff and their qualifications. If volunteers are used, describe how they are recruited and trained.",
+      "expected": {
+        "incoming": "Describe how the project will operate. Include hours, days and months of operation, full- and part-time staff and their qualifications. If volunteers are used, describe how they are recruited and trained.",
+        "matched_id": "program.operations",
+        "canonical": "Describe how the project will operate, including hours of operation, staffing, and how volunteers are recruited and trained.",
+        "category": "program",
+        "kb_ref": "kb.program_desc",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Description of your organization: Mission",
+      "expected": {
+        "incoming": "Description of your organization: Mission",
+        "matched_id": "organization.mission",
+        "canonical": "Summarize your organization's mission.",
+        "category": "organization",
+        "kb_ref": "kb.mission",
+        "answer_type": "narrative",
+        "confidence": 0.791,
+        "matched_via": "FFTC",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Description of your organization: Organizational background and history (if a first time applicant)",
+      "expected": {
+        "incoming": "Description of your organization: Organizational background and history (if a first time applicant)",
+        "matched_id": "organization.history",
+        "canonical": "Describe your organization's history and major accomplishments.",
+        "category": "organization",
+        "kb_ref": "kb.history",
+        "answer_type": "narrative",
+        "confidence": 0.796,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Description of your organization: Services provided",
+      "expected": {
+        "incoming": "Description of your organization: Services provided",
+        "matched_id": "organization.current_programs",
+        "canonical": "Describe your current programs, activities, and core services.",
+        "category": "organization",
+        "kb_ref": "kb.programs",
+        "answer_type": "narrative",
+        "confidence": 0.523,
+        "matched_via": "AllenHiles-2024",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Geographic area served by the project.",
+      "expected": {
+        "incoming": "Geographic area served by the project.",
+        "matched_id": "program.geographic_area",
+        "canonical": "What is the geographic service area for this project?",
+        "category": "program",
+        "kb_ref": "kb.target_population",
+        "answer_type": "field",
+        "confidence": 0.711,
+        "matched_via": "canonical",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Who will be in charge of the project? What are their qualifications?",
+      "expected": {
+        "incoming": "Who will be in charge of the project? What are their qualifications?",
+        "matched_id": "program.team_qualifications",
+        "canonical": "Who will carry out the project, and what are their qualifications?",
+        "category": "program",
+        "kb_ref": "kb.staff_bios",
+        "answer_type": "narrative",
+        "confidence": 0.536,
+        "matched_via": "canonical",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Project Title",
+      "expected": {
+        "incoming": "Project Title",
+        "matched_id": "cover.project_title",
+        "canonical": "What is the project title?",
+        "category": "cover",
+        "kb_ref": "kb.program_desc",
+        "answer_type": "field",
+        "confidence": 1.0,
+        "matched_via": "canonical",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Project Description/Proposal",
+      "expected": {
+        "incoming": "Project Description/Proposal",
+        "matched_id": "program.description",
+        "canonical": "Describe the project for which you are seeking funding, including a timeline and how the funds will be used.",
+        "category": "program",
+        "kb_ref": "kb.program_desc",
+        "answer_type": "narrative",
+        "confidence": 0.709,
+        "matched_via": "DCED",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "Who does the program serve, and how does it change their lives?",
+      "expected": {
+        "incoming": "Who does the program serve, and how does it change their lives?",
+        "matched_id": "program.population_impact",
+        "canonical": "Who does the program serve, and how does it change their lives?",
+        "category": "program",
+        "kb_ref": "kb.target_population",
+        "answer_type": "narrative",
+        "confidence": 1.0,
+        "matched_via": "canonical",
+        "is_confident": true
+      }
+    },
+    {
+      "incoming": "How is your operating budget allocated across program, personnel, and administration?",
+      "expected": {
+        "incoming": "How is your operating budget allocated across program, personnel, and administration?",
+        "matched_id": "financials.budget_allocation",
+        "canonical": "How is your operating budget allocated across program, personnel, and administration?",
+        "category": "financials",
+        "kb_ref": "kb.budget_narrative",
+        "answer_type": "narrative",
         "confidence": 1.0,
         "matched_via": "canonical",
         "is_confident": true

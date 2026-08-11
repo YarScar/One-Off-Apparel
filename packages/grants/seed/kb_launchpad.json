@@ -31,12 +31,28 @@
     "kb.program_desc": {
       "label": "Program/project description",
       "verified": true,
-      "text": "Launchpad recruits Philadelphia young people from more than 30 non-selective high schools and across 30+ ZIP codes, no prior experience required, and pays them from day one so finishing is financially possible. The advanced phases most funders support are LiftOff — six months of full-time, AI-first software-development training for participants 18–24 — and Launchpad Inc., a nonprofit social enterprise that puts participants on real, paid client projects ($20/hour) building automations, dashboards, integrations, and agents for Philadelphia nonprofits and small businesses. Participants train against the AI Engineer competency framework (six competencies, 24 skills; prompting and context engineering, building automations and agents, connecting systems, structuring data, evaluating AI output, and managing cost and risk), earn industry certifications (Generative AI Foundations, PCEP), and are assessed on deployed work tracked in Beacon, so every graduate finishes with a portfolio of shipped AI systems and the client references early-career tech hiring now screens on. Wraparound supports — a guaranteed $6,000 stipend floor, transportation, food, a laptop, and Career Success Coaching that continues through the first year of employment — remove the barriers that otherwise force low-income young adults to drop out. Delivered at no cost from Launchpad's Center City hub at 801 Market Street."
+      "text": "Launchpad recruits Philadelphia young people from more than 30 non-selective high schools and across 30+ ZIP codes, no prior experience required, and pays them from day one so finishing is financially possible. The advanced phases most funders support are LiftOff — six months of full-time, AI-first software-development training for participants 18–24 — and Launchpad Inc., a nonprofit social enterprise that puts participants on real, paid client projects ($20/hour) building automations, dashboards, integrations, and agents for Philadelphia nonprofits and small businesses. Participants train against the AI Engineer competency framework (six competencies, 24 skills; prompting and context engineering, building automations and agents, connecting systems, structuring data, evaluating AI output, and managing cost and risk), earn industry certifications (Generative AI Foundations, PCEP), and are assessed on deployed work tracked in Beacon, so every graduate finishes with a portfolio of shipped AI systems and the client references early-career tech hiring now screens on. Wraparound supports — a guaranteed $6,000 stipend floor, transportation, food, a laptop, and Career Success Coaching that continues through the first year of employment — remove the barriers that otherwise force low-income young adults to drop out. Delivered at no cost from Launchpad's Center City hub at 801 Market Street.",
+      "structured": {
+        "cover.project_title": {
+          "value": "Launchpad",
+          "verified": true
+        }
+      }
     },
     "kb.target_population": {
       "label": "Target population",
       "verified": true,
-      "text": "Launchpad serves Philadelphia young people ages 16–24: high school juniors and seniors (roughly 16–18) in Launchpad 101, and recent graduates / young adults (18–24) in LiftOff and Launchpad Inc. Participants come almost entirely from non-selective Philadelphia high schools across 30+ ZIP codes; all qualify for free or reduced-price lunch, nearly 90% are from low-income households, and about 85% are Black or Brown. No prior coding experience is required. (Funders that require an 18–24 band are served by the LiftOff/Inc profile; Launchpad 101 reaches the 16–18 group.)"
+      "text": "Launchpad serves Philadelphia young people ages 16–24: high school juniors and seniors (roughly 16–18) in Launchpad 101, and recent graduates / young adults (18–24) in LiftOff and Launchpad Inc. Participants come almost entirely from non-selective Philadelphia high schools across 30+ ZIP codes; all qualify for free or reduced-price lunch, nearly 90% are from low-income households, and about 85% are Black or Brown. No prior coding experience is required. (Funders that require an 18–24 band are served by the LiftOff/Inc profile; Launchpad 101 reaches the 16–18 group.)",
+      "structured": {
+        "program.geographic_area": {
+          "value": "City of Philadelphia, Pennsylvania",
+          "verified": true
+        },
+        "program.target_population": {
+          "value": "Philadelphia young people ages 16–24 (101: 16–18; LiftOff/Inc: 18–24)",
+          "verified": true
+        }
+      }
     },
     "kb.outcomes": {
       "label": "Outcomes & results committed",
@@ -91,12 +107,28 @@
     "kb.profile.identity": {
       "label": "Org identity fields",
       "verified": true,
-      "text": "Launchpad (launched 2023) is a fiscally sponsored initiative of Building 21, a Philadelphia 501(c)(3) founded in 2013 (EIN 47-2514219), and plans to spin out as its own 501(c)(3). Site/hub: 801 Market Street, Center City, Philadelphia, PA 19107. Current applications are filed with Building 21 as the named applicant/fiscal sponsor and Launchpad as the sponsored initiative or solution (framing varies by funder — e.g. GSK: 'Building 21 primary, Launchpad initiative'; Truist: 'Building 21 applicant, Launchpad solution'). Still to confirm before applying: Launchpad's own registered legal name/EIN if/when spun out, and the fiscal-year start. Building 21 also operates two high schools (Philadelphia and Allentown), so it is a broader parent/fiscal entity than Launchpad alone."
+      "text": "Launchpad (launched 2023) is a fiscally sponsored initiative of Building 21, a Philadelphia 501(c)(3) founded in 2013 (EIN 47-2514219), and plans to spin out as its own 501(c)(3). Site/hub: 801 Market Street, Center City, Philadelphia, PA 19107. Current applications are filed with Building 21 as the named applicant/fiscal sponsor and Launchpad as the sponsored initiative or solution (framing varies by funder — e.g. GSK: 'Building 21 primary, Launchpad initiative'; Truist: 'Building 21 applicant, Launchpad solution'). Still to confirm before applying: Launchpad's own registered legal name/EIN if/when spun out, and the fiscal-year start. Building 21 also operates two high schools (Philadelphia and Allentown), so it is a broader parent/fiscal entity than Launchpad alone.",
+      "structured": {
+        "cover.ein_taxstatus": {
+          "value": "501(c)(3), EIN 47-2514219",
+          "verified": true
+        },
+        "cover.address": {
+          "value": "801 Market Street, Center City, Philadelphia, PA 19107",
+          "verified": true
+        }
+      }
     },
     "kb.profile.contacts": {
       "label": "Contacts & leadership",
       "verified": true,
-      "text": "Executive Director: Dannyelle Austin (dannyelle@launchpadphilly.org) — Team Lead on the Truist application. Development contact seen on applications: Dannyelle Austin (Upwork); fiscal-sponsor contact: Chip Linehan (Philadelphia Foundation). Grants/giving inbox: giving@launchpadphilly.org. Site: 801 Market Street, Center City, Philadelphia. Confirm the specific application point-of-contact (name, email, phone) per opportunity and whether correspondence routes through Building 21."
+      "text": "Executive Director: Dannyelle Austin (dannyelle@launchpadphilly.org) — Team Lead on the Truist application. Development contact seen on applications: Dannyelle Austin (Upwork); fiscal-sponsor contact: Chip Linehan (Philadelphia Foundation). Grants/giving inbox: giving@launchpadphilly.org. Site: 801 Market Street, Center City, Philadelphia. Confirm the specific application point-of-contact (name, email, phone) per opportunity and whether correspondence routes through Building 21.",
+      "structured": {
+        "cover.contact_and_ed": {
+          "value": "Executive Director: Dannyelle Austin (dannyelle@launchpadphilly.org)",
+          "verified": true
+        }
+      }
     },
     "kb.profile.demographics": {
       "label": "Demographic breakdowns",
@@ -151,7 +183,29 @@
     "kb.eligibility": {
       "label": "Eligibility facts for fit-scoring",
       "verified": true,
-      "text": "Launchpad serves the City of Philadelphia; is operated by Building 21 (a 501(c)(3), EIN 47-2514219) as fiscal sponsor; and focuses on youth/young-adult tech workforce development (ages 16–24 — 101 at 16–18, LiftOff/Inc at 18–24). Multi-profile: match age gates to the relevant program (many workforce funders require 18–24, which fits LiftOff/Inc but excludes 101). Confirmed facts for gates: 100% free/reduced-lunch, ~90% low-income, ~85% Black or Brown; FY2025 expenses ~$1.34M / FY2026 projected revenue ~$1.68M (clears mid-band budget caps); PA EITC-approved. Confirm per funder: the applying legal entity/EIN (currently Building 21 as fiscal sponsor — some funders exclude fiscally sponsored orgs), that it reads as a workforce program rather than a school, and any prior funding within a waiting-period window (e.g. the expiring William Penn grant)."
+      "text": "Launchpad serves the City of Philadelphia; is operated by Building 21 (a 501(c)(3), EIN 47-2514219) as fiscal sponsor; and focuses on youth/young-adult tech workforce development (ages 16–24 — 101 at 16–18, LiftOff/Inc at 18–24). Multi-profile: match age gates to the relevant program (many workforce funders require 18–24, which fits LiftOff/Inc but excludes 101). Confirmed facts for gates: 100% free/reduced-lunch, ~90% low-income, ~85% Black or Brown; FY2025 expenses ~$1.34M / FY2026 projected revenue ~$1.68M (clears mid-band budget caps); PA EITC-approved. Confirm per funder: the applying legal entity/EIN (currently Building 21 as fiscal sponsor — some funders exclude fiscally sponsored orgs), that it reads as a workforce program rather than a school, and any prior funding within a waiting-period window (e.g. the expiring William Penn grant).",
+      "structured": {
+        "cover.fiscal_sponsor": {
+          "value": "Yes — Building 21 is the fiscal sponsor",
+          "verified": true
+        },
+        "eligibility.org_type": {
+          "value": "501(c)(3) public charity via fiscal sponsor Building 21",
+          "verified": true
+        },
+        "eligibility.geography": {
+          "value": "City of Philadelphia",
+          "verified": true
+        },
+        "eligibility.budget_size": {
+          "value": "FY2025 expenses ~$1.34M",
+          "verified": true
+        },
+        "eligibility.population_gate": {
+          "value": "Serves ages 16–24",
+          "verified": true
+        }
+      }
     }
   }
 }

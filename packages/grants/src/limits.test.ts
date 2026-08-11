@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_COMPRESSION_RATIO,
+  MIN_STRUCTURED_FILL_RATIO,
+  PROSE_LIMIT_FLOOR,
   countUnits,
   measure,
   measureAll,
   truncatePreview,
+  underfillsProseField,
+  type Measurement,
 } from './limits.js';
 import { pyCountSentences } from './py.js';
 
@@ -140,5 +144,81 @@ describe('measureAll', () => {
 
   it('reports all_fit on an empty batch', () => {
     expect(measureAll([])).toMatchObject({ all_fit: true, over_count: 0, infeasible_count: 0 });
+  });
+});
+
+/**
+ * The `needs_expand` guard (board `grant-h32`, DECISIONS.md D1e). Three tests, all required, and the
+ * cases below are organised as: what it must catch, then what it must NOT — the second group being
+ * the one that matters, because a guard that over-fires here tells a model to pad a grant answer,
+ * and padding is how invented facts reach a funder.
+ */
+describe('underfillsProseField', () => {
+  const m = (text: string, unit: 'words' | 'characters' | 'sentences', max: number): Measurement =>
+    measure({ text, unit, max });
+
+  const nineWords = 'Philadelphia young people ages 16-24 high school juniors seniors';
+
+  it('catches the case it was built for: a short value in a big narrative field', () => {
+    // The literal grant-h32 defect. Before this predicate it measured `fits` and returned
+    // `actor: none` — the tool reporting no work owed on a question it had barely answered.
+    expect(underfillsProseField(m(nineWords, 'words', 200), 'narrative')).toBe(true);
+  });
+
+  it('catches it on a demographic question too, which is where it actually happened', () => {
+    // `demographic` is in EXPANDABLE_ANSWER_TYPES *and* in NON_NARRATIVE_ANSWER_TYPES. That overlap
+    // is deliberate: "who do you serve, and how many?" takes a value or a paragraph depending on how
+    // much room the funder gives it.
+    expect(underfillsProseField(m(nineWords, 'words', 200), 'demographic')).toBe(true);
+  });
+
+  // ---- what it must NOT fire on -------------------------------------------------------------
+
+  it('does not fire on a title field, however generous the box', () => {
+    // THE REAL FALSE POSITIVE, found by running every seeded form before trusting the guard.
+    // Hamilton's LOI asks "Project/ Program/ Campaign Name" in a 250-character box. `Launchpad`
+    // fills 3.6% of it and is the complete correct answer. Firing here would instruct the model to
+    // write 250 characters of prose into a title.
+    expect(underfillsProseField(m('Launchpad', 'characters', 250), 'field')).toBe(false);
+    // ...and the measurement itself passes both other tests, which is the point of this case.
+    const measurement = m('Launchpad', 'characters', 250);
+    expect(measurement.max).toBeGreaterThanOrEqual(PROSE_LIMIT_FLOOR.characters);
+    expect(measurement.count / measurement.max).toBeLessThan(MIN_STRUCTURED_FILL_RATIO);
+  });
+
+  it('does not fire on a small field, whatever its type', () => {
+    // Truist's 30-character "name of your solution". Too small to hold prose at all.
+    expect(underfillsProseField(m('Launchpad', 'characters', 30), 'narrative')).toBe(false);
+    expect(underfillsProseField(m('one two', 'words', 20), 'narrative')).toBe(false);
+  });
+
+  it('does not fire when the value already uses most of the field', () => {
+    const text = Array.from({ length: 120 }, () => 'word').join(' ');
+    expect(underfillsProseField(m(text, 'words', 200), 'narrative')).toBe(false);
+  });
+
+  it('does not fire on text that is over the limit — that is the resize path', () => {
+    const long = Array.from({ length: 400 }, () => 'word').join(' ');
+    const measurement = m(long, 'words', 200);
+    expect(measurement.fits).toBe(false);
+    expect(underfillsProseField(measurement, 'narrative')).toBe(false);
+  });
+
+  it('does not fire when the question matched nothing, so the type is unknown', () => {
+    // An unmatched question has no answer_type. Guessing that it wants prose would be inventing.
+    expect(underfillsProseField(m(nineWords, 'words', 200), null)).toBe(false);
+  });
+
+  it('excludes every type that cannot want prose', () => {
+    const measurement = m(nineWords, 'words', 200);
+    for (const t of ['field', 'number', 'boolean', 'single_select', 'multi_select', 'attachment'] as const) {
+      expect(underfillsProseField(measurement, t)).toBe(false);
+    }
+  });
+
+  it('treats the chars alias exactly as characters', () => {
+    // `chars` is an accepted alias in the schema; a floor table that missed it would silently let
+    // every alias-using form through.
+    expect(PROSE_LIMIT_FLOOR.chars).toBe(PROSE_LIMIT_FLOOR.characters);
   });
 });

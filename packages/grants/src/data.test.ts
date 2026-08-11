@@ -20,12 +20,15 @@ describe('seed loader', () => {
   it('loads the question bank at the counts the documents claim', () => {
     const bank = loadBank();
     expect(bank.categories).toHaveLength(11);
-    expect(bank.questions).toHaveLength(88);
+    expect(bank.questions).toHaveLength(92);
     expect(bank.kb_entries).toHaveLength(29);
     const variants = bank.questions.reduce((n, q) => n + q.variants.length, 0);
     // 212 at bank v0.3.1; v0.4.0 added 35 recorded funder wordings across three new forms;
-    // v0.4.1 added cover.funder_connection with one JEVS wording, under board B6.
-    expect(variants).toBe(248);
+    // v0.4.1 added cover.funder_connection with one JEVS wording, under board B6;
+    // v0.4.2 added 15 JFF/Allen Hiles/Dolfinger-McMahon wordings and two new canonicals.
+    // v0.4.3 split two canonicals under board grant-h32 and MOVED three wordings onto them —
+    // the count is unchanged on purpose, and that is the check: a split must not invent a wording.
+    expect(variants).toBe(265);
   });
 
   it('loads the knowledge base with 29 answers, 4 of them unverified', () => {
@@ -43,10 +46,13 @@ describe('seed loader', () => {
 
   it('discovers every form fixture from disk', () => {
     expect(listFormIds()).toEqual([
+      'allen_hiles_2024',
       'aug7_gsk',
       'aug7_truist',
+      'dolfinger_mcmahon_2023',
       'hamilton_loi_2025',
       'jevs_c2l_2024',
+      'jff_ai_pathways_2026',
       'sample_incoming',
       'sample_philly_innovation',
       'wpf_workforce_2026',
@@ -248,6 +254,36 @@ describe('computeIntegrityReport', () => {
     q.answer_type = 'attachment';
     q.kb_ref = 'kb.docs';
     expect(codesFor(bank, kb)).toEqual([]);
+  });
+
+  it('fires structured_key_dangling for a value keyed to a question id that does not exist', () => {
+    const { bank, kb } = corpus();
+    const a = anAnswer(kb);
+    a.structured = { 'cover.question_renamed_away': { value: 'X', verified: true } };
+    const report = computeIntegrityReport(bank, kb);
+    expect(report.map((w) => w.code)).toEqual(['structured_key_dangling']);
+    expect(report[0]?.severity).toBe('high');
+    expect(report[0]?.message).toContain('cover.question_renamed_away');
+  });
+
+  it('accepts a structured value keyed to a question that exists', () => {
+    const { bank, kb } = corpus();
+    const real = bank.questions[0]?.id;
+    expect(real).toBeDefined();
+    const a = anAnswer(kb);
+    a.structured = { [String(real)]: { value: 'X', verified: true } };
+    expect(codesFor(bank, kb)).toEqual([]);
+  });
+
+  it('reports structured_key_dangling alongside other independent defects', () => {
+    const { bank, kb } = corpus();
+    bank.kb_entries.push({ id: 'kb.declared_only', label: 'x' });
+    const a = anAnswer(kb);
+    a.structured = { 'cover.gone': { value: 'X', verified: true } };
+    expect(codesFor(bank, kb)).toEqual([
+      'kb_entry_without_answer',
+      'structured_key_dangling',
+    ]);
   });
 
   it('fires unknown_question_category for a category id not in categories[]', () => {

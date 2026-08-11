@@ -67,7 +67,40 @@ export const DERIVE_RULES: readonly string[] = [
     'staff. An invented value is worse than an unanswered field.',
 ];
 
-export type HandbackTask = 'resize' | 'derive_short_value';
+/**
+ * The rules for writing a full answer around a confirmed short value.
+ *
+ * **This is the most dangerous task in the layer, and these rules are written accordingly.** The
+ * other two constrain a model that has too much material: resizing chooses what to drop, deriving
+ * picks one value out of prose. This one hands a model a 9-word fact, 200 words of empty field, and
+ * a slot of source material — and the obvious way to fill that space is to make something up. Every
+ * invented statistic in a grant application starts exactly here.
+ *
+ * Two rules carry the weight and neither is obvious:
+ *
+ * 1. **The limit is a ceiling, not a target.** A guard that provoked padding would be worse than the
+ *    defect it was added to fix, because a short accurate answer is a good answer and a long invented
+ *    one ends a funder relationship. The rule says so in those words.
+ * 2. **The confirmed value survives verbatim.** It is the one part of the answer already checked
+ *    against filed material. An expansion that paraphrases it has quietly replaced a verified fact
+ *    with an unverified one while looking like it did the work.
+ */
+export const EXPAND_RULES: readonly string[] = [
+  'The confirmed value MUST appear in your answer unchanged — same figures, same names, same ' +
+    'wording. It is the part of this answer that has already been checked. Build around it; do not ' +
+    'restate it in your own words.',
+  'NEVER invent, add, infer, or embellish any fact, figure, statistic, name, date, program detail, ' +
+    'or outcome. Everything you add must come from the source material below.',
+  'The limit is a CEILING, NOT A TARGET. Do not pad to reach it. If the confirmed value and the ' +
+    'source material only support three sentences, write three sentences — a short accurate answer ' +
+    'is a good answer, and a padded one is how invented facts reach a funder.',
+  'If the source material does not cover what the field is asking for, write what it does support ' +
+    'and say plainly what is missing, so staff can fill the gap. Do not paper over it.',
+  'Do not add a preamble, a title, quotation marks, meta-commentary, or a word/character count. ' +
+    'Return ONLY the answer text, nothing else.',
+];
+
+export type HandbackTask = 'resize' | 'derive_short_value' | 'expand';
 
 /**
  * Context that shapes the rewrite without licensing new content. Mirrors the prototype's
@@ -99,6 +132,15 @@ export interface Handback {
   readonly rules: readonly string[];
   /** Then re-measure. Shaped text is never final until the arithmetic agrees. */
   readonly verify_with: string;
+  /**
+   * Present only on an `expand` task: the confirmed short value the expansion is built around, which
+   * must survive into the answer verbatim.
+   *
+   * Structural rather than folded into `source_text` on purpose. The two are different kinds of
+   * material — this one is checked and must be preserved, the source is context that may be used —
+   * and a caller that concatenated them would lose the distinction the rules depend on.
+   */
+  readonly anchor_value?: string;
 }
 
 /**
@@ -124,25 +166,47 @@ export interface BuildHandbackInput {
   readonly context: HandbackContext;
   /** Prepended to the standard rules — for the case where dropping facts is unavoidable. */
   readonly extraRules?: readonly string[];
+  /** Required on an `expand` task, ignored otherwise. See {@link Handback.anchor_value}. */
+  readonly anchorValue?: string;
+}
+
+const RULES_FOR_TASK: Readonly<Record<HandbackTask, readonly string[]>> = {
+  resize: RESIZE_RULES,
+  derive_short_value: DERIVE_RULES,
+  expand: EXPAND_RULES,
+};
+
+function instructionFor(task: HandbackTask, limit: FormLimit | null, anchor: string | undefined): string {
+  switch (task) {
+    case 'resize':
+      return `Rewrite the source text below to fit ${describeLimit(limit)}, following every rule.`;
+    case 'derive_short_value':
+      return `Give the short value this field asks for, taken from the source material below${
+        limit === null ? '' : `, within ${describeLimit(limit)}`
+      }.`;
+    case 'expand':
+      return (
+        `This field has room for more than the confirmed value${
+          anchor === undefined ? '' : ` (“${anchor}”)`
+        } answers on its own. Write the full answer around that value, drawing ONLY on the source ` +
+        `material below${limit === null ? '' : `, up to ${describeLimit(limit)}`}. Use less if that ` +
+        `is all the material supports.`
+      );
+  }
 }
 
 export function buildHandback(input: BuildHandbackInput): Handback {
-  const { task, sourceText, limit, measurement, context } = input;
-  const base = task === 'resize' ? RESIZE_RULES : DERIVE_RULES;
+  const { task, sourceText, limit, measurement, context, anchorValue } = input;
   return {
     task,
-    instruction:
-      task === 'resize'
-        ? `Rewrite the source text below to fit ${describeLimit(limit)}, following every rule.`
-        : `Give the short value this field asks for, taken from the source material below${
-            limit === null ? '' : `, within ${describeLimit(limit)}`
-          }.`,
+    instruction: instructionFor(task, limit, anchorValue),
     source_text: sourceText,
     limit,
     measurement,
     context,
-    rules: [...(input.extraRules ?? []), ...base],
+    rules: [...(input.extraRules ?? []), ...RULES_FOR_TASK[task]],
     verify_with: VERIFY,
+    ...(task === 'expand' && anchorValue !== undefined ? { anchor_value: anchorValue } : {}),
   };
 }
 
