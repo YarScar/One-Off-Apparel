@@ -9,7 +9,14 @@ interface SeedStudent {
   enrollmentStatus: string;
   cohort: number;
   neighborhood: string;
+  zip: string;
+  schoolName: string;
+  hsGraduationYear: number;
+  dob: string;
+  withdrawalCode?: string;
+  withdrawalDate?: string;
   aliases: Array<{ alias: string; source: string }>;
+  certifications: Array<{ type: string; phase: string; result: string; score: number; date: string }>;
 }
 
 const STUDENTS: SeedStudent[] = [
@@ -21,11 +28,18 @@ const STUDENTS: SeedStudent[] = [
     enrollmentStatus: 'E',
     cohort: 2,
     neighborhood: 'Kensington',
+    zip: '19125',
+    schoolName: 'Kensington CAPA',
+    hsGraduationYear: 2025,
+    dob: '2007-04-12',
     aliases: [
       { alias: 'Maria Garcia', source: 'drive' },
       { alias: 'Maria G.', source: 'drive' },
       { alias: '@maria.g', source: 'slack' },
       { alias: 'LP1042', source: 'bigquery' },
+    ],
+    certifications: [
+      { type: 'PCEP', phase: '101', result: 'Pass', score: 82, date: '2026-02-10' },
     ],
   },
   {
@@ -33,13 +47,22 @@ const STUDENTS: SeedStudent[] = [
     canonicalName: 'Tai Pham',
     email: 'tai.pham@example.org',
     currentPhase: 'Foundations',
-    enrollmentStatus: 'E',
+    enrollmentStatus: 'W',
     cohort: 3,
     neighborhood: 'Olney',
+    zip: '19141',
+    schoolName: 'Olney High School',
+    hsGraduationYear: 2024,
+    dob: '2006-09-30',
+    withdrawalCode: 'W2',
+    withdrawalDate: '2026-03-01',
     aliases: [
       { alias: 'Tai Pham', source: 'drive' },
       { alias: '@tai.p', source: 'slack' },
       { alias: 'LP1051', source: 'bigquery' },
+    ],
+    certifications: [
+      { type: 'PCEP', phase: '101', result: 'Pass', score: 90, date: '2026-02-12' },
     ],
   },
   {
@@ -50,11 +73,18 @@ const STUDENTS: SeedStudent[] = [
     enrollmentStatus: 'E',
     cohort: 1,
     neighborhood: 'West Philly',
+    zip: '19139',
+    schoolName: 'West Philadelphia High School',
+    hsGraduationYear: 2025,
+    dob: '2007-01-22',
     aliases: [
       { alias: 'Janelle Brooks', source: 'drive' },
       { alias: 'Jay Brooks', source: 'drive' },
       { alias: '@janelle', source: 'slack' },
       { alias: 'LP1078', source: 'bigquery' },
+    ],
+    certifications: [
+      { type: 'PCEP', phase: '101', result: 'Fail', score: 58, date: '2026-02-14' },
     ],
   },
 ];
@@ -146,6 +176,12 @@ export async function seed(
         enrollmentStatus: s.enrollmentStatus,
         cohort: s.cohort,
         neighborhood: s.neighborhood,
+        zip: s.zip,
+        schoolName: s.schoolName,
+        hsGraduationYear: s.hsGraduationYear,
+        dob: new Date(s.dob),
+        withdrawalCode: s.withdrawalCode ?? null,
+        withdrawalDate: s.withdrawalDate ? new Date(s.withdrawalDate) : null,
       },
     });
     for (const a of s.aliases) {
@@ -154,6 +190,19 @@ export async function seed(
         entityType: 'student',
         entityId: student.id,
         source: a.source,
+      });
+    }
+    for (const c of s.certifications) {
+      await prisma.studentCertification.create({
+        data: {
+          sourceId: `seed:certification:${s.studentNumber}:${c.type}`,
+          studentId: student.id,
+          type: c.type,
+          phase: c.phase,
+          result: c.result,
+          score: c.score,
+          date: c.date,
+        },
       });
     }
   }
