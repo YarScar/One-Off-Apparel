@@ -9,7 +9,7 @@ import { toolError } from '../errors.js';
 const NAME = 'query_finances';
 
 const DESCRIPTION =
-  'Look up financial data from finance_snapshots. Each query_type maps to a data source tab (Google Sheets or Aplos accounting). Returns the raw rowData JSON so the caller can read whichever columns matter for the question. Every response carries total_matching and truncated, so a small limit is never mistaken for an empty tab.';
+  'Look up financial data from finance_snapshots. Each query_type maps to a data source tab (Google Sheets or Aplos accounting). Returns the raw rowData JSON so the caller can read whichever columns matter for the question. Every response carries tab_names_matched (the tabs the filter matched, independent of limit), total_matching and truncated, so a small limit is never mistaken for an empty tab. When contains is used on a large tab the search may stop early: total_matching_is_lower_bound and scan_incomplete then say so, and the count must not be quoted as a total. Rows carry their own tab_name — budget_actuals spans two tabs, so split on tab_name before summing or comparing.';
 
 /**
  * Exported so the map-consistency test can assert every value resolves to a real
@@ -80,9 +80,14 @@ const QUERY_TYPE_TO_TABS: Record<string, string[]> = {
   monthly: ['Monthly'],
   fund_balances: ['Combined Funds', 'fund_balances'],
   annual: ['Annual'],
-  // docs/mcp-server-spec.md documents this as "Prior month + YTD combined".
-  // Rows carry their own tab_name, so the caller can tell the two apart.
-  budget_actuals: ['Prior Month Budget vs Actual', 'YTD Budget vs Actual'],
+  // docs/mcp-server-spec.md documents this as "Prior month + YTD combined". Two
+  // tabs means the same account line appears twice, once per period, so anything
+  // summing or differencing this result MUST split on `tab_name` first — the
+  // response's `tab_names_matched` names the tabs it drew from. `'ytd'` is carried
+  // for the same reason as on `ytd` itself: it is the seed's name, and without it
+  // this query_type — which four shipped prompts call — returns nothing on a
+  // seeded or CI database.
+  budget_actuals: ['Prior Month Budget vs Actual', 'YTD Budget vs Actual', 'ytd'],
   phase_budget_dashboard: ['phase_dashboard:2025 actuals'],
   phase_budget_monthly_liftoff: ['phase_dashboard:monthly liftoff only'],
   phase_budget_monthly_hs: ['phase_dashboard:monthly hs only'],
@@ -123,6 +128,67 @@ export const FINANCE_TAB_MAP = { QUERY_TYPE_TO_TABS, QUERY_TYPE_TO_TAB_PREFIX, U
 
 /** Hard ceiling on rows pulled before `contains` filtering, to bound memory. */
 const SCAN_CAP = 5000;
+
+/**
+ * Page size for the `contains` scan.
+ *
+ * The scan used to pull `SCAN_CAP` rows in one query and `JSON.stringify` every
+ * one of them, so `contains` with `limit: 1` serialized 5000 JSON blobs to return
+ * a single row. Paging lets it stop as soon as it has enough matches to answer,
+ * and caps the pathological case at `SCAN_CAP / PAGE` queries.
+ */
+const SCAN_PAGE = 500;
+
+interface ScanResult {
+  readonly matched: { sourceId: string; tabName: string; period: string | null; rowData: unknown }[];
+  readonly scanned: number;
+  /** True when rows matching `where` were left unscanned. */
+  readonly incomplete: boolean;
+}
+
+/**
+ * Scan a tab for rows whose serialized `rowData` contains `needle`.
+ *
+ * Prisma cannot express a substring match over a Json column, so this reads rows
+ * and filters in memory. It stops at the first of: enough matches to fill `limit`
+ * and prove truncation, `SCAN_CAP` rows scanned, or the result set exhausted.
+ *
+ * `incomplete` is the honest part. When it is true the caller has been handed a
+ * *lower bound* on the match count, not the count — and the two fields this tool
+ * added so a small result set could be trusted (`total_matching`, `truncated`)
+ * must say so rather than report the partial number as final.
+ */
+async function scanForContains(
+  where: Prisma.FinanceSnapshotWhereInput,
+  needle: string,
+  limit: number,
+  total: number,
+): Promise<ScanResult> {
+  const matched: ScanResult['matched'] = [];
+  const ceiling = Math.min(total, SCAN_CAP);
+  let scanned = 0;
+
+  // `matched.length <= limit` rather than `< limit`: one match past the limit is
+  // what proves `truncated`, and stopping there is what keeps a `limit: 1` query
+  // from serializing the whole tab.
+  while (scanned < ceiling && matched.length <= limit) {
+    const page = await prisma.financeSnapshot.findMany({
+      where,
+      orderBy: [{ period: 'desc' }, { sourceId: 'asc' }],
+      skip: scanned,
+      take: Math.min(SCAN_PAGE, ceiling - scanned),
+    });
+    if (page.length === 0) break; // rows disappeared mid-scan; treat as exhausted
+    scanned += page.length;
+    for (const r of page) {
+      if (JSON.stringify(r.rowData).toLowerCase().includes(needle)) {
+        matched.push({ sourceId: r.sourceId, tabName: r.tabName, period: r.period, rowData: r.rowData });
+      }
+    }
+  }
+
+  return { matched, scanned, incomplete: scanned < total };
+}
 
 /**
  * Escape LIKE metacharacters. Prisma compiles `mode: 'insensitive'` to `ILIKE`
@@ -175,32 +241,53 @@ export function registerQueryFinances(server: McpServer): void {
 
       const totalMatching = await prisma.financeSnapshot.count({ where });
 
-      // `contains` is a substring match over the serialized rowData, which Prisma
-      // cannot express on a Json column, so scan the tab and filter in memory.
-      // Tabs run to a few hundred rows; SCAN_CAP bounds the pathological case.
-      const scanned = await prisma.financeSnapshot.findMany({
+      // Which tabs the filter matched, computed over `where` rather than over the
+      // rows returned. Derived from the returned rows it lies whenever `limit`
+      // bites: `budget_actuals` spans two tabs whose rows sort by different
+      // `period` values, so one tab lands entirely ahead of the other and a small
+      // limit reported the second as absent — read as "that tab is empty", which is
+      // the inference this tool exists to prevent.
+      const matchedTabGroups = await prisma.financeSnapshot.groupBy({
+        by: ['tabName'],
         where,
-        orderBy: [{ period: 'desc' }, { sourceId: 'asc' }],
-        take: containsFilter ? SCAN_CAP : limit,
       });
+      const tabNamesMatched = matchedTabGroups.map((g) => g.tabName).sort();
 
       const needle = containsFilter?.toLowerCase();
-      const matched = needle
-        ? scanned.filter((r) => JSON.stringify(r.rowData).toLowerCase().includes(needle))
-        : scanned;
-      const rows = matched.slice(0, limit);
+      const scan = needle ? await scanForContains(where, needle, limit, totalMatching) : undefined;
+      const rows: ScanResult['matched'] = scan
+        ? scan.matched.slice(0, limit)
+        : (
+            await prisma.financeSnapshot.findMany({
+              where,
+              orderBy: [{ period: 'desc' }, { sourceId: 'asc' }],
+              take: limit,
+            })
+          ).map((r) => ({ sourceId: r.sourceId, tabName: r.tabName, period: r.period, rowData: r.rowData }));
 
-      const scanIncomplete = Boolean(containsFilter) && totalMatching > SCAN_CAP;
+      const scanIncomplete = scan?.incomplete ?? false;
+      // A partial scan yields a lower bound, never a total. Reporting it as
+      // `total_matching: 3, truncated: false` — as this did over a 16K-row tab —
+      // tells the caller the opposite of the truth about a result set they were
+      // given these two fields specifically in order to trust.
+      const matchCount = scan ? scan.matched.length : totalMatching;
 
       return {
         query_type: queryType,
-        tab_names_matched: [...new Set(rows.map((r) => r.tabName))],
+        tab_names_matched: tabNamesMatched,
+        tab_names_returned: [...new Set(rows.map((r) => r.tabName))].sort(),
         record_count: rows.length,
-        total_matching: needle ? matched.length : totalMatching,
-        truncated: needle ? matched.length > rows.length : totalMatching > rows.length,
+        total_matching: matchCount,
+        ...(scanIncomplete ? { total_matching_is_lower_bound: true } : {}),
+        truncated: scanIncomplete || matchCount > rows.length,
         ...(containsFilter ? { contains_applied: containsFilter } : {}),
         ...(scanIncomplete
-          ? { scan_incomplete: `Only the first ${SCAN_CAP} rows of ${totalMatching} were searched for "${containsFilter}".` }
+          ? {
+              scan_incomplete:
+                `Searched ${scan?.scanned ?? 0} of ${totalMatching} rows for "${containsFilter}" ` +
+                `(page size ${SCAN_PAGE}, cap ${SCAN_CAP}, stopped once ${rows.length} rows could be returned). ` +
+                `total_matching is a lower bound; raise limit or narrow the query_type to search further.`,
+            }
           : {}),
         records: rows.map((r) => ({
           source_id: r.sourceId,

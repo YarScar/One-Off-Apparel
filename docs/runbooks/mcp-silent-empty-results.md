@@ -47,8 +47,11 @@ through unescaped, which would make the `%` in `q3_2026_actuals:global %` a
 wildcard and let the query claim rows from any tab sharing that prefix — verified
 against a planted neighbour tab. The one place a LIKE pattern survives is the
 caller's `tab_name` override, which stays case-insensitive for convenience and is
-run through `escapeLike()` first; without that, `tab_name: '%'` returned rows from
-every tab in `finance_snapshots`. Exact matching also lets the query use
+run through `escapeLike()` first. **That wildcard hazard is this change's own, not
+the old code's**: the previous override was `where.tabName = tabOverride`, plain
+equality, so `tab_name: '%'` matched nothing. Making the override case-insensitive
+is what turned the value into a LIKE pattern, and `escapeLike()` closes it in the
+same change. Exact matching also lets the query use
 `finance_snapshots_tab_name_idx`, which `ILIKE` cannot.
 
 `apps/mcp-server/src/__tests__/finance-tab-map.test.ts` locks the casing, asserts
@@ -88,7 +91,17 @@ Fix: resolve the newest period first, then return only that snapshot.
 ### 5. `get_finance_brief.sheet_fund_balances` used the seed's tab name
 
 Same `fund_balances` versus `Combined Funds` mismatch as above, so this key was
-always `[]`. Now matches either name, case-insensitively.
+always `[]`. Now matches either name via `tabName: { in: [...] }` — **exactly, and
+case-sensitively**, for the `ILIKE` reason above. A tab written as `combined funds`
+would still be missed; the fix is to add the name to that array, not to relax the
+match.
+
+The same key was also capped at 50 rows ordered by `period`, which for dashboard
+tabs is a selector-cell string shared by every row (`sync-dashboard.ts:235`) rather
+than a date — so the cap took an arbitrary slice, and the spec points callers at
+`Combined Funds` for an annual budget total. It is now ordered deterministically,
+capped well past the real tab size, and reports
+`sheet_fund_balances_total` plus `sheet_fund_balances_truncated` when the cap bites.
 
 ## Found, not fixed, needs a decision
 

@@ -443,6 +443,7 @@ Required KPIs by category and the tool call that provides each:
 
 Columns: Category, Line Item, ${period} Amount, ${comparison} Amount, Variance, Variance %, Notes
 Build from \`query_finances\` "ytd" and "budget_actuals" results. Variance = Actual - Budget. Variance % = Variance / Budget * 100.
+"budget_actuals" spans two tabs — prior month and YTD — so the same account line appears twice, once per period. Group its rows by \`tab_name\` before computing anything: summing or differencing across both double-counts every line. Use the YTD rows for a ${period} figure and the prior-month rows for ${comparison}.
 
 Also produce: \`budget_vs_actual.csv\`
 Columns: Line Item, Budget, Actual, Variance, Variance %, Status

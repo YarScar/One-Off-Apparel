@@ -493,23 +493,42 @@ Look up financial data across multiple ingested sheets — Launchpad budgets and
 {
   "query_type": "...",
   "tab_names_matched": ["phase_dashboard:2025 actuals"],
+  "tab_names_returned": ["phase_dashboard:2025 actuals"],
   "record_count": 174,
   "total_matching": 174,
+  "total_matching_is_lower_bound": true,
   "truncated": false,
   "contains_applied": "…",
-  "scan_incomplete": "Only the first 5000 rows of N were searched for \"…\".",
+  "scan_incomplete": "Searched N of M rows for \"…\" (…). total_matching is a lower bound; …",
   "records": [ /* row_data fields, vary by tab. See connector docs for column names. */ ],
   "sources": ["google_sheets", "aplos"]
 }
 ```
 
-`contains_applied` appears only when `contains` was passed; `scan_incomplete` only when the tab
-exceeded the 5000-row scan cap.
+`contains_applied` appears only when `contains` was passed. `scan_incomplete` and
+`total_matching_is_lower_bound` appear only when the `contains` scan did not reach every matching
+row — either because the tab exceeds the 5000-row scan cap, or because the scan stopped as soon as it
+had enough matches to fill `limit` and prove truncation.
+
+**`tab_names_matched` vs `tab_names_returned`.** The first is computed over the filter, independent of
+`limit`; the second describes the page. They differ whenever a limit bites, and only the first can be
+read as "which tabs hold data": `budget_actuals` spans tabs whose rows sort under different `period`
+values, so one tab lands entirely ahead of the other and a small limit made the second look empty.
 
 **Why `total_matching` and `truncated` exist.** An empty or short result set used to be
 indistinguishable from a missing tab. That is the specific way this tool misled callers — see
 [the silent-empty-results runbook](runbooks/mcp-silent-empty-results.md). `record_count` is what was
 returned; `total_matching` is what the filter actually matched.
+
+**`total_matching` is a lower bound when `total_matching_is_lower_bound` is set.** With `contains`,
+matching happens in memory over a paged scan that stops early, so the count is a floor, not a total —
+quote it as "at least N" or raise `limit` to search further. Reporting a partial count as final was
+the original defect in these two fields: over the ~16K-row `aplos:transactions` tab,
+`contains: "grant"` returned `total_matching: 3, truncated: false`.
+
+**`budget_actuals` spans two tabs, so it double-counts by construction.** The same account line
+appears once for prior month and once for YTD. Split on each record's `tab_name` before summing or
+differencing.
 
 **Tab matching is exact, and deliberately not case-insensitive.** Prisma compiles
 `mode: 'insensitive'` to `ILIKE` and passes the value through unescaped, so the `%` in
@@ -637,8 +656,16 @@ list saw duplicate fund names and an incomplete current picture. The query now r
 `period` first and returns only that day's funds (up to 200).
 
 **`sheet_fund_balances` matches `Combined Funds`.** The dashboard sync writes that tab name; the
-seed's name is `fund_balances`. Both are matched, exactly. Looking for only the seed name is why this
-array was empty against real data.
+seed's name is `fund_balances`. Both are matched **exactly and case-sensitively** — a tab written
+`combined funds` would still be missed, and the fix for that is another entry in the array, not a
+relaxed match. Looking for only the seed name is why this array was empty against real data.
+
+**`sheet_fund_balances` is a page, and says so.** It is ordered by `tab_name` then `source_id`, not by
+`period`: for dashboard tabs `period` is a selector-cell string shared by every row in the tab, so
+ordering by it is arbitrary. The response carries `sheet_fund_balances_total`, and
+`sheet_fund_balances_truncated` when the 500-row cap bites. Do not sum a truncated page — the note
+above points at `query_finances(fund_balances)` for an annual budget total, and that is the call to
+make for any figure that has to add up.
 
 ---
 
