@@ -618,6 +618,32 @@ Aggregate student enrollment data from `student_phase_outcomes`. Supports total 
 
 `by_student` is the right tool for sliced retention queries (e.g., "101 retention for African American students" → `query_type=by_student`, `phase=101`, `race='Black or African American'`, then tally `phase_101_status` on the result).
 
+**Filters, and how they are reported.** The input schema accepts `phase`, `status`, `current_phase`,
+`enrollment_status`, `cohort`, `start_date` and `end_date`. `phase` and `status` are
+`student_phase_outcomes` columns; `current_phase`, `enrollment_status` and `cohort` are `students`
+columns. **All five apply to every `query_type`** — student columns reach phase-outcome queries
+through the `student` relation, and `phase` / `status` reach student-level queries through
+`phaseOutcomes: { some: ... }`. `phase` without `status` means "this phase has an outcome at all";
+`status` without `phase` means "any phase carries this status".
+
+`start_date` / `end_date` are read only by `active_during`.
+
+Every response carries `filters_applied`, and `filters_ignored` when a supplied filter does not apply
+to the chosen `query_type`. This matters because until 2026-08-12 several branches accepted filters
+and silently discarded them — `by_phase` built a student predicate and never used it, and
+`active_during` discarded the student filters and `status` entirely — so a caller who scoped to 15
+Lightspeed completers received all 301 students with nothing in the envelope to say so. A silently
+unscoped count is a wrong denominator, which is the specific way this tool can mislead.
+
+> **Doc drift, unfixed.** The `by_student` bullet above claims a "full student-info filter set"
+> (race, gender, withdrawal_code, entry/withdrawal date ranges, city, zip, college/workforce fields,
+> income and parental-ed ranges, numeric score ranges) and the `by_program_year` bullet claims
+> grad/retention rates with `liftoff_graduating` / `phase_101_graduating` projections. **Neither is in
+> the code.** `query-enrollment.ts` accepts the seven filters listed above and nothing else, and
+> `by_program_year` is a plain `groupBy` on `hsGraduationYear`. Those filters do exist on
+> `query_students`. Recorded here rather than silently corrected, because closing it is a tool change
+> with its own review.
+
 ---
 
 ### `query_students`

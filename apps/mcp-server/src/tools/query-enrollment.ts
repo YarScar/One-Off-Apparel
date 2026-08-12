@@ -8,7 +8,7 @@ import { runTool, parseStr, parseNum } from '../tool-helpers.js';
 const NAME = 'query_enrollment';
 
 const DESCRIPTION =
-  'Aggregate student enrollment data. Supports total headcount, phase status breakdowns, date-range active queries, cohort breakdowns, and per-student rows.';
+  'Aggregate student enrollment data. Supports total headcount, phase status breakdowns, date-range active queries, cohort breakdowns, and per-student rows. Every response echoes filters_applied, and filters_ignored when a filter does not apply to the query_type, so a count is never silently unscoped.';
 
 const inputSchema = {
   query_type: z.enum([
@@ -40,6 +40,69 @@ const PHASE_FIELDS = {
 
 type PhaseName = keyof typeof PHASE_FIELDS;
 
+const PHASE_NAMES = Object.keys(PHASE_FIELDS) as PhaseName[];
+
+/**
+ * Filters that live on the `students` table. Applied directly on student-level
+ * query types, and through the `student` relation on phase-outcome ones.
+ */
+const STUDENT_FILTERS = ['current_phase', 'enrollment_status', 'cohort'] as const;
+
+/** Filters that live on `student_phase_outcomes` columns. */
+const OUTCOME_FILTERS = ['phase', 'status'] as const;
+
+/** Only `active_during` reads these. Every other query_type reports them ignored. */
+const DATE_FILTERS = ['start_date', 'end_date'] as const;
+
+const NON_DATE_FILTERS = [...STUDENT_FILTERS, ...OUTCOME_FILTERS] as const;
+const ALL_FILTERS = [...NON_DATE_FILTERS, ...DATE_FILTERS] as const;
+
+/**
+ * Translate `phase` / `status` into a predicate over a phase-outcome row.
+ *
+ * `phase` without `status` means "this phase has an outcome at all", matching the
+ * `{ not: null }` the by_phase breakdown has always used. `status` without
+ * `phase` means "any phase carries this status", which is why it fans out over
+ * all four columns rather than picking one.
+ */
+function outcomePredicate(
+  phase: PhaseName | undefined,
+  status: string | undefined,
+): Prisma.StudentPhaseOutcomeWhereInput | undefined {
+  if (phase) {
+    return { [PHASE_FIELDS[phase].status]: status ?? { not: null } } as Prisma.StudentPhaseOutcomeWhereInput;
+  }
+  if (status) {
+    return {
+      OR: PHASE_NAMES.map(
+        (p) => ({ [PHASE_FIELDS[p].status]: status }) as Prisma.StudentPhaseOutcomeWhereInput,
+      ),
+    };
+  }
+  return undefined;
+}
+
+/**
+ * Exported for the filter-application test. Given the filters a caller supplied
+ * and the subset a branch honours, returns the echo block. A filter that reaches
+ * no query is named in `filters_ignored` rather than dropped — the previous
+ * behaviour returned all 301 students to a caller who asked for 15 Lightspeed
+ * completers, with nothing in the envelope to say so.
+ */
+export function filterEcho(
+  provided: Record<string, string | number>,
+  honoured: readonly string[],
+): { filters_applied: Record<string, string | number>; filters_ignored?: string[] } {
+  const applied: Record<string, string | number> = {};
+  const ignored: string[] = [];
+  for (const name of ALL_FILTERS) {
+    if (!(name in provided)) continue;
+    if (honoured.includes(name)) applied[name] = provided[name]!;
+    else ignored.push(name);
+  }
+  return { filters_applied: applied, ...(ignored.length > 0 ? { filters_ignored: ignored } : {}) };
+}
+
 export function registerQueryEnrollment(server: McpServer): void {
   server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
     runTool(NAME, input, async () => {
@@ -54,25 +117,50 @@ export function registerQueryEnrollment(server: McpServer): void {
       const endDate = parseStr(raw, 'end_date');
       const limit = Math.min(parseNum(raw, 'limit') ?? 500, 1000);
 
+      const provided: Record<string, string | number> = {
+        ...(phaseFilter ? { phase: phaseFilter } : {}),
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(currentPhase ? { current_phase: currentPhase } : {}),
+        ...(enrollmentStatus ? { enrollment_status: enrollmentStatus } : {}),
+        ...(cohort ? { cohort } : {}),
+        ...(startDate ? { start_date: startDate } : {}),
+        ...(endDate ? { end_date: endDate } : {}),
+      };
+
       const studentWhere: Prisma.StudentWhereInput = {
         ...(currentPhase ? { currentPhase } : {}),
         ...(enrollmentStatus ? { enrollmentStatus } : {}),
         ...(cohort ? { cohort } : {}),
       };
+      const hasStudentFilters = Object.keys(studentWhere).length > 0;
+
+      const outcome = outcomePredicate(phaseFilter, statusFilter);
+
+      /** Student-level queries: student columns plus the phase/status predicate. */
+      const scopedStudentWhere: Prisma.StudentWhereInput = {
+        ...studentWhere,
+        ...(outcome ? { phaseOutcomes: { some: outcome } } : {}),
+      };
+
+      /** Phase-outcome queries: reach the student columns through the relation. */
+      const studentScope: Prisma.StudentPhaseOutcomeWhereInput = hasStudentFilters
+        ? { student: studentWhere }
+        : {};
 
       switch (queryType) {
         case 'total': {
-          const count = await prisma.student.count({ where: studentWhere });
-          return { query_type: 'total', student_count: count };
+          const count = await prisma.student.count({ where: scopedStudentWhere });
+          return { query_type: 'total', student_count: count, ...filterEcho(provided, NON_DATE_FILTERS) };
         }
         case 'by_phase': {
-          const phases = phaseFilter ? [phaseFilter] : (Object.keys(PHASE_FIELDS) as PhaseName[]);
+          const phases = phaseFilter ? [phaseFilter] : PHASE_NAMES;
           const breakdown: Array<{ phase: string; status: string | null; count: number }> = [];
           for (const p of phases) {
             const f = PHASE_FIELDS[p];
             const where: Prisma.StudentPhaseOutcomeWhereInput = {
-              [f.status]: statusFilter ? statusFilter : { not: null },
-            } as Prisma.StudentPhaseOutcomeWhereInput;
+              ...({ [f.status]: statusFilter ? statusFilter : { not: null } } as Prisma.StudentPhaseOutcomeWhereInput),
+              ...studentScope,
+            };
             const rows = await prisma.studentPhaseOutcome.findMany({ where, select: { [f.status]: true } as Prisma.StudentPhaseOutcomeSelect });
             const counts = new Map<string | null, number>();
             for (const r of rows) {
@@ -83,7 +171,7 @@ export function registerQueryEnrollment(server: McpServer): void {
               breakdown.push({ phase: p, status, count });
             }
           }
-          return { query_type: 'by_phase', breakdown };
+          return { query_type: 'by_phase', breakdown, ...filterEcho(provided, NON_DATE_FILTERS) };
         }
         case 'active_during': {
           if (!phaseFilter) {
@@ -93,7 +181,8 @@ export function registerQueryEnrollment(server: McpServer): void {
             };
           }
           const f = PHASE_FIELDS[phaseFilter];
-          const where: Prisma.StudentPhaseOutcomeWhereInput = {};
+          const where: Prisma.StudentPhaseOutcomeWhereInput = { ...studentScope };
+          if (statusFilter) (where as Record<string, unknown>)[f.status] = statusFilter;
           if (endDate) (where as Record<string, unknown>)[f.start] = { lte: new Date(endDate) };
           if (startDate) (where as Record<string, unknown>)[f.end] = { gte: new Date(startDate) };
           const rows = await prisma.studentPhaseOutcome.findMany({
@@ -112,12 +201,13 @@ export function registerQueryEnrollment(server: McpServer): void {
               end_date: (r as unknown as Record<string, Date | null>)[f.end],
               status: (r as unknown as Record<string, string | null>)[f.status],
             })),
+            ...filterEcho(provided, ALL_FILTERS),
           };
         }
         case 'by_cohort': {
           const grouped = await prisma.student.groupBy({
             by: ['cohort'],
-            where: studentWhere,
+            where: scopedStudentWhere,
             _count: { _all: true },
           });
           return {
@@ -126,12 +216,13 @@ export function registerQueryEnrollment(server: McpServer): void {
               cohort: g.cohort,
               count: g._count?._all ?? 0,
             })),
+            ...filterEcho(provided, NON_DATE_FILTERS),
           };
         }
         case 'by_school': {
           const grouped = await prisma.student.groupBy({
             by: ['schoolName'],
-            where: studentWhere,
+            where: scopedStudentWhere,
             _count: { _all: true },
           });
           return {
@@ -140,12 +231,13 @@ export function registerQueryEnrollment(server: McpServer): void {
               school: g.schoolName,
               count: g._count?._all ?? 0,
             })),
+            ...filterEcho(provided, NON_DATE_FILTERS),
           };
         }
         case 'by_race': {
           const grouped = await prisma.student.groupBy({
             by: ['raceEthnicity'],
-            where: studentWhere,
+            where: scopedStudentWhere,
             _count: { _all: true },
           });
           return {
@@ -154,12 +246,13 @@ export function registerQueryEnrollment(server: McpServer): void {
               race_ethnicity: g.raceEthnicity,
               count: g._count?._all ?? 0,
             })),
+            ...filterEcho(provided, NON_DATE_FILTERS),
           };
         }
         case 'by_program_year': {
           const grouped = await prisma.student.groupBy({
             by: ['hsGraduationYear'],
-            where: studentWhere,
+            where: scopedStudentWhere,
             _count: { _all: true },
           });
           return {
@@ -168,11 +261,12 @@ export function registerQueryEnrollment(server: McpServer): void {
               hs_graduation_year: g.hsGraduationYear,
               count: g._count?._all ?? 0,
             })),
+            ...filterEcho(provided, NON_DATE_FILTERS),
           };
         }
         case 'by_student': {
           const rows = await prisma.student.findMany({
-            where: studentWhere,
+            where: scopedStudentWhere,
             include: { phaseOutcomes: true },
             take: limit,
           });
@@ -188,6 +282,7 @@ export function registerQueryEnrollment(server: McpServer): void {
               cohort: s.cohort,
               phase_outcomes: s.phaseOutcomes.flatMap((po) => unpackPhases(po)),
             })),
+            ...filterEcho(provided, NON_DATE_FILTERS),
           };
         }
         default: {
