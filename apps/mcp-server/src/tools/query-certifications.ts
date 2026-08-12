@@ -1,17 +1,16 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { prisma } from '@lp-ai/lib-db';
-import type { Prisma } from '@lp-ai/lib-db';
+import { prisma, Prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr } from '../tool-helpers.js';
 
 const NAME = 'query_certifications';
 
 const DESCRIPTION =
-  'Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdowns by cert type, LP phase, or date range.';
+  'Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdowns by cert type, LP phase, date range, or student zip code.';
 
 const inputSchema = {
-  query_type: z.enum(['summary', 'by_type', 'by_phase', 'by_result', 'scores']),
+  query_type: z.enum(['summary', 'by_type', 'by_phase', 'by_result', 'by_zip', 'scores']),
   type: z.string().optional(),
   phase: z.string().optional(),
   result: z.enum(['Pass', 'Fail']).optional(),
@@ -105,6 +104,35 @@ export function registerQueryCertifications(server: McpServer): void {
             breakdown: grouped.map((g) => ({
               result: g.result,
               count: g._count?._all ?? 0,
+            })),
+          };
+        }
+        case 'by_zip': {
+          // Zip lives on Student, not StudentCertification, so this needs a join —
+          // Prisma.groupBy can't aggregate across a relation.
+          const conditions: Prisma.Sql[] = [Prisma.sql`s.zip IS NOT NULL`];
+          if (typeFilter) conditions.push(Prisma.sql`sc.type ILIKE ${'%' + typeFilter + '%'}`);
+          if (phaseFilter) conditions.push(Prisma.sql`sc.phase = ${phaseFilter}`);
+          if (resultFilter) conditions.push(Prisma.sql`sc.result = ${resultFilter}`);
+          if (startDate) conditions.push(Prisma.sql`sc.date >= ${startDate}`);
+          if (endDate) conditions.push(Prisma.sql`sc.date <= ${endDate}`);
+
+          const rows = await prisma.$queryRaw<
+            Array<{ zip: string; n: bigint; avg_score: number | null }>
+          >(Prisma.sql`
+            SELECT s.zip AS zip, COUNT(*) AS n, AVG(sc.score)::float8 AS avg_score
+            FROM student_certifications sc
+            JOIN students s ON s.id = sc.student_id
+            WHERE ${Prisma.join(conditions, ' AND ')}
+            GROUP BY s.zip
+            ORDER BY s.zip
+          `);
+          return {
+            query_type: 'by_zip',
+            breakdown: rows.map((r) => ({
+              zip: r.zip,
+              count: Number(r.n),
+              avg_score: r.avg_score,
             })),
           };
         }

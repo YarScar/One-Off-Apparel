@@ -19,11 +19,13 @@ import { registerSearchDocuments } from './tools/search-documents.js';
 
 import { registerSkillGrantWriting } from './tools/skill-grant-writing.js';
 import { registerSkillGrantProspecting } from './tools/skill-grant-prospecting.js';
+import { registerSkillGrantSourcingEvaluation } from './tools/skill-grant-sourcing-evaluation.js';
 import { registerSkillFinanceAudit } from './tools/skill-finance-audit.js';
 import { registerSkillBoardReporting } from './tools/skill-board-reporting.js';
 
 import { registerGrantWritingPrompt } from './prompts/grant-writing.js';
 import { registerGrantProspectingPrompt } from './prompts/grant-prospecting.js';
+import { registerGrantSourcingEvaluationPrompt } from './prompts/grant-sourcing-evaluation.js';
 import { registerFinanceAuditPrompt } from './prompts/finance-audit.js';
 import { registerBoardReportingPrompt } from './prompts/board-reporting.js';
 
@@ -54,12 +56,14 @@ export function makeServer(): McpServer {
   // Skill tools (return structured instructions for Claude to follow)
   registerSkillGrantWriting(server);
   registerSkillGrantProspecting(server);
+  registerSkillGrantSourcingEvaluation(server);
   registerSkillFinanceAudit(server);
   registerSkillBoardReporting(server);
 
   // Prompts (same skills, for clients that support MCP prompts)
   registerGrantWritingPrompt(server);
   registerGrantProspectingPrompt(server);
+  registerGrantSourcingEvaluationPrompt(server);
   registerFinanceAuditPrompt(server);
   registerBoardReportingPrompt(server);
 

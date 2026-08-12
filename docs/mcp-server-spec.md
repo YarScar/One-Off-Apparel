@@ -628,19 +628,25 @@ Population-level analytics on the `students` table. Supports numeric stats (avg/
 
 **Numeric fields:** interview_score, tech_interest_onboarding, interview_passion_score, interview_college_score, hs_gpa, algebra1_grade, geometry_grade, zip, distance_to_office_miles.
 
-**Categorical fields (for breakdown):** college_enroll, university, major, workforce_program_referral, workforce_referral_status, internship_status, parental_ed, income.
+**Categorical fields (for breakdown):** current_phase, enrollment_status, cohort, neighborhood, zip, school_name, hs_graduation_year, withdrawal_code, college_enroll, university, major, workforce_program_referral, workforce_referral_status, internship_status, parental_ed, income.
 
-**Filter set (all query types):** race, gender, school (partial), graduation_year, enrollment_status, current_phase, withdrawal_code, entry_date_start/end, withdrawal_date_start/end, city, zip, college_enroll, university (partial), major, workforce_program_referral, workforce_referral_status, internship_status, plus numeric range via `filter_field` + `filter_min` / `filter_max`. `income` and `parental_ed` accept range filters (income → dollar amounts; parental_ed → 0=I don't know, 1=neither, 2=one, 3=both).
+> Note: as of the current implementation, only `current_phase`, `enrollment_status`, `cohort`, `neighborhood`, `zip`, `school_name`, `hs_graduation_year`, and `withdrawal_code` are wired into `BREAKDOWN_FIELDS`. `distance_to_office` and `hs_graduation_year` are wired into the `filter_field` numeric-range filter (`filter_min`/`filter_max`); only `distance_to_office` is wired into `NUMERIC_FIELDS` (the `numeric_stats` aggregate query type). The remaining fields below describe the original design intent but are not yet implemented — treat them as a backlog, not current behavior.
+
+**Filter set (all query types):** enrollment_status, current_phase, cohort, school (partial match on school_name), hs_graduation_year (exact match; range via `filter_field=hs_graduation_year`), dob_start / dob_end (ISO date bounds on date of birth), withdrawal_code (exact match), withdrawal_date_start / withdrawal_date_end (ISO date bounds), zip, plus numeric range on distance_to_office via `filter_field` + `filter_min` / `filter_max`. Everything else in this line — race, gender, graduation_year (LP program), entry_date_start/end, city, college_enroll, university (partial), major, workforce_program_referral, workforce_referral_status, internship_status, income/parental_ed ranges — is not yet implemented (see note above).
+
+`withdrawal_code`/`withdrawal_date` are designed as join keys for cross-tool analysis: pull a `student_number` list filtered by withdrawal reason or date here, then feed those numbers into `query_certifications`, `query_attendance`, etc. to correlate withdrawal with outcomes in other data sources.
 
 ---
 
 ### `query_certifications`
 
-Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdowns by cert type, LP phase, or date range.
+Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdowns by cert type, LP phase, date range, or student zip code.
 
-**Query types:** `summary`, `by_type`, `by_phase`, `by_result`, `scores`.
+**Query types:** `summary`, `by_type`, `by_phase`, `by_result`, `by_zip`, `scores`.
 
-**Filters:** `type`, `phase`, `result` (Pass / Fail), `start_date`, `end_date`.
+**Filters:** `type`, `phase`, `result` (Pass / Fail), `start_date`, `end_date` — all apply to `by_zip` too.
+
+`by_zip` joins to `students.zip` (zip isn't a column on `student_certifications`) and returns `{ zip, count, avg_score }` per zip, e.g. `query_type=by_zip, type=PCEP` for average PCEP score by zip code. Rows with a null zip are excluded.
 
 ---
 
