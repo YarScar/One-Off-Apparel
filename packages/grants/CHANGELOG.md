@@ -27,6 +27,43 @@ entry can be verified rather than trusted.
 
 ## 2026-08-12
 
+### Fixed — four of the seed integrity checks could not catch what they were written to catch
+
+A code review of the 2026-08-11 seed-audit checks found each of them silently ineffective on the
+*next* edit rather than wrong today: the live report is empty before and after, and it stayed empty
+under the stricter versions, so the seed really is clean. What changed is that the checks now fire.
+
+- **`figures.ts` `CLAIM_CURRENCY` swallowed the next word's leading capital.** The magnitude suffix
+  was `\s?[MKB]?`, so `$500,000 Kresge grant` tokenized to `$500,000 K` — a token no KB text
+  contains, which retired `figure_claim_uncovered` for that claim entirely instead of reporting
+  anything. Suffix is now `(?:\s?[MKB](?![A-Za-z]))?`.
+- **`figures.ts` `statesFigure` accepted decimal and magnitude continuations**, contradicting its own
+  docstring: `statesFigure('about $20.50 per hour', '$20')` and `statesFigure('$1.34M', '$1.34')` both
+  returned `true`, so a slot quoting an unrelated `$20.50/hr` was reported as restating the `~$20/hr`
+  wage claim. The lookahead now rejects all three continuations (`\.\d`, not a bare `.`, so a token
+  ending a sentence still matches).
+- **`data.ts` `figure_claim_uncovered` scanned only `answer.text`**, never `answer.structured[*].value`
+  — though a structured value is the whole answer to its question. The motivating real case
+  (`kb.eligibility`, added 2026-08-11) fired only because its prose also quotes `$1.34M`; a figure
+  restated *only* in a structured value went uncovered. Both are scanned now.
+- **`data.ts` `variant_shared_across_questions` used its own normalization**, `[^a-z0-9 ] -> ''`,
+  where `matcher.ts:81` uses `[^a-z0-9 ]+ -> ' '`. `"Program/project description"` and
+  `"Program project description"` tie at 1.0 in the matcher and were different keys here — the exact
+  confident-wrong-match class the check exists for. It now keys on `matcher.normalize()` and indexes
+  canonicals alongside variants, because `candidatesFor()` scores canonicals as candidates too. **No
+  new live ties**: still the three in `ACKNOWLEDGED_TIES`.
+- **`data.ts` `structured_value_missing` read `structured: {}` as "carries structured values"**, so
+  emptying a slot's map would have flagged every short-value question routed there. Guard is now on
+  key count.
+- **`figures.ts` `inc_client_work_booked`'s claim said `$50-80K`**, which tokenizes to a bare `$50` —
+  two orders of magnitude off and generic enough to match unrelated prose. Written out as
+  `$50K-$80K`. The extractor still does not understand a range with a shared trailing suffix; write
+  ranges out.
+
+`data.test.ts` gains 10 cases (39 → 49), one per fix plus direct coverage of `extractCurrencyClaims`
+and `statesFigure`, which had no unit tests of their own. Suite: `packages/grants` **240 in 9 files**,
+repository **294 in 14**, `pnpm -r typecheck` clean.
+
 ### Verified — every gap in `docs/INFORMATION-GAPS.md` re-tested live, and the finance gaps are not data gaps
 
 Each claim in the gap register was re-run against the live production MCP. **The tool defects

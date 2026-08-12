@@ -18,9 +18,17 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// FIGURE_CHECKS is read inside loadIntegrityReport() only, never at module evaluation, so this
-// import cycle (data -> figures -> data) is safe in both load orders.
-import { FIGURE_CHECKS } from './figures.js';
+// Every figures.ts and matcher.ts symbol below is read inside computeIntegrityReport() only — never
+// at module evaluation — so both import cycles (data -> figures -> data, data -> matcher -> data) are
+// safe in either load order. That is the invariant to preserve when adding a check: keep the reads
+// function-scoped.
+import { normalize } from './matcher.js';
+import {
+  extractCurrencyClaims,
+  statesFigure,
+  FIGURE_CHECKS,
+  QUESTION_FIGURE_CHECKS,
+} from './figures.js';
 import {
   incomingFormSchema,
   knowledgeBaseSchema,
@@ -134,6 +142,77 @@ export function __resetSeedCacheForTesting(): void {
  * defect. Keep this list short — a slot belongs here only if its text tells staff what to upload.
  */
 const ATTACHMENT_SLOTS: ReadonlySet<string> = new Set(['kb.docs', 'kb.budget_narrative']);
+
+/** Two question ids joined by `|` in sorted order — the key shape for {@link ACKNOWLEDGED_TIES}. */
+function pairKey(a: string, b: string): string {
+  return [a, b].sort().join('|');
+}
+
+/**
+ * Funder wordings that legitimately sit on two canonical questions at once.
+ *
+ * A wording recorded against two canonicals is a matcher tie: an incoming form asking it verbatim
+ * scores 1.0 against both, and which one wins is bank order. That is the confident-wrong-match class
+ * board B6 pinned by hand and v0.4.0 avoided by placing the WPF "Project description" wording on
+ * exactly one canonical.
+ *
+ * These three are recorded rather than resolved, because resolving one means moving a real funder
+ * wording, which changes matcher output and obliges a parity regeneration against the prototype —
+ * see `../CHANGELOG.md`. Each is a genuinely two-part ask that the bank splits, so neither
+ * destination is wrong; the tie is in the source form, not in the bank. **This is a debt register,
+ * not an approval list.** Removing an entry once the wording is placed is the fix; adding one is
+ * taking on debt and needs the same reasoning written down.
+ */
+const ACKNOWLEDGED_TIES: ReadonlyMap<string, string> = new Map([
+  [
+    pairKey('organization.mission', 'organization.history'),
+    "Instrumentl asks mission and history in one sentence; the bank splits them and both halves are answerable.",
+  ],
+  [
+    pairKey('organization.demographics', 'attachments.board_list'),
+    'NNG asks for the board list AND its demographics — one is an upload, one is a narrative.',
+  ],
+  [
+    pairKey('program.target_population', 'program.jobs_and_participants'),
+    'FFTC asks how many people will be impacted: a population question and a count question at once.',
+  ],
+]);
+
+/**
+ * Non-narrative questions knowingly answered from prose, on a slot that disambiguates other
+ * questions with a structured value but not this one.
+ *
+ * Routing a `field` or `single_select` question to a narrative slot is not itself a defect — the
+ * tools label that prose reference material rather than an answer, which is the designed fallback
+ * (`schemas.ts::NON_NARRATIVE_ANSWER_TYPES`). What this register tracks is narrower and is a real
+ * gap: the slot was *already* set up with per-question structured values, and these questions were
+ * left out. `cover.legal_name` returns the 778-character `kb.profile.identity` paragraph where a
+ * funder wants one line.
+ *
+ * They are listed rather than filled because the values are organisational facts this layer must not
+ * invent — `CLAUDE.md` "Do not invent". `kb.profile.identity` says so itself: "Still to confirm
+ * before applying: Launchpad's own registered legal name/EIN". Filling one is the fix; the check
+ * below fires on any NEW question that falls into the same gap.
+ */
+const STRUCTURED_VALUE_DEBT: ReadonlySet<string> = new Set([
+  'cover.authorized_rep', // field -> kb.profile.contacts
+  'cover.fiscal_year', // field -> kb.profile.identity
+  'cover.legal_name', // field -> kb.profile.identity
+  'cover.year_founded', // field -> kb.profile.identity
+  'eligibility.debarment', // boolean -> kb.eligibility
+  'eligibility.minority_owned', // single_select -> kb.eligibility
+  'eligibility.prior_funding', // single_select -> kb.eligibility
+]);
+
+/** Answer types that want a short value, not a paragraph. Mirrors `schemas.ts`, minus attachment. */
+const SHORT_VALUE_TYPES: ReadonlySet<string> = new Set([
+  'field',
+  'number',
+  'boolean',
+  'single_select',
+  'multi_select',
+  'demographic',
+]);
 
 /**
  * Cross-file consistency checks over the writing corpus. Warnings render alongside results; they
@@ -279,6 +358,175 @@ export function computeIntegrityReport(
         `narrative KB slot: ${misroutedAttachments.join(', ')}. Those need a document, not text — ` +
         `route them to an attachment checklist slot (${[...ATTACHMENT_SLOTS].sort().join(', ')}) ` +
         `or set kb_ref to null.`,
+    });
+  }
+
+  // -- QUESTION_FIGURE_CHECKS must resolve on both sides ------------------------------------
+  // This map is the whole `fetch_figure` path: `buildAnswer` consults it to decide that a number
+  // question gets a LIVE figure instead of the frozen KB value. A key naming a renamed question, or
+  // a value naming a renamed check, does not error — the lookup misses, the question quietly takes
+  // the normal path, and the draft ships a static number that has already drifted. Nothing else
+  // validates it: the checks above cover question kb_refs, meta prose, and FIGURE_CHECKS.appears_in.
+  const figureCheckKeys = new Set(FIGURE_CHECKS.map((c) => c.key));
+  const badFigureQuestions = Object.keys(QUESTION_FIGURE_CHECKS)
+    .filter((qid) => !questionIds.has(qid))
+    .sort();
+  const badFigureKeys = [
+    ...new Set(Object.values(QUESTION_FIGURE_CHECKS).filter((key) => !figureCheckKeys.has(key))),
+  ].sort();
+  if (badFigureQuestions.length > 0 || badFigureKeys.length > 0) {
+    const parts: string[] = [];
+    if (badFigureQuestions.length > 0) {
+      parts.push(`question id(s) not in questions.json: ${badFigureQuestions.join(', ')}`);
+    }
+    if (badFigureKeys.length > 0) {
+      parts.push(`check key(s) not in FIGURE_CHECKS: ${badFigureKeys.join(', ')}`);
+    }
+    out.push({
+      severity: 'high',
+      code: 'question_figure_check_dangling',
+      message:
+        `QUESTION_FIGURE_CHECKS in figures.ts does not resolve — ${parts.join('; ')}. Those ` +
+        `questions silently lose the fetch_figure path and fall back to the frozen KB number, ` +
+        `which is the drifted figure the live lookup exists to replace.`,
+    });
+  }
+
+  // -- every slot carrying a figure claim must be declared on its check ---------------------
+  // The inverse of figure_check_ref_dangling above. That one asks whether every declared slot
+  // exists; this asks whether every slot carrying the claim gets declared. Both failures are silent
+  // for the same reason — `buildFigureWorkOrder()` scopes by `appears_in` — but this one is the
+  // commoner edit: a figure gets restated in a new slot and nobody updates figures.ts.
+  //
+  // Currency tokens only. See `extractCurrencyClaims` for the measured reason percentages are out.
+  //
+  // Structured values are scanned alongside `text` because they are answers in their own right —
+  // `eligibility.budget_size` hands a funder "FY2025 expenses ~$1.34M" with no prose around it, so a
+  // figure restated only there needs the same verification item as one restated in a paragraph.
+  const claimGaps: string[] = [];
+  for (const check of FIGURE_CHECKS) {
+    const tokens = extractCurrencyClaims(check.claim);
+    if (tokens.length === 0) continue;
+    const undeclared = Object.entries(kb.answers)
+      .filter(([slot]) => !check.appears_in.includes(slot))
+      .filter(([, answer]) => {
+        const texts = [answer.text, ...Object.values(answer.structured ?? {}).map((s) => s.value)];
+        return tokens.some((t) => texts.some((text) => statesFigure(text, t)));
+      })
+      .map(([slot]) => slot)
+      .sort();
+    if (undeclared.length > 0) {
+      claimGaps.push(`${check.key} -> ${undeclared.join(', ')}`);
+    }
+  }
+  if (claimGaps.length > 0) {
+    out.push({
+      severity: 'high',
+      code: 'figure_claim_uncovered',
+      message:
+        `KB slot(s) state a figure whose FIGURE_CHECK does not list them in appears_in: ` +
+        `${claimGaps.join('; ')}. A draft built from those slots alone gets no verification item ` +
+        `for the figure and publishes it frozen. Add the slot to appears_in in figures.ts.`,
+    });
+  }
+
+  // -- funder wordings recorded against more than one canonical -----------------------------
+  // A duplicated wording scores 1.0 against both canonicals, so bank order decides the match. See
+  // ACKNOWLEDGED_TIES for the three that are known and why they are not resolved here.
+  //
+  // The key is `matcher.normalize()`, not a local approximation of it: what counts as "the same
+  // wording" here has to be what the matcher counts as the same, or the check misses exactly the
+  // collisions it exists to catch. A local `[^a-z0-9 ] -> ''` made "Program/project description"
+  // and "Program project description" different keys while the matcher tied them at 1.0.
+  //
+  // Canonicals are indexed alongside variants because `candidatesFor()` scores the canonical text as
+  // a candidate too, so a variant matching another question's canonical ties the same way.
+  const byWording = new Map<string, Set<string>>();
+  for (const q of bank.questions) {
+    for (const text of [q.canonical, ...q.variants.map((v) => v.text)]) {
+      const key = normalize(text).join(' ');
+      if (key === '') continue;
+      const seen = byWording.get(key) ?? new Set<string>();
+      seen.add(q.id);
+      byWording.set(key, seen);
+    }
+  }
+  const newTies = [...byWording.values()]
+    .filter((ids) => ids.size > 1)
+    .map((ids) => [...ids].sort())
+    .filter((ids) => {
+      const [a, b] = ids;
+      if (ids.length !== 2 || a === undefined || b === undefined) return true;
+      return !ACKNOWLEDGED_TIES.has(pairKey(a, b));
+    })
+    .map((ids) => ids.join(' + '))
+    .sort();
+  if (newTies.length > 0) {
+    out.push({
+      severity: 'medium',
+      code: 'variant_shared_across_questions',
+      message:
+        `funder wording(s) recorded against more than one canonical question: ` +
+        `${newTies.join('; ')}. An incoming form asking one verbatim scores 1.0 against both and ` +
+        `bank order decides the match. Place the wording on one canonical, or record the tie in ` +
+        `ACKNOWLEDGED_TIES with the reason.`,
+    });
+  }
+
+  // -- provenance: every cited source must be declared --------------------------------------
+  // `meta.sources` is what makes a recorded wording traceable back to a real funder form. A source
+  // id cited by a variant or a limit but never declared breaks that chain, and provenance is the
+  // only thing separating the bank from invented questions.
+  const declaredSources = new Set(bank.meta.sources.map((s) => s.id));
+  const undeclaredSources = [
+    ...new Set(
+      bank.questions.flatMap((q) => [
+        ...q.variants.map((v) => v.source),
+        ...(q.limits ?? []).map((l) => l.source),
+      ]),
+    ),
+  ]
+    .filter((s) => !declaredSources.has(s))
+    .sort();
+  if (undeclaredSources.length > 0) {
+    out.push({
+      severity: 'medium',
+      code: 'variant_source_undeclared',
+      message:
+        `wordings or limits cite source id(s) not declared in meta.sources ` +
+        `(${String(declaredSources.size)} declared): ${undeclaredSources.join(', ')}. Provenance ` +
+        `does not resolve for those, so the recorded wording cannot be traced to a real form.`,
+    });
+  }
+
+  // -- short-value questions left out of a slot that disambiguates its siblings --------------
+  // Not "routes to prose" — that is the designed fallback. This is the narrower gap: the slot
+  // already carries per-question structured values and this question was missed, so it hands back a
+  // paragraph where the funder gave a one-line box. See STRUCTURED_VALUE_DEBT for the known seven.
+  const missingStructured = bank.questions
+    .filter((q) => SHORT_VALUE_TYPES.has(q.answer_type) && q.kb_ref !== null)
+    .filter((q) => !STRUCTURED_VALUE_DEBT.has(q.id))
+    .filter((q) => {
+      const ref = q.kb_ref;
+      if (ref === null) return false;
+      const structured = kb.answers[ref]?.structured;
+      // `structured: {}` is not "carries structured values" — reading it that way would flag every
+      // short-value question on a slot the moment its last structured value is removed.
+      if (structured === undefined || Object.keys(structured).length === 0) return false;
+      return !(q.id in structured);
+    })
+    .map((q) => q.id)
+    .sort();
+  if (missingStructured.length > 0) {
+    out.push({
+      severity: 'medium',
+      code: 'structured_value_missing',
+      message:
+        `${String(missingStructured.length)} short-value question(s) route to a KB slot that ` +
+        `carries structured values for its other questions but not for these: ` +
+        `${missingStructured.join(', ')}. Each returns the slot's full narrative where the funder ` +
+        `expects a one-line value. Add a structured value keyed by question id, or record the id ` +
+        `in STRUCTURED_VALUE_DEBT with what has to be confirmed first.`,
     });
   }
 

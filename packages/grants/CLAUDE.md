@@ -84,10 +84,11 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **275 tests across 14
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **294 tests across 14
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
-over stdio. `packages/grants` alone is **230 in 9 files**, with no database and no network. (217 in 9
-before the seed audit added four integrity checks on 2026-08-11; 192 in 9
+over stdio. `packages/grants` alone is **240 in 9 files**, with no database and no network. (230 in 9
+before 2026-08-12, when the code review of the seed-audit checks added 10 cases to `data.test.ts`;
+217 in 9 before the seed audit added four integrity checks on 2026-08-11; 192 in 9
 before the `needs_expand` guard landed earlier the same day; 187 in 9
 before earlier the same day, when board `grant-h32` split two canonicals at bank v0.4.3; 177 in 9
 before 2026-08-10, when D1a/D1b added the structured-value and fetch_figure branches; 207 across
@@ -230,7 +231,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 275 passed, 0 skipped, 14 files.
+# Full suite — expect 294 passed, 0 skipped, 14 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

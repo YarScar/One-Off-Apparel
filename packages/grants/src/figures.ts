@@ -67,8 +67,11 @@ export interface FigureCheck {
 export const FIGURE_CHECKS: readonly FigureCheck[] = [
   {
     key: 'employment_earnings_total',
-    claim: '$350,268 total wages paid to 45 participants across 88 jobs',
-    appears_in: ['kb.metrics', 'kb.outcomes'],
+    claim: '$350,268 total wages paid to 45 participants across 88 jobs; $229,000+ documented alumni wages',
+    // kb.theory_of_change and kb.capacity added 2026-08-11: both carry the $229,000+ alumni-wage
+    // restatement of the same underlying aggregate, and the same query_employment call settles all
+    // three. kb.capacity was found by the `figure_claim_uncovered` check rather than by reading.
+    appears_in: ['kb.metrics', 'kb.outcomes', 'kb.theory_of_change', 'kb.capacity'],
     tool: 'query_employment',
     args: { query_type: 'aggregate' },
     conflict_kind: 'drift',
@@ -95,7 +98,12 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
   },
   {
     key: 'cert_pass_rate',
-    claim: '92% certification pass rate; 100% in the most recent cohort',
+    // Corrected 2026-08-11: this read '92% certification pass rate'. No KB slot says that. The 92%
+    // in kb.metrics and kb.capacity is the CohortÂ 1 paid-work rate (11 of 12 at six months) and now
+    // belongs to `placement_rate` below; the certification claim is the PCEP range. A reviewer sent
+    // to find "92% certification pass rate" in kb.metrics finds a 92% that means something else,
+    // which is the confident-wrong-figure failure this module exists to prevent.
+    claim: 'PCEP pass rates 70–100% per cohort; 100% in the most recent cohort',
     appears_in: ['kb.metrics', 'kb.outcomes'],
     tool: 'query_certifications',
     args: { query_type: 'summary' },
@@ -108,7 +116,10 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
   {
     key: 'annual_budget',
     claim: '$1.34M FY2025 expenses; $1.68M FY2026 projected revenue',
-    appears_in: ['kb.financials', 'kb.budget_narrative'],
+    // kb.eligibility added 2026-08-11: both its prose and its `eligibility.budget_size` structured
+    // value quote $1.34M, so an eligibility-only draft published the frozen budget figure with no
+    // verification step.
+    appears_in: ['kb.financials', 'kb.budget_narrative', 'kb.eligibility'],
     tool: 'get_finance_brief',
     args: { period: 'ytd' },
     conflict_kind: 'drift',
@@ -126,9 +137,15 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     conflict_kind: 'content_gap',
     severity: 'high',
     note:
-      'The platform records a Lightspeed phase (Foundations -> 101 -> Lightspeed -> LiftOff) that ' +
-      'the KB program descriptions omit entirely. A drafted program description built only from ' +
-      'the KB will be missing a phase.',
+      'The platform records a Lightspeed phase that the KB program descriptions omit entirely, so a ' +
+      'drafted program description built only from the KB is missing a phase. Queried 2026-08-11 — ' +
+      'Lightspeed is a 7-week summer intensive, run twice: 2024-07-01 to 2024-08-19 (7 completers) ' +
+      'and 2025-07-07 to 2025-08-27 (8), 15 of 15 completing and none dropping. 14 of the 15 sat ' +
+      'PCEP and all 14 passed. Do NOT describe it as a linear stage between 101 and LiftOff: it ' +
+      'runs in the summer gap between school years, no student has it as current_phase, and its ' +
+      'completers show up later under LiftOff and Alumni. Use query_enrollment active_during with ' +
+      'phase=Lightspeed and a wide date window for the roster — by_phase gives only the counts, and ' +
+      'by_student cannot filter by phase at all (see the filter caveat in CLAUDE.md §4).',
   },
   {
     key: 'prior_funding_wpf',
@@ -143,7 +160,16 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
   {
     key: 'demographics_race',
     claim: '85% / 90% / 100% demographic shares',
-    appears_in: ['kb.dei', 'kb.profile.demographics'],
+    // Four slots added 2026-08-11. The same shares are restated across the corpus, and only two
+    // slots declared them, so a draft built from any of the others published them unverified.
+    appears_in: [
+      'kb.dei',
+      'kb.profile.demographics',
+      'kb.need',
+      'kb.target_population',
+      'kb.metrics',
+      'kb.eligibility',
+    ],
     tool: 'query_enrollment',
     args: { query_type: 'by_race' },
     conflict_kind: 'drift',
@@ -153,7 +179,18 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
   {
     key: 'employment_wage_range',
     claim: '$15,000–$35,000 earned; ~$20/hr',
-    appears_in: ['kb.metrics', 'kb.program_desc', 'kb.uniqueness'],
+    // Four slots added 2026-08-11: kb.outcomes carries the $15,000/$35,000 pair verbatim, and the
+    // $20/hour client-work rate is restated in kb.programs, kb.budget_narrative and
+    // kb.management_plan.
+    appears_in: [
+      'kb.metrics',
+      'kb.program_desc',
+      'kb.uniqueness',
+      'kb.outcomes',
+      'kb.programs',
+      'kb.budget_narrative',
+      'kb.management_plan',
+    ],
     tool: 'query_employment',
     args: { query_type: 'aggregate' },
     conflict_kind: 'drift',
@@ -163,7 +200,10 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
   {
     key: 'top_employers',
     claim: '17 employer partners / 20 employers',
-    appears_in: ['kb.partnerships'],
+    // kb.theory_of_change and kb.risk added 2026-08-11: both lean on "17+ partners" — the risk
+    // narrative uses it as the mitigation for employer dependence, so a stale count there
+    // understates a stated control.
+    appears_in: ['kb.partnerships', 'kb.theory_of_change', 'kb.risk'],
     tool: 'query_employment',
     args: { query_type: 'by_employer' },
     conflict_kind: 'drift',
@@ -173,7 +213,10 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
   {
     key: 'inc_client_work_booked',
     claim: '$75,000 in client work booked in July 2026 alone (Barra Launchpad Inc overview, ~1/3 of the full-year target); ' +
-      'two clients with hiring intent in writing at $50-80K',
+      // The range is written out as $50K-$80K, not $50-80K: the extractor reads a shared trailing
+      // suffix as belonging to the second number only, so the abbreviated form tokenizes to a bare
+      // `$50` — two orders of magnitude off, and generic enough to match unrelated prose.
+      'two clients with hiring intent in writing at $50K-$80K',
     appears_in: ['kb.sustainability', 'kb.innovation'],
     tool: 'get_finance_brief',
     args: { period: 'ytd' },
@@ -200,8 +243,16 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
   },
   {
     key: 'phase_costs',
-    claim: '$519K / $455K / $362K per phase; ~$6,000 per participant',
-    appears_in: ['kb.budget_narrative', 'kb.financials'],
+    claim: '$519K / $455K / $362K per phase; ~$6,000 per participant stipend floor',
+    // Three slots added 2026-08-11: the $6,000 stipend floor is quoted as a programme feature in
+    // kb.programs, kb.program_desc and kb.uniqueness, not only as a budget line.
+    appears_in: [
+      'kb.budget_narrative',
+      'kb.financials',
+      'kb.programs',
+      'kb.program_desc',
+      'kb.uniqueness',
+    ],
     tool: 'query_finances',
     args: { query_type: 'phase_budget_dashboard' },
     conflict_kind: 'drift',
@@ -249,6 +300,26 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     conflict_kind: 'drift',
     severity: 'low',
     note: 'The evaluation narrative is qualitative; live scores can make it concrete.',
+  },
+  {
+    key: 'placement_rate',
+    // Added 2026-08-11. The paid-work rate was the most-quoted outcome in the corpus and had no
+    // check at all: `cert_pass_rate` claimed the 92%, but 92% is 11 of 12 in paid work, not a
+    // certification result. Four slots restate some form of it and none had a verification path.
+    claim:
+      '11 of 12 (92%) in paid work or training at six months; 100% in paid work now; ' +
+      '95% of Launchpad 101 graduates to college, training or work',
+    appears_in: ['kb.metrics', 'kb.outcomes', 'kb.capacity', 'kb.theory_of_change'],
+    tool: 'query_employment',
+    args: { query_type: 'aggregate' },
+    conflict_kind: 'unknown',
+    severity: 'high',
+    note:
+      'No query_* tool returns a cohort placement rate directly — query_employment aggregate gives ' +
+      'the participant and job counts, and the denominator has to come from query_enrollment. The ' +
+      'cohort framing ("Cohort 1 at six months") is also a moving window: "100% in paid work now" ' +
+      'is dated by whenever "now" was. Confirm both the numerator and the as-of date, or write ' +
+      '[DATA UNAVAILABLE].',
   },
   {
     key: 'staff_count',
@@ -329,6 +400,58 @@ const NUMERIC_VALUE = /\$\s?\d[\d,]*(?:\.\d+)?|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(
 export function extractNumericClaims(text: string): string[] {
   const matches = text.match(NUMERIC_VALUE) ?? [];
   return matches.map((m) => m.replace(/[$%,\s]/g, ''));
+}
+
+/**
+ * Currency amounts inside a {@link FigureCheck.claim}, with their magnitude suffix attached.
+ *
+ * Feeds the `figure_claim_uncovered` integrity check in `data.ts`, which asks the inverse of
+ * `figure_check_ref_dangling`: not "does every declared slot exist" but "does every slot carrying
+ * this claim get declared". An undeclared slot is invisible — `buildFigureWorkOrder()` scopes by
+ * `appears_in`, so a draft built from that slot alone publishes the frozen figure with no
+ * verification item and no warning.
+ *
+ * **Currency only, on purpose.** Percentages and bare counts are not distinctive enough to scan on.
+ * Measured against the 2026-08-11 corpus, `100%` matches the certification rate, the free-and-
+ * reduced-lunch share, and the current paid-work rate — three unrelated claims; `60%` matches both
+ * the revenue mix and "40–60% administrative time savings". Every one of those is a false positive,
+ * and a check that cries wolf on a third of the corpus gets ignored. Currency tokens produced zero
+ * false positives on the same corpus. The trade is real and recorded: a percentage-only claim gets
+ * no coverage check, and `appears_in` for those is maintained by hand.
+ *
+ * The suffix is part of the token because `$1.34M` and `$1.34` are different figures — the same gap
+ * {@link extractNumericClaims} documents for the resize guardrail, closed here because a check on
+ * whole claims can afford to be strict.
+ *
+ * The `(?![A-Za-z])` after the suffix is load-bearing. Without it, `$500,000 Kresge grant` tokenizes
+ * to `$500,000 K` — a token no KB text contains, so the claim silently loses its coverage check
+ * entirely, which is the failure this whole check exists to prevent.
+ */
+const CLAIM_CURRENCY = /\$\s?\d[\d,]*(?:\.\d+)?(?:\s?[MKB](?![A-Za-z]))?/g;
+
+export function extractCurrencyClaims(text: string): string[] {
+  return [...new Set((text.match(CLAIM_CURRENCY) ?? []).map((m) => m.trim()))];
+}
+
+/**
+ * Does `text` state `token` as a whole figure?
+ *
+ * The boundaries are what make the coverage check usable: a plain `includes` treats `$50` as present
+ * in `$50,000` and `$1.34` as present in `$1.34M`, which on the 2026-08-11 corpus turned 8 real
+ * findings into 40. The lookahead rejects a longer number continuing to the right; the lookbehind
+ * rejects one continuing to the left.
+ *
+ * Three ways a figure continues to the right, all rejected: more digits (`$20` in `$20,000`), a
+ * decimal (`$20` in `$20.50`), and a magnitude suffix (`$1.34` in `$1.34M`, `$1.34 M`). The decimal
+ * arm is `\.\d`, not a bare `.`, so a token ending a sentence — `costs $50K.` — still matches. The
+ * suffix arm carries the same `(?![A-Za-z])` as {@link CLAIM_CURRENCY} so `$50 Kresge` does not read
+ * as `$50K`.
+ */
+export function statesFigure(text: string, token: string): boolean {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(
+    `(?<![\\d.,])${escaped}(?![\\d,]*\\d|\\.\\d|\\s?[MKB](?![A-Za-z]))`,
+  ).test(text);
 }
 
 export interface FigureWorkOrder {

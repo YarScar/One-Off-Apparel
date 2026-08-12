@@ -58,7 +58,14 @@ Keep `canonical` phrasings funder-neutral (no funder name, no specific limit). L
 
 ## Current coverage
 
-**v0.4.3** — 11 categories · 92 canonical questions · 29 KB answer slots · 265 recorded funder wordings, synthesized from 25 sources. `meta.version` in `questions.json` is authoritative; if this section and that field disagree, this section is stale.
+**v0.4.3** — 11 categories · 92 canonical questions · 29 KB answer slots · 265 recorded funder wordings, synthesized from **27 sources**. `meta.version` in `questions.json` is authoritative; if this section and that field disagree, this section is stale.
+
+The source count moved 25 → 27 on 2026-08-11 with no new wordings. `GSK-STEM-2026` and
+`Truist-Inspire-2026` were carrying 31 recorded wordings between them and had never been declared in
+`meta.sources` — added at v0.3, cited ever since, untraceable the whole time. Nothing detected it
+until the `variant_source_undeclared` check landed; that check now enforces the invariant, and
+`data.test.ts` pins the count at 27. **No `canonical` or `variants[]` text changed**, so matcher
+output is untouched and the parity fixtures did not need regenerating — the full suite confirms it.
 
 v0.4.3 closed board `grant-h32` by splitting two canonicals. **The wording count is unchanged at 265
 on purpose** — this release moved three recorded variants rather than adding any, and `data.test.ts`
