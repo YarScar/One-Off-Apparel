@@ -635,6 +635,16 @@ and silently discarded them — `by_phase` built a student predicate and never u
 Lightspeed completers received all 301 students with nothing in the envelope to say so. A silently
 unscoped count is a wrong denominator, which is the specific way this tool can mislead.
 
+Filter presence is tested, not truthiness, so `cohort: 0` is a filter like any other. A blank or
+whitespace-only string is treated as **absent on every `query_type`** rather than as a literal
+column match, and string filters are trimmed; a blank filter therefore appears in neither
+`filters_applied` nor `filters_ignored`.
+
+`active_during` reports `student_count` as the number of rows matching the filters, counted
+separately from the page it returns. When the page is short of that count it adds
+`truncated: true`, `returned` (rows in this response) and `limit`. Reporting the page size as the
+count is the same wrong denominator as a dropped filter, reached from the other direction.
+
 > **Doc drift, unfixed.** The `by_student` bullet above claims a "full student-info filter set"
 > (race, gender, withdrawal_code, entry/withdrawal date ranges, city, zip, college/workforce fields,
 > income and parental-ed ranges, numeric score ranges) and the `by_program_year` bullet claims

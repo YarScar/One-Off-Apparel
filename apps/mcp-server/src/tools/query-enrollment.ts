@@ -69,10 +69,10 @@ function outcomePredicate(
   phase: PhaseName | undefined,
   status: string | undefined,
 ): Prisma.StudentPhaseOutcomeWhereInput | undefined {
-  if (phase) {
+  if (phase !== undefined) {
     return { [PHASE_FIELDS[phase].status]: status ?? { not: null } } as Prisma.StudentPhaseOutcomeWhereInput;
   }
-  if (status) {
+  if (status !== undefined) {
     return {
       OR: PHASE_NAMES.map(
         (p) => ({ [PHASE_FIELDS[p].status]: status }) as Prisma.StudentPhaseOutcomeWhereInput,
@@ -80,6 +80,24 @@ function outcomePredicate(
     };
   }
   return undefined;
+}
+
+/**
+ * A string filter, with blank treated as absent.
+ *
+ * Every filter below is presence-tested, not truthiness-tested, so that `cohort: 0`
+ * reaches the query and the echo. That makes `""` the one remaining hazard: an
+ * empty `status` present in the payload would become a literal column match on
+ * every branch that reads it directly, and a `{ not: null }` on the branches that
+ * test truthiness — the same silent divergence between branches this fix exists to
+ * remove. A blank filter means "no filter", uniformly, on every query type.
+ *
+ * Trimming is part of that: ` "Completed" ` is the value with the same intent, and
+ * an untrimmed one matches nothing while reporting itself applied.
+ */
+export function filterStr(raw: Record<string, unknown>, key: string): string | undefined {
+  const trimmed = parseStr(raw, key)?.trim();
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
 }
 
 /**
@@ -108,29 +126,31 @@ export function registerQueryEnrollment(server: McpServer): void {
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
       const queryType = parseStr(raw, 'query_type') ?? 'total';
-      const phaseFilter = parseStr(raw, 'phase') as PhaseName | undefined;
-      const statusFilter = parseStr(raw, 'status');
-      const currentPhase = parseStr(raw, 'current_phase');
-      const enrollmentStatus = parseStr(raw, 'enrollment_status');
+      const phaseFilter = filterStr(raw, 'phase') as PhaseName | undefined;
+      const statusFilter = filterStr(raw, 'status');
+      const currentPhase = filterStr(raw, 'current_phase');
+      const enrollmentStatus = filterStr(raw, 'enrollment_status');
       const cohort = parseNum(raw, 'cohort');
-      const startDate = parseStr(raw, 'start_date');
-      const endDate = parseStr(raw, 'end_date');
+      const startDate = filterStr(raw, 'start_date');
+      const endDate = filterStr(raw, 'end_date');
       const limit = Math.min(parseNum(raw, 'limit') ?? 500, 1000);
 
+      // Presence, not truthiness, everywhere below — `cohort: 0` is a filter, and a
+      // filter dropped for being falsy is the defect this tool is being fixed for.
       const provided: Record<string, string | number> = {
-        ...(phaseFilter ? { phase: phaseFilter } : {}),
-        ...(statusFilter ? { status: statusFilter } : {}),
-        ...(currentPhase ? { current_phase: currentPhase } : {}),
-        ...(enrollmentStatus ? { enrollment_status: enrollmentStatus } : {}),
-        ...(cohort ? { cohort } : {}),
-        ...(startDate ? { start_date: startDate } : {}),
-        ...(endDate ? { end_date: endDate } : {}),
+        ...(phaseFilter !== undefined ? { phase: phaseFilter } : {}),
+        ...(statusFilter !== undefined ? { status: statusFilter } : {}),
+        ...(currentPhase !== undefined ? { current_phase: currentPhase } : {}),
+        ...(enrollmentStatus !== undefined ? { enrollment_status: enrollmentStatus } : {}),
+        ...(cohort !== undefined ? { cohort } : {}),
+        ...(startDate !== undefined ? { start_date: startDate } : {}),
+        ...(endDate !== undefined ? { end_date: endDate } : {}),
       };
 
       const studentWhere: Prisma.StudentWhereInput = {
-        ...(currentPhase ? { currentPhase } : {}),
-        ...(enrollmentStatus ? { enrollmentStatus } : {}),
-        ...(cohort ? { cohort } : {}),
+        ...(currentPhase !== undefined ? { currentPhase } : {}),
+        ...(enrollmentStatus !== undefined ? { enrollmentStatus } : {}),
+        ...(cohort !== undefined ? { cohort } : {}),
       };
       const hasStudentFilters = Object.keys(studentWhere).length > 0;
 
@@ -158,7 +178,7 @@ export function registerQueryEnrollment(server: McpServer): void {
           for (const p of phases) {
             const f = PHASE_FIELDS[p];
             const where: Prisma.StudentPhaseOutcomeWhereInput = {
-              ...({ [f.status]: statusFilter ? statusFilter : { not: null } } as Prisma.StudentPhaseOutcomeWhereInput),
+              ...(outcomePredicate(p, statusFilter) ?? {}),
               ...studentScope,
             };
             const rows = await prisma.studentPhaseOutcome.findMany({ where, select: { [f.status]: true } as Prisma.StudentPhaseOutcomeSelect });
@@ -190,10 +210,16 @@ export function registerQueryEnrollment(server: McpServer): void {
             include: { student: { select: { canonicalName: true, studentNumber: true } } },
             take: limit,
           });
+          // Counted, not inferred from `rows.length`. Under `take: limit` a wide window
+          // returns a page, and reporting its length as the count hands back a
+          // truncated denominator with `filters_applied` echoed beside it — the same
+          // wrong-denominator failure as a dropped filter, from the other direction.
+          const matched = await prisma.studentPhaseOutcome.count({ where });
           return {
             query_type: 'active_during',
             phase: phaseFilter,
-            student_count: rows.length,
+            student_count: matched,
+            ...(rows.length < matched ? { truncated: true, returned: rows.length, limit } : {}),
             students: rows.map((r) => ({
               student_number: r.student.studentNumber,
               canonical_name: r.student.canonicalName,

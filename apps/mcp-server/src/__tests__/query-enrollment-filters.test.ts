@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { filterEcho } from '../tools/query-enrollment.js';
+import { filterEcho, filterStr } from '../tools/query-enrollment.js';
+import { McpStdioClient } from './mcp-client.js';
 
 /**
  * The defect this suite exists for: `query_enrollment` accepted `phase`,
@@ -58,38 +59,187 @@ describe('query_enrollment filter echo', () => {
 });
 
 /**
+ * `filterStr` is what makes the echo's presence semantics safe to hold. The handler
+ * now presence-tests every filter, so a blank string would otherwise reach the query
+ * as a literal column match on the branches that read it directly and as
+ * `{ not: null }` on the branches that test truthiness — one payload, two answers.
+ */
+describe('query_enrollment blank filters', () => {
+  it('treats a blank or whitespace-only filter as absent', () => {
+    expect(filterStr({ status: '' }, 'status')).toBeUndefined();
+    expect(filterStr({ status: '   ' }, 'status')).toBeUndefined();
+    expect(filterStr({}, 'status')).toBeUndefined();
+  });
+
+  it('trims a filter rather than matching on the padding', () => {
+    expect(filterStr({ status: ' Completed ' }, 'status')).toBe('Completed');
+  });
+
+  it('ignores a non-string value rather than coercing it', () => {
+    expect(filterStr({ status: 5 }, 'status')).toBeUndefined();
+  });
+});
+
+
+/**
  * Live-DB half. Gated the same way as the rest of the suite: only runs against a
- * localhost DATABASE_URL, so CI without a database and any developer pointed at
- * RDS both skip rather than fail.
+ * localhost DATABASE_URL, so CI without a database and any developer pointed at RDS
+ * both skip rather than fail.
+ *
+ * These cases go through the real MCP server over stdio, and each compares the
+ * tool's answer to a Prisma reference *and* to the answer an unfiltered query would
+ * give. Both halves are needed: the reference proves the number is right, and the
+ * inequality proves the predicate reached the query at all. An earlier version of
+ * this file asserted only `scoped <= unscoped` and `Number.isInteger(scoped)`,
+ * which stayed green with the entire fix reverted and on an empty database.
+ *
+ * The fixture is built here rather than assumed, for the same reason: `pnpm db:seed`
+ * inserts three students and **zero** phase outcomes, so every phase-outcome
+ * assertion against the seed alone would pass without executing anything.
  */
 const isLocalDb = (process.env['DATABASE_URL'] ?? '').includes('localhost');
 const describeLocal = isLocalDb ? describe : describe.skip;
 
-describeLocal('query_enrollment filter application (live DB)', () => {
-  it('scopes by_phase by student columns instead of ignoring them', async () => {
-    const { prisma } = await import('@lp-ai/lib-db');
+/** Namespaced so cleanup cannot touch a developer's own rows. */
+const FIXTURE_PREFIX = 'PR50-';
+const KEPT = 'PR50Kept';
+const DROPPED = 'PR50Dropped';
 
+describeLocal('query_enrollment filter application (live DB)', () => {
+  let client: McpStdioClient;
+
+  beforeAll(async () => {
+    const { prisma } = await import('@lp-ai/lib-db');
+    await prisma.student.deleteMany({ where: { studentNumber: { startsWith: FIXTURE_PREFIX } } });
+    // Two rows carry the status under test and one does not, so a dropped filter
+    // returns 3 where an applied one returns 2. Two matching rows is also what makes
+    // the `limit: 1` truncation case meaningful.
+    for (const [n, status] of [
+      ['1', KEPT],
+      ['2', KEPT],
+      ['3', DROPPED],
+    ] as const) {
+      await prisma.student.create({
+        data: {
+          studentNumber: `${FIXTURE_PREFIX}${n}`,
+          canonicalName: `Fixture Student ${n}`,
+          enrollmentStatus: status,
+          phaseOutcomes: {
+            create: {
+              lightspeedStatus: 'Completed',
+              lightspeedStartDate: new Date('2025-06-01'),
+              lightspeedEndDate: new Date('2025-07-31'),
+            },
+          },
+        },
+      });
+    }
+    client = new McpStdioClient();
+  });
+
+  afterAll(async () => {
+    const { prisma } = await import('@lp-ai/lib-db');
+    client.close();
+    await prisma.student.deleteMany({ where: { studentNumber: { startsWith: FIXTURE_PREFIX } } });
+    await prisma.$disconnect();
+  });
+
+  it('applies enrollment_status on total instead of counting every student', async () => {
+    const { prisma } = await import('@lp-ai/lib-db');
+    const all = await prisma.student.count();
+    const reference = await prisma.student.count({ where: { enrollmentStatus: KEPT } });
+
+    const res = (await client.callTool('query_enrollment', {
+      query_type: 'total',
+      enrollment_status: KEPT,
+    })) as { student_count: number; filters_applied: Record<string, unknown> };
+
+    expect(reference).toBeLessThan(all); // the fixture guarantees this
+    expect(res.student_count).toBe(reference);
+    expect(res.filters_applied).toEqual({ enrollment_status: KEPT });
+  });
+
+  it('applies student columns to by_phase, which used to build the predicate and discard it', async () => {
+    const { prisma } = await import('@lp-ai/lib-db');
     const unscoped = await prisma.studentPhaseOutcome.count({
       where: { lightspeedStatus: { not: null } },
     });
-    const scoped = await prisma.studentPhaseOutcome.count({
-      where: { lightspeedStatus: { not: null }, student: { enrollmentStatus: 'Completed' } },
+    const reference = await prisma.studentPhaseOutcome.count({
+      where: { lightspeedStatus: { not: null }, student: { enrollmentStatus: KEPT } },
     });
 
-    // The point is that the relation filter reaches the query at all. Equality
-    // would mean the predicate was a no-op, which is the bug.
-    expect(scoped).toBeLessThanOrEqual(unscoped);
-    expect(Number.isInteger(scoped)).toBe(true);
+    const res = (await client.callTool('query_enrollment', {
+      query_type: 'by_phase',
+      phase: 'Lightspeed',
+      enrollment_status: KEPT,
+    })) as { breakdown: Array<{ count: number }>; filters_applied: Record<string, unknown> };
+
+    expect(reference).toBeLessThan(unscoped);
+    expect(res.breakdown.reduce((n, b) => n + b.count, 0)).toBe(reference);
+    expect(res.filters_applied).toEqual({ phase: 'Lightspeed', enrollment_status: KEPT });
   });
 
-  it('scopes a student-level count by a phase outcome', async () => {
+  it('applies phase and status together on a student-level count', async () => {
     const { prisma } = await import('@lp-ai/lib-db');
-
+    const reference = await prisma.student.count({
+      where: { phaseOutcomes: { some: { lightspeedStatus: 'Completed' } } },
+    });
     const all = await prisma.student.count();
-    const withLightspeed = await prisma.student.count({
-      where: { phaseOutcomes: { some: { lightspeedStatus: { not: null } } } },
+
+    const res = (await client.callTool('query_enrollment', {
+      query_type: 'total',
+      phase: 'Lightspeed',
+      status: 'Completed',
+    })) as { student_count: number };
+
+    expect(reference).toBeLessThan(all); // seeded students have no outcome row
+    expect(res.student_count).toBe(reference);
+  });
+
+  it('reads a blank filter the same way on every branch', async () => {
+    // `status: ''` used to become a literal column match where a branch read it
+    // directly and `{ not: null }` where a branch tested truthiness: `total` returned
+    // 0 while `by_phase` returned the full breakdown, and neither echo mentioned it.
+    const blank = (await client.callTool('query_enrollment', {
+      query_type: 'total',
+      phase: 'Lightspeed',
+      status: '',
+    })) as { student_count: number; filters_applied: Record<string, unknown> };
+    const absent = (await client.callTool('query_enrollment', {
+      query_type: 'total',
+      phase: 'Lightspeed',
+    })) as { student_count: number };
+
+    expect(blank.student_count).toBeGreaterThan(0); // the fixture has Lightspeed rows
+    expect(blank.student_count).toBe(absent.student_count);
+    expect(blank.filters_applied).toEqual({ phase: 'Lightspeed' });
+  });
+
+  it('reports the matched count on active_during, not the size of the page returned', async () => {
+    const { prisma } = await import('@lp-ai/lib-db');
+    // With no dates and no status, `active_during`'s where clause is just the student
+    // scope — `phase` selects which columns are read, it does not require the outcome
+    // to exist — so the reference is every outcome row for a fixture student.
+    const matched = await prisma.studentPhaseOutcome.count({
+      where: { student: { enrollmentStatus: KEPT } },
     });
 
-    expect(withLightspeed).toBeLessThanOrEqual(all);
+    const res = (await client.callTool('query_enrollment', {
+      query_type: 'active_during',
+      phase: 'Lightspeed',
+      enrollment_status: KEPT,
+      limit: 1,
+    })) as {
+      student_count: number;
+      returned?: number;
+      truncated?: boolean;
+      students: unknown[];
+    };
+
+    expect(matched).toBeGreaterThan(1); // fixture: two KEPT rows, page size 1
+    expect(res.students).toHaveLength(1);
+    expect(res.student_count).toBe(matched);
+    expect(res.truncated).toBe(true);
+    expect(res.returned).toBe(1);
   });
 });
