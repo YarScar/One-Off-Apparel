@@ -16,6 +16,13 @@ const inputSchema = {
   enrollment_status: z.string().optional(),
   current_phase: z.string().optional(),
   cohort: z.number().optional(),
+  school: z.string().optional().describe('High school name, partial match.'),
+  hs_graduation_year: z.number().optional(),
+  dob_start: z.string().optional().describe('ISO date; students born on or after this date.'),
+  dob_end: z.string().optional().describe('ISO date; students born on or before this date.'),
+  withdrawal_code: z.string().optional().describe('Exact match.'),
+  withdrawal_date_start: z.string().optional().describe('ISO date; withdrew on or after this date.'),
+  withdrawal_date_end: z.string().optional().describe('ISO date; withdrew on or before this date.'),
   filter_field: z.string().optional(),
   filter_min: z.number().optional(),
   filter_max: z.number().optional(),
@@ -27,12 +34,32 @@ const BREAKDOWN_FIELDS = new Set([
   'enrollment_status',
   'cohort',
   'neighborhood',
+  'zip',
+  'school_name',
+  'hs_graduation_year',
+  'withdrawal_code',
 ]);
+
+type BreakdownColumn =
+  | 'currentPhase'
+  | 'enrollmentStatus'
+  | 'cohort'
+  | 'neighborhood'
+  | 'zip'
+  | 'schoolName'
+  | 'hsGraduationYear'
+  | 'withdrawalCode';
 
 const NUMERIC_FIELDS = new Set(['distance_to_office']);
 
 const FIELD_TO_COLUMN: Record<string, string> = {
   distance_to_office: 'distance_to_office',
+};
+
+// Fields filterable by range via filter_field + filter_min/filter_max.
+const NUMERIC_RANGE_FIELDS: Record<string, 'distanceToOffice' | 'hsGraduationYear'> = {
+  distance_to_office: 'distanceToOffice',
+  hs_graduation_year: 'hsGraduationYear',
 };
 
 export function registerQueryStudents(server: McpServer): void {
@@ -44,6 +71,13 @@ export function registerQueryStudents(server: McpServer): void {
       const enrollmentStatus = parseStr(raw, 'enrollment_status');
       const currentPhase = parseStr(raw, 'current_phase');
       const cohort = parseNum(raw, 'cohort');
+      const school = parseStr(raw, 'school');
+      const hsGraduationYear = parseNum(raw, 'hs_graduation_year');
+      const dobStart = parseStr(raw, 'dob_start');
+      const dobEnd = parseStr(raw, 'dob_end');
+      const withdrawalCode = parseStr(raw, 'withdrawal_code');
+      const withdrawalDateStart = parseStr(raw, 'withdrawal_date_start');
+      const withdrawalDateEnd = parseStr(raw, 'withdrawal_date_end');
       const filterField = parseStr(raw, 'filter_field');
       const filterMin = parseNum(raw, 'filter_min');
       const filterMax = parseNum(raw, 'filter_max');
@@ -53,11 +87,32 @@ export function registerQueryStudents(server: McpServer): void {
         ...(enrollmentStatus ? { enrollmentStatus } : {}),
         ...(currentPhase ? { currentPhase } : {}),
         ...(cohort ? { cohort } : {}),
+        ...(school ? { schoolName: { contains: school, mode: 'insensitive' } } : {}),
+        ...(hsGraduationYear ? { hsGraduationYear } : {}),
+        ...(dobStart || dobEnd
+          ? {
+              dob: {
+                ...(dobStart ? { gte: new Date(dobStart) } : {}),
+                ...(dobEnd ? { lte: new Date(dobEnd) } : {}),
+              },
+            }
+          : {}),
+        ...(withdrawalCode ? { withdrawalCode } : {}),
+        ...(withdrawalDateStart || withdrawalDateEnd
+          ? {
+              withdrawalDate: {
+                ...(withdrawalDateStart ? { gte: new Date(withdrawalDateStart) } : {}),
+                ...(withdrawalDateEnd ? { lte: new Date(withdrawalDateEnd) } : {}),
+              },
+            }
+          : {}),
       };
-      if (filterField === 'distance_to_office' && (filterMin !== undefined || filterMax !== undefined)) {
-        where.distanceToOffice = {};
-        if (filterMin !== undefined) where.distanceToOffice.gte = filterMin;
-        if (filterMax !== undefined) where.distanceToOffice.lte = filterMax;
+      if (filterField && filterField in NUMERIC_RANGE_FIELDS && (filterMin !== undefined || filterMax !== undefined)) {
+        const column = NUMERIC_RANGE_FIELDS[filterField]!;
+        where[column] = {
+          ...(filterMin !== undefined ? { gte: filterMin } : {}),
+          ...(filterMax !== undefined ? { lte: filterMax } : {}),
+        };
       }
 
       if (queryType === 'numeric_stats') {
@@ -116,7 +171,7 @@ export function registerQueryStudents(server: McpServer): void {
         const camel = field
           .split('_')
           .map((p, i) => (i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1)))
-          .join('') as 'currentPhase' | 'enrollmentStatus' | 'cohort' | 'neighborhood';
+          .join('') as BreakdownColumn;
         const grouped = await prisma.student.groupBy({
           by: [camel],
           where,
@@ -151,6 +206,12 @@ export function registerQueryStudents(server: McpServer): void {
           enrollment_status: s.enrollmentStatus,
           cohort: s.cohort,
           neighborhood: s.neighborhood,
+          zip: s.zip,
+          school_name: s.schoolName,
+          hs_graduation_year: s.hsGraduationYear,
+          dob: s.dob,
+          withdrawal_code: s.withdrawalCode,
+          withdrawal_date: s.withdrawalDate,
           distance_to_office: s.distanceToOffice,
           graduation_date: s.graduationDate,
         })),
