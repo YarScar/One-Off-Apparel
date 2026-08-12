@@ -25,7 +25,235 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-12
+
+### Verified — every gap in `docs/INFORMATION-GAPS.md` re-tested live, and the finance gaps are not data gaps
+
+Each claim in the gap register was re-run against the live production MCP. **The tool defects
+reproduced exactly as recorded.** But probing production with `query_finances`' `tab_name` override —
+which bypasses the broken map — proved the rows exist:
+
+| Probe | Result |
+|---|---|
+| `tab_name: "phase_dashboard:2025 actuals"` | real rows — per-phase actuals by account (`account_number`, `total_launchpad`, `liftoff`, `liftoff_pct`, `hs`, `hs_pct`) |
+| `tab_name: "Combined Funds"` | real rows — account-level totals across every fund |
+| `tab_name: "development:grants tracker"` | real rows — funder records with `lifetime_total`, `received_to_date` |
+
+So §1.1, §1.2 and §8.2 are **casing defects in `query-finances.ts`, not missing organizational data**.
+The budget fields that all four drafts in the 2026-08-11 run filed as `[DATA UNAVAILABLE]` are
+answerable today. **Re-source them rather than treating them as gaps.** For an annual budget total the
+right call is `query_finances(fund_balances)` (the `Combined Funds` tab), not `get_finance_brief` —
+that tool genuinely carries no income or expense total and never did; its `period` argument only
+labels the response.
+
+Confirmed still broken, unchanged: §8.1 `query_enrollment` filter dropping (`by_phase` with
+`current_phase: Lightspeed` + `enrollment_status: Completed` returned the full 301-student,
+all-four-phase breakdown), §8.3 `query_competency(scores)` capped at exactly 1000, §2 staff headcount
+(`search_documents` → 0 results), §7 routing defects (92 questions, still no `cover.website` and no
+determination-year canonical).
+
+### Added — two PRs against `master`
+
+- **PR #49** — `fix/mcp-finance-tab-mapping`, the branch that had sat unmerged since 2026-08-05. Its
+  tab map was checked character-for-character against the connectors that write those tabs
+  (`connectors/google-sheets/src/sync-phase-budget-dashboard.ts:108-112` and
+  `sync-development-crm.ts:21-26`) and matches exactly. Verified: build clean, `pnpm -r typecheck`
+  clean across 13 packages, **49/49 tests**, including all 10 `finance-tab-map.test.ts` cases.
+- **PR #50** — `fix/query-enrollment-filter-application`, written from scratch; **no branch among the
+  44 local and remote refs had ever touched this**. All five non-date filters now apply to all eight
+  query types (student columns reach phase-outcome queries through the `student` relation,
+  `phase`/`status` reach student-level queries through `phaseOutcomes: { some: ... }`), and every
+  response carries `filters_applied` plus `filters_ignored`. Adds `query-enrollment-filters.test.ts`,
+  8 cases. Verified: typecheck clean, **56/56 tests**.
+
+Reading `query-enrollment.ts` to fix it showed the defect was **wider than §8.1 recorded**:
+`active_during` builds its own `where`, never uses `studentWhere` at all, *and* ignores `status`; and
+`total`, `by_cohort`, `by_school`, `by_race` and `by_program_year` all ignore `phase`/`status`. All
+eight query types dropped something.
+
+**Neither PR is merged or deployed, so the live tools still misbehave.**
+
+### Fixed — `docs/mcp-server-spec.md` overclaimed on three tools
+
+Corrections landed on the PR branches, not here, since `packages/grants` does not exist on `master`.
+
+- `query_finances` documented `fund`, `category`, `row_type`, `launchpad_only` and `donor` input
+  filters, a `tabs_queried` / `launchpad_only` output pair, and a Launchpad-scoping rule keyed on
+  `TABS_WITH_LAUNCHPAD_FILTER`. **None of those symbols exist in the file.** Removed; `query_donors`
+  serves those lookups. The real inputs are `query_type`, `tab_name`, `period`, `contains`, `limit`.
+- `get_finance_brief` claimed "YTD revenue vs. expenses" and "top campaigns" in both its heading and
+  its Claude-facing description. Neither is computed. **That overclaim is the direct cause of the
+  §1.1 misdiagnosis** — an absent total read as an organizational gap because the spec promised it.
+- `query_enrollment`'s `by_student` advertises a "full student-info filter set" (race, gender, zip,
+  income and parental-ed ranges, …) and `by_program_year` advertises retention projections. Neither is
+  in the code. **Recorded as debt rather than corrected**, per [`CLAUDE.md`](CLAUDE.md) §1 rule 5 —
+  closing either is a tool change with its own review.
+
+### Corrected — a "broken `master`" report, withdrawn
+
+Mid-session I reported 8 × TS1362 in `apps/mcp-server/src/tools/query-certifications.ts` as a defect
+`master` had picked up from #47, and 9 consequent integration-test failures. **That was wrong.** The
+cause was a stale local `packages/db/dist/index.d.ts` dated 2026-08-03, which exports `Prisma` as a
+type where `packages/db/src/index.ts:3` exports it as a value; `apps/mcp-server` resolves
+`@lp-ai/lib-db` to the built `.d.ts`. After `pnpm --filter @lp-ai/lib-db build`, `master` typechecks
+clean and the suite passes. `master` was never broken and no fix is needed.
+
+Recorded because the failure mode generalises, and it is the same one that produced the finance
+misdiagnosis in the first place: **`pnpm test` alone would not have caught it, and `pnpm -r typecheck`
+reported a stale artifact as a source error.** Rebuild workspace packages before believing a type
+error, exactly as you should probe with `tab_name` before believing an empty result.
+
+---
+
 ## 2026-08-11
+
+### Added — four integrity checks, closing the seed-audit findings that could be closed mechanically
+
+An audit of `questions.json`, `kb_launchpad.json`, and `FIGURE_CHECKS` against each other. The bank's
+structure was sound — no duplicate ids, no dangling `kb_ref`, no orphan answer, counts matching
+`meta.version` — and the existing seven checks reported empty and still do. What the audit found is
+that **the checks covered the bank's internal shape and almost nothing about provenance or figure
+coverage**, which is where the corpus had actually drifted.
+
+`computeIntegrityReport()` in `src/data.ts` gains four checks, each exercised in `src/data.test.ts`
+against a corpus that has the defect (the file's existing discipline — an empty report proves the
+seed is clean only if the checker still fires):
+
+- **`figure_claim_uncovered`** — the inverse of `figure_check_ref_dangling`. That one asks whether
+  every slot a check *declares* exists; this asks whether every slot *carrying* the claim gets
+  declared. Both fail silently for the same reason: `buildFigureWorkOrder()` scopes by `appears_in`,
+  so an undeclared slot means a draft built from it gets no verification item and publishes the
+  frozen figure. This was the audit's largest finding — see the fixes below.
+- **`question_figure_check_dangling`** — validates `QUESTION_FIGURE_CHECKS` on both sides. That map
+  is the entire `fetch_figure` path. A renamed question id or check key does not error; the lookup
+  misses, the question quietly takes the normal path, and the draft ships the static number the live
+  lookup exists to replace. Nothing validated it before.
+- **`variant_source_undeclared`** — every `source` on a variant or a limit must be declared in
+  `meta.sources`. Provenance is the only thing separating this bank from invented questions.
+- **`structured_value_missing`** — fires when a short-value question routes to a slot that carries
+  per-question structured values for its siblings but not for it. Deliberately narrower than "routes
+  to prose", which is the designed fallback and would flag every attachment question in the bank.
+
+**Two debt registers ship with them, and they are the honest part of this entry.** Ten real defects
+are recorded rather than fixed, because fixing them needs something this change could not supply:
+
+- `ACKNOWLEDGED_TIES` (3) — funder wordings recorded against two canonicals each, where an incoming
+  form asking one verbatim scores 1.0 against both and bank order decides the match. Resolving one
+  means moving a real wording, which changes matcher output and obliges regenerating
+  `src/__fixtures__/matcher-parity.json` against the prototype.
+- `STRUCTURED_VALUE_DEBT` (7) — `cover.legal_name`, `cover.year_founded`, `cover.fiscal_year`,
+  `cover.authorized_rep`, and three `eligibility.*` questions, each returning a full narrative slot
+  where a funder gave a one-line box. The values are organisational facts, and `kb.profile.identity`
+  says itself that the registered legal name is still to be confirmed. Per `CLAUDE.md` "Do not
+  invent", they are named, not guessed.
+
+Read the empty integrity report accordingly: it is empty *given* those ten. `CLAUDE.md` §3 now says so
+at the G1 bullet.
+
+### Fixed — eight figure claims that appeared in KB slots their check never declared
+
+Found by `figure_claim_uncovered` and by hand, then confirmed sentence by sentence in
+`kb_launchpad.json`. Every one meant a draft scoped to the undeclared slot published a frozen figure
+with no verification step and no warning — the exact failure `figures.ts` was written to prevent.
+`appears_in` in `src/figures.ts` now names them:
+
+| check | slots added |
+|---|---|
+| `demographics_race` | `kb.need`, `kb.target_population`, `kb.metrics`, `kb.eligibility` |
+| `employment_wage_range` | `kb.outcomes`, `kb.programs`, `kb.budget_narrative`, `kb.management_plan` |
+| `phase_costs` | `kb.programs`, `kb.program_desc`, `kb.uniqueness` |
+| `employment_earnings_total` | `kb.theory_of_change`, `kb.capacity` |
+| `top_employers` | `kb.theory_of_change`, `kb.risk` |
+| `annual_budget` | `kb.eligibility` |
+
+`kb.eligibility` is the sharpest of these: its `eligibility.budget_size` structured value literally
+reads `FY2025 expenses ~$1.34M`, and no check claimed it. `kb.risk` is the next: it uses "17+ partners"
+as the stated mitigation for employer dependence, so a stale count there understates a control the
+application is relying on.
+
+### Fixed — `cert_pass_rate` described a figure that is not in the knowledge base
+
+The check's `claim` read `92% certification pass rate`. **No KB slot says that.** The 92% in
+`kb.metrics` and `kb.capacity` is the Cohort 1 *paid-work* rate — 11 of 12 at six months — and the
+certification claim is the PCEP range, `70–100% per cohort`. A reviewer sent to find "92%
+certification pass rate" in `kb.metrics` finds a 92% that means something else and confirms the wrong
+thing. The claim is corrected to the wording the KB actually carries.
+
+### Added — a `placement_rate` figure check
+
+The paid-work rate was the most-quoted outcome in the corpus and had no check at all; `cert_pass_rate`
+had been standing in for it by accident. Four slots restate some form of it. It is `conflict_kind:
+'unknown'` on purpose: no `query_*` tool returns a cohort placement rate directly — `query_employment`
+`aggregate` gives participant and job counts, and the denominator has to come from `query_enrollment`.
+The cohort framing is also a moving window; "100% in paid work now" is dated by whenever "now" was.
+
+### Fixed — two funder sources cited by 31 wordings and never declared
+
+`GSK-STEM-2026` (14 wordings) and `Truist-Inspire-2026` (17) — the two Aug-7 pilot forms, added as
+variants at v0.3 and cited ever since without an entry in `meta.sources`. Provenance did not resolve
+for any of them. Both are now declared, taking the source count 25 → 27, and
+`variant_source_undeclared` enforces it. `Truist-Inspire-2026` is genuinely distinct from the
+already-declared `Truist`, which carries 2 wordings from the generic Truist Foundation application.
+
+**No `canonical` or `variants[]` text changed**, so matcher output is untouched and the parity
+fixtures did **not** need regenerating. The full suite confirms it: `matcher.test.ts` and
+`seq-ratio.test.ts` both pass unchanged. `data.test.ts` pins the source count at 27.
+
+**Blast radius:** none at runtime beyond wider figure work orders, which is the safe direction — more
+figures now carry a verification item. If you have a clone: `pnpm -r typecheck && pnpm test`. Expect
+**275 across 14 files**, `packages/grants` **230 across 9**.
+
+### Verified — what Lightspeed actually is, from the live connector
+
+The content gap had been open since 2026-07-29 with only "the phase exists" recorded. Queried
+2026-08-11 through the LP Internal AI connector, read-only. **Lightspeed is a 7-week summer intensive,
+run twice** — 2024-07-01 → 2024-08-19 (7 completers) and 2025-07-07 → 2025-08-27 (8) — with **15 of 15
+completing and none dropping**, and **14 of the 15 sat PCEP and all 14 passed**. Its completers appear
+later under `LiftOff` and `Alumni`; no student has it as `current_phase`, and `query_students`
+`breakdown` on `current_phase` returns no Lightspeed value at all.
+
+**The KB's own reconciliation prose is wrong about it.** That note describes
+`Foundations → 101 → Lightspeed → LiftOff`, a linear pipeline. The data does not support it: Lightspeed
+runs in the summer gap between school years (101 runs Sept–Aug), and both completers whose full phase
+history was inspected had `101: Not Enrolled`. A drafter who filled the gap from the reconciliation
+prose — the obvious move, since it is the only place the phase was described — would have written a
+false sequence into a grant application. The facts and that warning are now in the
+`enrollment_by_phase` note in `src/figures.ts`.
+
+Also worth knowing: those 14 Lightspeed passes are 14 of the 59 all-time PCEP attempts, and the other
+45 (`_101`) are 18 pass / 27 fail = 40%. That is what the 54.2% all-time aggregate is averaging, and
+it is a sharper version of the definitional conflict `cert_pass_rate` already flags.
+
+### Found — `query_enrollment` silently drops filters it does not apply
+
+Hit while querying the above, then confirmed in
+`apps/mcp-server/src/tools/query-enrollment.ts`. `phase: 'Lightspeed', status: 'Completed'` on
+`by_student` returned 20 arbitrary students, most of them `Lightspeed: Not Enrolled`;
+`current_phase: 'LiftOff'` on `by_phase` returned results byte-identical to the unfiltered call.
+
+The cause is per-branch: `by_phase` builds a `studentWhere` and never uses it, so `current_phase`,
+`enrollment_status` and `cohort` are dropped; `by_student` uses `studentWhere` but ignores `phase` and
+`status`, which live on the phase-outcome row. Nothing errors and nothing echoes which filters were
+honoured, so a caller who believes they scoped to 15 students gets all 301.
+
+**Recorded, not fixed** — a tool change with its own review, per `CLAUDE.md` §1 rule 5. Added as §4
+row 10. The workaround for a phase roster is `active_during` with `phase` and a wide date window,
+which does filter correctly; that is what produced the census above, and it is now named in the
+`enrollment_by_phase` note so the next drafter does not repeat the wrong call.
+
+### Recorded — three seed defects the audit found and could not fix
+
+Added to `CLAUDE.md` §4 as rows 7–9 rather than left silent:
+
+- **Lightspeed is still missing from the KB.** The platform records
+  `Foundations → 101 → Lightspeed → LiftOff` with 15 completions. The KB's own reconciliation prose
+  flagged it on 2026-07-29; re-confirmed 2026-08-11, still **0 of 29 slots**. Every drafted program
+  description omits a phase.
+- **Six slots cannot fill the longest ask routed to them** — `kb.staff_bios` is 110 words against a
+  600-word question. The `needs_expand` guard makes this visible rather than silent, but expansion is
+  where invention happens, and the underlying content is thin.
+- **The KB snapshot (`2026-07-23`) is older than the bank (`2026-08-11`)**, and all four staff flags
+  in its reconciliation prose are still open.
 
 ### Added — `needs_expand`, guarding D1a's mechanism against answering a field it has only filled
 

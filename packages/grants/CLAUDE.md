@@ -84,10 +84,11 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **262 tests across 14
+`pg_trgm 1.6` via `pnpm db:up`. 13 migrations applied. The full suite is **275 tests across 14
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
-over stdio. `packages/grants` alone is **217 in 9 files**, with no database and no network. (192 in 9
-before the `needs_expand` guard landed on 2026-08-11; 187 in 9
+over stdio. `packages/grants` alone is **230 in 9 files**, with no database and no network. (217 in 9
+before the seed audit added four integrity checks on 2026-08-11; 192 in 9
+before the `needs_expand` guard landed earlier the same day; 187 in 9
 before earlier the same day, when board `grant-h32` split two canonicals at bank v0.4.3; 177 in 9
 before 2026-08-10, when D1a/D1b added the structured-value and fetch_figure branches; 207 across
 13 before 2026-08-06, when D4 added `reframe.test.ts`; 183 across 12 before G4 added `resize.test.ts`
@@ -124,10 +125,15 @@ port at all, so counting them as a bar measured the condition rather than the to
 G4 restated 7 → 12, absorbing the 5 that left G3. `admin/SPEC.md` §1 and §4 hold the per-case
 accounting, and the 3 cases with no analogue anywhere are named there rather than stubbed.
 
-- **G1 half 1 proven** — `packages/grants/src/data.test.ts` passes 23/23. It asserts the seed
-  integrity report is empty, so a defect cannot regress silently, *and* exercises each of the seven
+- **G1 half 1 proven** — `packages/grants/src/data.test.ts` passes 39/39. It asserts the seed
+  integrity report is empty, so a defect cannot regress silently, *and* exercises each of the eleven
   checks against a corpus that has the defect — an empty report proves the seed is clean only if the
-  checker still fires, and until 2026-08-03 nothing tested that.
+  checker still fires, and until 2026-08-03 nothing tested that. **Read the empty report as narrowly
+  as the rest of G1.** Two of the eleven checks are gated by a debt register — `ACKNOWLEDGED_TIES`
+  (3 entries) and `STRUCTURED_VALUE_DEBT` (7) — so the report is empty *given ten known defects that
+  are recorded rather than fixed*, and those registers are where to look before trusting it. They
+  exist because the fixes need either a parity regeneration or an organisational fact this layer must
+  not invent; both registers name what would settle each entry.
 - **G1 half 2 proven** — "the three tools resolve in the ACL", verified 2026-08-03 through
   `dist/serve-http.js` with real bearer tokens. A `leadership` caller succeeded, a `program_staff`
   caller was refused with `permission_denied`, and both calls landed in `usage_logs` with the caller
@@ -176,6 +182,12 @@ unrecorded. Tracked build work lives in `bd` — `bd ready --json` — not here.
 | 4 | **Connector status claims spread across files** | Live/skeleton status appears in the root `CLAUDE.md`, `docs/data-sources/*`, and `docs/runbooks/local-dev.md`. A connector changing status requires all three. Candidate for collapsing into one owner. |
 | 5 | **Grant layer under-documented in `docs/`** | Partly retired 2026-08-04: `docs/mcp-server-spec.md` now carries entries for all three grant tools — `grant_match_question`, `grant_build_draft`, and `grant_resize_answer`. Still missing: any `docs/data-sources/` or user-guide coverage. All other grant documentation lives in `packages/grants/`, aimed at the build rather than at consumers — `admin/ARCHITECTURE.md` included, which orients a developer and does not serve a staff user. |
 | 6 | **No doc-drift check in CI** | Every inconsistency in this file was found by hand. The cheap subset is mechanical: dead relative links, and the tool count against `grep -c "NAME = '"`. |
+| 7 | **The KB is missing the Lightspeed phase, still** | `kb_launchpad.json` `meta.connector_reconciliation` flagged this and recorded "Confirmed 2026-07-29: no answer in this file mentions Lightspeed." Re-confirmed **2026-08-11: still 0 of 29 slots**. Every drafted program description omits a phase. The connector was queried on 2026-08-11 and the facts are now in the `enrollment_by_phase` note in `src/figures.ts`, so the material to write it exists; what is left is programme copy in Launchpad's voice, which is a staff decision. **The reconciliation prose's own framing — `Foundations → 101 → Lightspeed → LiftOff` — is contradicted by the data** and must not be copied into a draft: Lightspeed is a 7-week summer intensive run twice, not a linear stage. |
+| 10 | ~~**`query_enrollment` silently drops filters it does not apply**~~ **Fixed 2026-08-12, PR #50, not yet merged** | Was: the input schema accepts `phase`, `status`, `current_phase`, `enrollment_status`, and `cohort` on every `query_type`, and each branch applied only some — `by_phase` built `studentWhere` and never used it; `by_student` used it but ignored `phase` / `status`. No error and no echo, so a caller who thought they scoped to 15 Lightspeed completers got all 301 students back. Reproduced live on 2026-08-12, then fixed on `fix/query-enrollment-filter-application`. **The defect was wider than this entry recorded**: `active_during` never used `studentWhere` at all *and* ignored `status`, and the four `groupBy` branches ignored `phase` / `status` too — all eight query types dropped something. All five non-date filters now apply to all eight query types, and every response carries `filters_applied` / `filters_ignored`. **Keep this row until PR #50 merges and deploys** — the live tool still misbehaves. |
+| 11 | **Finance tab-mapping fix still unmerged** | `fix/mcp-finance-tab-mapping` (PR #49) has sat unmerged since 2026-08-05 while `query_finances` returns `record_count: 0` for 11 of 29 query types on a casing mismatch. Verified 2026-08-12: the branch's map matches `connectors/google-sheets/src/sync-phase-budget-dashboard.ts:108-112` and `sync-development-crm.ts:21-26` exactly, and probing production with the `tab_name` override proves the rows exist. **So the budget figures the grant layer filed as `[DATA UNAVAILABLE]` are answerable, not missing** — see `docs/INFORMATION-GAPS.md` §1 and §9. Until it merges, every finance figure sourced through the mapped query types is suspect. |
+| 12 | **Rebuild workspace packages before believing a type error** | Not documentation debt so much as a trap that has now cost time twice. A stale `packages/db/dist/index.d.ts` (dated 2026-08-03, exporting `Prisma` as a type where `src/index.ts:3` exports it as a value) produced 8 × TS1362 in `query-certifications.ts` and 9 integration failures on 2026-08-12 that read exactly like a defect on `master`. It was reported as such and withdrawn after `pnpm --filter @lp-ai/lib-db build`. `master` was never broken. §3's insistence that `pnpm test` and `pnpm -r typecheck` are both needed is right but insufficient — **typecheck reported a stale artifact as a source error**. Add the workspace build to the pairing, or record why not. |
+| 8 | **Six KB slots cannot fill the longest ask routed to them** | The KB's own note says answers are "the LONGEST canonical version" and the pipeline resizes *down*. Measured 2026-08-11 against the largest word limit recorded on any question routing to each slot: `kb.staff_bios` 110 words vs 600, `kb.history` 119 vs 500, `kb.target_population` 86 vs 300, `kb.capacity` 129 vs 250, `kb.dei` 122 vs 250, `kb.evaluation` 116 vs 200. The `needs_expand` guard (2026-08-11) makes this visible at draft time rather than silent, but the underlying content is thin and expansion is where invention happens. |
+| 9 | **`kb_launchpad.json` snapshot is older than the bank** | `kb.meta.updated` is `2026-07-23`; `questions.json` `meta.updated` is `2026-08-11`. The connector reconciliation prose is dated the same 2026-07-23 and its four staff flags — served count, PCEP denominator, Lightspeed, postsecondary — are all still open. Nothing enforces a maximum age, and a date-based check would be flaky in the suite; this is the record instead. |
 
 ---
 
@@ -218,7 +230,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 232 passed, 0 skipped, 14 files.
+# Full suite — expect 275 passed, 0 skipped, 14 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 
