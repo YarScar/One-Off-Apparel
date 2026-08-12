@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Detect changed services
         id: detect
@@ -65,7 +65,17 @@ jobs:
             exit 0
           fi
 
-          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          # Diff against the push event's actual "before" SHA (not HEAD~1) so
+          # multi-commit pushes and merge commits are diffed correctly — HEAD~1
+          # only walks the first parent and previously missed changes brought
+          # in by a merge, or by earlier commits in a multi-commit push.
+          BEFORE="${{ github.event.before }}"
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "No usable 'before' commit (new branch or force-push) — treating all services as changed."
+            CHANGED=$(git ls-files)
+          else
+            CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          fi
 
           # Shared packages trigger all services
           SHARED=false
