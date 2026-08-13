@@ -89,10 +89,10 @@ async function seed(): Promise<void> {
     for (const [i, code] of f.codes.entries()) {
       await prisma.attendanceRecord.create({
         data: {
-          sourceId: `${PREFIX}${f.n}-${i}`,
+          sourceId: `${PREFIX}${f.n}-${String(i)}`,
           cohort: f.cohort,
           studentNumber: `${PREFIX}${f.n}`,
-          date: new Date(`2025-03-0${i + 1}`),
+          date: new Date(`2025-03-0${String(i + 1)}`),
           code,
           rowData: {},
         },
