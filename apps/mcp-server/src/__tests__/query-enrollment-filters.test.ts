@@ -150,6 +150,17 @@ const FIXTURE_PREFIX = 'PR50-';
 const KEPT = 'PR50Kept';
 const DROPPED = 'PR50Dropped';
 
+/**
+ * `current_phase` values, namespaced like the rest of the fixture so they exist on no
+ * other row in any database this suite might run against. That is what makes
+ * `current_phase: PHASE_A` + `enrollment_status: DROPPED` a *guaranteed* zero rather
+ * than a probable one: both values are present in their columns, so the domain check
+ * must pass them, and no row anywhere carries both, so the answer must be empty. The
+ * unmatchable-versus-legitimate-zero boundary is untestable without a pair like this.
+ */
+const PHASE_A = 'PR50PhaseA';
+const PHASE_B = 'PR50PhaseB';
+
 const OUTCOMES = {
   lightspeed: {
     lightspeedStatus: 'Completed',
@@ -184,11 +195,11 @@ const OUTCOMES = {
  *   which is exactly how `active_during` shipped ignoring `phase`.
  */
 const FIXTURE = [
-  { n: '1', status: KEPT, outcome: 'lightspeed' },
-  { n: '2', status: KEPT, outcome: 'lightspeed' },
-  { n: '3', status: DROPPED, outcome: 'lightspeed' },
-  { n: '4', status: DROPPED, outcome: 'none' },
-  { n: '5', status: KEPT, outcome: 'foundations' },
+  { n: '1', status: KEPT, outcome: 'lightspeed', phase: PHASE_A, cohort: 2050 },
+  { n: '2', status: KEPT, outcome: 'lightspeed', phase: PHASE_A, cohort: 2050 },
+  { n: '3', status: DROPPED, outcome: 'lightspeed', phase: PHASE_B, cohort: 2051 },
+  { n: '4', status: DROPPED, outcome: 'none', phase: PHASE_B, cohort: 2051 },
+  { n: '5', status: KEPT, outcome: 'foundations', phase: PHASE_A, cohort: 2050 },
 ] as const;
 
 describeLocal('query_enrollment filter application (live DB)', () => {
@@ -203,6 +214,8 @@ describeLocal('query_enrollment filter application (live DB)', () => {
           studentNumber: `${FIXTURE_PREFIX}${f.n}`,
           canonicalName: `Fixture Student ${f.n}`,
           enrollmentStatus: f.status,
+          currentPhase: f.phase,
+          cohort: f.cohort,
           ...(f.outcome === 'none' ? {} : { phaseOutcomes: { create: OUTCOMES[f.outcome] } }),
         },
       });
@@ -380,5 +393,182 @@ describeLocal('query_enrollment filter application (live DB)', () => {
     expect(res.student_count).toBe(matched);
     expect(res.truncated).toBe(true);
     expect(res.returned).toBe(1);
+  });
+});
+
+/**
+ * Unmatchable filter values, against the live server. Every case here comes in a pair,
+ * because a suite that only asserts the error is what let the previous fix ship half
+ * done: it would stay green if the check erred on *every* empty result, which would
+ * replace a false zero with a false error and break every truthful zero in the tool.
+ *
+ * The rule under test: a value absent from its own column's distinct values errors; a
+ * combination of values that are each present returns an empty answer.
+ */
+type Envelope = {
+  error?: { code: string; message: string; suggestions?: string[] };
+  student_count?: number;
+  breakdown?: Array<{ count: number }>;
+  filters_applied?: Record<string, unknown>;
+  filters_ignored?: string[];
+};
+
+describeLocal('query_enrollment unmatchable filter values (live DB)', () => {
+  let client: McpStdioClient;
+
+  beforeAll(async () => {
+    const { prisma } = await import('@lp-ai/lib-db');
+    await prisma.student.deleteMany({ where: { studentNumber: { startsWith: FIXTURE_PREFIX } } });
+    for (const f of FIXTURE) {
+      await prisma.student.create({
+        data: {
+          studentNumber: `${FIXTURE_PREFIX}${f.n}`,
+          canonicalName: `Fixture Student ${f.n}`,
+          enrollmentStatus: f.status,
+          currentPhase: f.phase,
+          cohort: f.cohort,
+          ...(f.outcome === 'none' ? {} : { phaseOutcomes: { create: OUTCOMES[f.outcome] } }),
+        },
+      });
+    }
+    client = new McpStdioClient();
+  });
+
+  afterAll(async () => {
+    const { prisma } = await import('@lp-ai/lib-db');
+    client.close();
+    await prisma.student.deleteMany({ where: { studentNumber: { startsWith: FIXTURE_PREFIX } } });
+    await prisma.$disconnect();
+  });
+
+  // The reported defect, verbatim in shape: `enrollment_status: 'Active'` against a
+  // column of short codes returned `breakdown: []` and `filters_applied` naming the
+  // filter, which reads as "no active students".
+  it('errors instead of returning an empty by_phase breakdown for a value no student holds', async () => {
+    const unfiltered = (await client.callTool('query_enrollment', {
+      query_type: 'by_phase',
+    })) as Envelope;
+    // Proves the empty answer was the filter's doing, not an empty table.
+    expect(unfiltered.breakdown?.length ?? 0).toBeGreaterThan(0);
+
+    const res = (await client.callTool('query_enrollment', {
+      query_type: 'by_phase',
+      enrollment_status: 'Active',
+    })) as Envelope;
+
+    expect(res.breakdown).toBeUndefined();
+    expect(res.error?.code).toBe('no_records');
+    expect(res.error?.message).toContain("enrollment_status='Active'");
+    expect(res.error?.message).toContain('students.enrollment_status');
+    // The values actually present, so the caller can retry in one round trip.
+    expect(res.error?.message).toContain(KEPT);
+    expect(res.error?.message).toContain(DROPPED);
+    expect(res.error?.suggestions?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  // Checked once before the switch, so the answer cannot differ per branch — the
+  // divergence-between-branches problem the rest of this file exists for.
+  it('errors on the same value from a different query_type', async () => {
+    for (const query_type of ['total', 'by_student', 'by_cohort']) {
+      const res = (await client.callTool('query_enrollment', {
+        query_type,
+        enrollment_status: 'Active',
+      })) as Envelope;
+      expect(res.error?.code).toBe('no_records');
+      expect(res.student_count).toBeUndefined();
+    }
+  });
+
+  it('errors on an unmatchable current_phase, status, or cohort', async () => {
+    const phase = (await client.callTool('query_enrollment', {
+      query_type: 'total',
+      current_phase: 'Phase Nine',
+    })) as Envelope;
+    expect(phase.error?.code).toBe('no_records');
+    expect(phase.error?.message).toContain('students.current_phase');
+    expect(phase.error?.message).toContain(PHASE_A);
+
+    const status = (await client.callTool('query_enrollment', {
+      query_type: 'by_phase',
+      status: 'Graduated With Distinction',
+    })) as Envelope;
+    expect(status.error?.code).toBe('no_records');
+    expect(status.error?.message).toContain("'Completed'"); // the fixture's only status
+
+    const cohort = (await client.callTool('query_enrollment', {
+      query_type: 'total',
+      cohort: 1899,
+    })) as Envelope;
+    expect(cohort.error?.code).toBe('no_records');
+    expect(cohort.error?.message).toContain('cohort=1899');
+    expect(cohort.error?.message).toContain('2050');
+  });
+
+  // The other direction, and the one that matters most. PHASE_A and DROPPED are both
+  // real values in their columns; no student carries both. That is a fact about the
+  // program, so it must come back as zero — not as an error, and not as a suggestion to
+  // retry with something else.
+  it('returns a real zero, not an error, for present values that no student combines', async () => {
+    const { prisma } = await import('@lp-ai/lib-db');
+    const reference = await prisma.student.count({
+      where: { currentPhase: PHASE_A, enrollmentStatus: DROPPED },
+    });
+    expect(reference).toBe(0); // guaranteed by the fixture, not assumed
+    // Each value on its own does match, which is what separates this from the case above.
+    expect(await prisma.student.count({ where: { currentPhase: PHASE_A } })).toBeGreaterThan(0);
+    expect(await prisma.student.count({ where: { enrollmentStatus: DROPPED } })).toBeGreaterThan(0);
+
+    const total = (await client.callTool('query_enrollment', {
+      query_type: 'total',
+      current_phase: PHASE_A,
+      enrollment_status: DROPPED,
+    })) as Envelope;
+    expect(total.error).toBeUndefined();
+    expect(total.student_count).toBe(0);
+    expect(total.filters_applied).toEqual({ current_phase: PHASE_A, enrollment_status: DROPPED });
+
+    const byPhase = (await client.callTool('query_enrollment', {
+      query_type: 'by_phase',
+      current_phase: PHASE_A,
+      enrollment_status: DROPPED,
+    })) as Envelope;
+    expect(byPhase.error).toBeUndefined();
+    expect(byPhase.breakdown).toEqual([]);
+  });
+
+  /**
+   * The same boundary one level down, and the reason `status` is checked against the
+   * union of the four phase-status columns rather than the one the phase selects.
+   * `Completed` is a real status; no KEPT fixture student has any LiftOff data, so
+   * `LiftOff` + `Completed` is an empty combination of real values.
+   */
+  it('returns a real zero for a status that exists but not in the phase asked about', async () => {
+    const res = (await client.callTool('query_enrollment', {
+      query_type: 'active_during',
+      phase: 'LiftOff',
+      status: 'Completed',
+      enrollment_status: KEPT,
+    })) as Envelope & { students?: unknown[] };
+    expect(res.error).toBeUndefined();
+    expect(res.student_count).toBe(0);
+    expect(res.students).toEqual([]);
+    expect(res.filters_applied).toEqual({
+      phase: 'LiftOff',
+      status: 'Completed',
+      enrollment_status: KEPT,
+    });
+  });
+
+  // A blank filter means "no filter" and is already reported as ignored; sending it
+  // through the domain check would error on the empty string, which is not a value the
+  // caller asked to match.
+  it('does not domain-check a blank filter', async () => {
+    const res = (await client.callTool('query_enrollment', {
+      query_type: 'total',
+      enrollment_status: '   ',
+    })) as Envelope;
+    expect(res.error).toBeUndefined();
+    expect(res.student_count).toBeGreaterThan(0);
+    expect(res.filters_ignored).toEqual(['enrollment_status']);
   });
 });
