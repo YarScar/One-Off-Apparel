@@ -22,11 +22,33 @@ export function registerGetFinanceBrief(server: McpServer): void {
       const raw = input as Record<string, unknown>;
       const period = parseStr(raw, 'period') ?? 'ytd';
 
+      // aplos:funds is snapshotted daily, so an unbounded "latest 50" mixes two
+      // snapshot dates and truncates the newest one. Pin to the newest period.
+      //
+      // `period` is nullable and Postgres sorts DESC as NULLS FIRST, so without the
+      // `not: null` a single null-period row wins this query, the pin below spreads
+      // to nothing, and the tool silently reverts to the multi-date behaviour this
+      // is here to fix.
+      const latestFundPeriod = await prisma.financeSnapshot.findFirst({
+        where: { tabName: 'aplos:funds', period: { not: null } },
+        orderBy: { period: 'desc' },
+        select: { period: true },
+      });
+
+      const SHEET_FUND_TABS = ['Combined Funds', 'fund_balances'];
+      /** Rows in those tabs, whether or not the page below reaches them. */
+      const sheetFundTotal = await prisma.financeSnapshot.count({
+        where: { tabName: { in: SHEET_FUND_TABS } },
+      });
+
       const [aplosFunds, aplosAccounts, recentTransactions, sheetFundBalances, recentGifts] = await Promise.all([
         prisma.financeSnapshot.findMany({
-          where: { tabName: 'aplos:funds' },
-          orderBy: { period: 'desc' },
-          take: 50,
+          where: {
+            tabName: 'aplos:funds',
+            ...(latestFundPeriod?.period ? { period: latestFundPeriod.period } : {}),
+          },
+          orderBy: { sourceId: 'asc' },
+          take: 200,
         }),
         prisma.financeSnapshot.findMany({
           where: { tabName: 'aplos:accounts' },
@@ -37,10 +59,21 @@ export function registerGetFinanceBrief(server: McpServer): void {
           orderBy: { period: 'desc' },
           take: 20,
         }),
+        // The dashboard sync writes this tab as 'Combined Funds'; 'fund_balances'
+        // is the seed's name. Match either, exactly — `mode: 'insensitive'`
+        // compiles to an unescaped ILIKE, which would make the `_` a wildcard.
+        //
+        // Ordered by `sourceId`, not `period`: for dashboard tabs `period` is a
+        // selector-cell string shared by every row in the tab
+        // (`sync-dashboard.ts:235`), so ordering by it is arbitrary. It used to be
+        // an arbitrary 50 rows with nothing saying so, while the spec points
+        // callers at `Combined Funds` for an annual budget total — a silently
+        // partial sum. The cap is now well past the real tab size, and
+        // `sheet_fund_balances_truncated` reports the case where it still bites.
         prisma.financeSnapshot.findMany({
-          where: { tabName: 'fund_balances' },
-          orderBy: { period: 'desc' },
-          take: 50,
+          where: { tabName: { in: SHEET_FUND_TABS } },
+          orderBy: [{ tabName: 'asc' }, { sourceId: 'asc' }],
+          take: 500,
         }),
         prisma.donorGift.findMany({
           orderBy: { giftDate: 'desc' },
@@ -69,6 +102,14 @@ export function registerGetFinanceBrief(server: McpServer): void {
         },
         recent_transactions: recentTransactions.map(mapSnapshot),
         sheet_fund_balances: sheetFundBalances.map(mapSnapshot),
+        sheet_fund_balances_total: sheetFundTotal,
+        ...(sheetFundBalances.length < sheetFundTotal
+          ? {
+              sheet_fund_balances_truncated:
+                `Returned ${sheetFundBalances.length} of ${sheetFundTotal} rows. Do not sum this ` +
+                `field; use query_finances(fund_balances) with a limit for the full tab.`,
+            }
+          : {}),
         recent_gifts: recentGifts.map((g) => ({
           amount: g.amount,
           gift_date: g.giftDate,
