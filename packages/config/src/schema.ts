@@ -40,6 +40,7 @@ export const envSchema = z.object({
   GOOGLE_SHEETS_ATTENDANCE_COHORT_2: optional,
   GOOGLE_SHEETS_ATTENDANCE_COHORT_3: optional,
   GOOGLE_SHEETS_FINANCE_WORKBOOK: optional,
+  GOOGLE_SHEETS_HOURS_ID: optional,
 
   BIGQUERY_PROJECT_ID: z.string().trim().min(1).default('lp-internal-ai'),
   BIGQUERY_DATASET: optional,

@@ -70,6 +70,7 @@ These return data directly from the database. Typical query tools include:
 | `query_certifications` | Certification pass/fail rates, scores, breakdowns |
 | `query_employment` | Employment records — earnings, hours, exit codes |
 | `query_postsecondary` | Post-program education enrollment and outcomes |
+| `query_hours` | Team hour logs — totals, per-person/project/day breakdowns, raw entries |
 | `query_finances` | Financial snapshots — monthly, YTD, forecasts, budgets, fund balances |
 | `query_donors` | Donor profiles, gift history, pipeline, grants tracker |
 | `get_finance_brief` | High-level financial overview (fund balances + recent gifts) |

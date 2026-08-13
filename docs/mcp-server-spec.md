@@ -2,9 +2,9 @@
 
 ## Tool Availability
 
-The server currently exposes **23 tools** — 16 data tools, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 4 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+The server currently exposes **24 tools** — 17 data tools, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 4 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
 
-**Active tools (16):**
+**Active tools (17):**
 - `get_student_info` — Sheets student roster + Drive student info doc
 - `query_outcomes` — Phase progression from Student Information sheet
 - `query_enrollment` — enrollment statistics by phase, school, cohort, race, date ranges, with full per-student profile filters
@@ -16,6 +16,7 @@ The server currently exposes **23 tools** — 16 data tools, `grant_match_questi
 - `query_attendance` — three Launchpad cohort attendance sheets unified into `attendance_records`. By-student rates, aggregate breakdowns, raw event drill-downs
 - `query_employment` — post-program employment data (employer, wages, hours, exit codes) from the Employment tab
 - `query_postsecondary` — college enrollment tracking from National Student Clearinghouse data
+- `query_hours` — team hour logs across engagements (North10AI, LP Internal AI) with totals, per-person/project/day breakdowns, and raw entry drill-downs
 - `search_conversations` — semantic search over Drive docs + Notion meeting transcripts (pgvector)
 - `search_by_person` — document search scoped to a student or staff name
 - `search_documents` — raw document chunk search with optional entity filter
@@ -34,7 +35,7 @@ Composite tools (`get_entity_brief`, `get_finance_brief`) MUST gracefully omit s
 
 ## Overview
 
-The MCP server exposes 23 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
+The MCP server exposes 24 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
 
 Every tool call is logged to the `usage_logs` Postgres table (tool name, timestamp, duration, caller identity, token usage).
 
@@ -43,6 +44,47 @@ Every tool call is logged to the `usage_logs` Postgres table (tool name, timesta
 **Production URL:** `https://mcp.launchpadinc.org`
 
 ## Tool Definitions
+
+---
+
+### `query_hours`
+
+Query the team's hour logs from the shared Hours spreadsheet (`hour_logs` table). Both engagements — "North10AI" and "LP Internal AI" — live in one spreadsheet, one tab per project, so every entry carries a `project` field. Use for totals, per-person / per-project / per-day breakdowns, or raw entry drill-downs over a date range.
+
+**Source:** Hours Google Sheet (`GOOGLE_SHEETS_HOURS_ID`), tabs `North10AI` and `LP Internal AI`. Headers are read dynamically at sync time; well-known columns (date / person / hours / task) are promoted to typed fields and the full raw row is preserved in `row_data`.
+
+**Description shown to Claude:**
+> Query the team's hour logs from the shared Hours spreadsheet (North10AI and LP Internal AI tabs, synced into hour_logs). Use for totals, per-person / per-project / per-day breakdowns, or raw entry drill-downs over a date range. hours are stored as decimals; task is the free-text description from the sheet.
+
+**Input Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "person": { "type": "string", "description": "Partial name match (case-insensitive), e.g. \"mili\"." },
+    "project": { "type": "string", "enum": ["North10AI", "LP Internal AI"] },
+    "start_date": { "type": "string", "format": "date" },
+    "end_date": { "type": "string", "format": "date" },
+    "group_by": { "type": "string", "enum": ["project", "person", "day"], "description": "Group entries and sum hours. Omit to return raw entries." },
+    "limit": { "type": "number", "description": "Max raw entries returned. Default 200, max 500." }
+  }
+}
+```
+
+**Output Schema (raw entries — no `group_by`):**
+```json
+{
+  "total_records_matched": 42,
+  "total_hours": 183.5,
+  "records_returned": 42,
+  "truncated": false,
+  "records": [
+    { "id": "…", "project": "LP Internal AI", "source_tab": "LP Internal AI", "log_date": "2026-08-03", "person_name": "Mili", "hours": 6.5, "task": "…", "row_data": { "…": "…" } }
+  ]
+}
+```
+
+**Output Schema (grouped — `group_by` set):** `groups` array of `{ group, records, hours }`, sorted by hours descending, plus the same `total_records_matched` / `total_hours`.
 
 ---
 

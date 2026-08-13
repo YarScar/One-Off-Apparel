@@ -4,7 +4,7 @@ ORM: **Prisma**. The schema lives in `packages/db/prisma/schema.prisma`. The gen
 
 Extensions: `pgvector` (vector similarity), `pg_trgm` (trigram fuzzy matching).
 
-## Tables (30 models)
+## Tables (31 models)
 
 ### Student & Staff Core
 
@@ -89,6 +89,14 @@ Unified storage for three Launchpad cohort attendance sheets. Each cohort has a 
 Key columns: `id` (UUID PK), `source_id` (unique), `cohort` (1|2|3), `student_number` (LP####), `date`, `start_date`, `end_date`, `code` (P/A/E), `percentage` (cohort 1 only), `row_data` (JSON).
 
 Indexes: `student_number`, `(cohort, date)`, `date`.
+
+#### `hour_logs`
+
+Team hour logs from the shared Hours spreadsheet. One row per spreadsheet row; the `project` column carries the engagement tab ("North10AI" or "LP Internal AI"), so both engagements stay in one table. Headers are mapped dynamically at sync time and the full source row is preserved in `row_data`.
+
+Key columns: `id` (UUID PK), `source_id` (unique, format `hours:<tabKey>:<sheetRowNumber>`), `project`, `source_tab`, `log_date`, `person_name`, `hours` (decimal), `task`, `row_data` (JSON).
+
+Indexes: `project`, `log_date`, `person_name`.
 
 #### `finance_snapshots`
 

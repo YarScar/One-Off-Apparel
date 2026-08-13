@@ -19,7 +19,7 @@ describeLocal('MCP tool handlers (integration)', () => {
     await prisma.$disconnect();
   });
 
-  it('tools/list exposes all 23 tools', async () => {
+  it('tools/list exposes all 24 tools', async () => {
     const tools = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -37,6 +37,7 @@ describeLocal('MCP tool handlers (integration)', () => {
         'query_employment',
         'query_enrollment',
         'query_finances',
+        'query_hours',
         'query_outcomes',
         'query_postsecondary',
         'query_students',
@@ -136,6 +137,52 @@ describeLocal('MCP tool handlers (integration)', () => {
     };
     expect(typeof result.overall.student_count).toBe('number');
     expect(Array.isArray(result.breakdown)).toBe(true);
+  });
+
+  it('query_hours returns seeded entries and a total', async () => {
+    const result = (await client.callTool('query_hours', {})) as {
+      total_records_matched: number;
+      total_hours: number;
+      records: Array<{ project: string; person_name: string; hours: number; task: string | null }>;
+    };
+    expect(result.total_records_matched).toBe(3);
+    expect(result.total_hours).toBe(17.5);
+    expect(result.records).toHaveLength(3);
+    const byProject = result.records.map((r) => r.project).sort();
+    expect(byProject).toEqual(['LP Internal AI', 'LP Internal AI', 'North10AI']);
+  });
+
+  it('query_hours filters by project and groups by person', async () => {
+    const result = (await client.callTool('query_hours', {
+      project: 'LP Internal AI',
+      group_by: 'person',
+    })) as {
+      total_records_matched: number;
+      total_hours: number;
+      group_by: string;
+      groups: Array<{ group: string; records: number; hours: number }>;
+    };
+    expect(result.total_records_matched).toBe(2);
+    expect(result.total_hours).toBe(10.5);
+    expect(result.groups).toHaveLength(1);
+    expect(result.groups[0]).toEqual({ group: 'Mili', records: 2, hours: 10.5 });
+  });
+
+  it('query_hours groups by project across engagements', async () => {
+    const result = (await client.callTool('query_hours', {
+      group_by: 'project',
+    })) as { groups: Array<{ group: string; hours: number }> };
+    const byProject = new Map(result.groups.map((g) => [g.group, g.hours]));
+    expect(byProject.get('LP Internal AI')).toBe(10.5);
+    expect(byProject.get('North10AI')).toBe(7);
+  });
+
+  it('query_hours date filter narrows results', async () => {
+    const result = (await client.callTool('query_hours', {
+      start_date: '2026-08-05',
+      end_date: '2026-08-31',
+    })) as { total_records_matched: number };
+    expect(result.total_records_matched).toBe(1);
   });
 
   it('query_students list returns seeded students', async () => {

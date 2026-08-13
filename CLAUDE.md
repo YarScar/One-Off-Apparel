@@ -2,6 +2,35 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Work Tracking — OpenProject is mandatory
+
+**Every piece of work on this project must be associated with an OpenProject work package.** This
+covers work in progress, work planned, and work committed. If a change relates to this project
+directly, it has a work package; if it does not have one, create one before starting.
+
+| | |
+|---|---|
+| Instance | `https://projects.liftofflearning.tech` |
+| Project identifier | `internal-ai-integrations` |
+| API docs | https://www.openproject.org/docs/api/ |
+| Credential | `OPENPROJECT_API_KEY` in `.env` — HTTP Basic, username literal `apikey`, password the key |
+
+What this means in practice:
+
+- **Before starting work**, find the work package that covers it, or create one. Set it to *In
+  progress* when you begin.
+- **Commit messages reference the work package** — `refs #<id>` in the body (OpenProject parses this
+  and links the commit to the work package). Use `closes #<id>` when the commit finishes it.
+- **Discovered work gets its own work package**, related to the one you found it from, rather than
+  being folded silently into the current change.
+- **Close the work package** when the work is done and verified, with a comment saying what landed.
+- **Exception:** incidental local housekeeping that touches nothing in the repo — scratch files,
+  local tooling, environment setup on your own machine. Everything that produces a commit here is in
+  scope.
+
+Never read, print, or otherwise ingest `.env` itself. Reference `OPENPROJECT_API_KEY` through the
+environment.
+
 ## What This Is
 
 An internal AI intelligence layer for Launchpad that lets team members query Claude with live organizational data — student profiles, program outcomes, certifications, competency scores, finances, donations, and communications. Built on a fully AWS-native stack. The system ingests data through six connectors (Google Sheets, Google Drive, Aplos, Slack, Notion, plus a sync task runner), stores it in Postgres + pgvector, and exposes it to Claude through an MCP server. A Next.js HQ dashboard provides sync status and operational visibility.
@@ -31,7 +60,7 @@ An internal AI intelligence layer for Launchpad that lets team members query Cla
 
 | Connector | Source | Destination | Status |
 |---|---|---|---|
-| `google-sheets` | Launchpad Dashboard + Outcomes sheets (12 spreadsheets) | Postgres | ✅ Live — all 12 sheet syncs ported; 27K+ records ingested |
+| `google-sheets` | Launchpad Dashboard + Outcomes sheets (13 spreadsheets) | Postgres | ✅ Live — all 13 sheet syncs ported; 27K+ records ingested |
 | `google-drive` | Drive docs folder | Postgres + pgvector | Skeleton — creds available, implementation pending |
 | `aplos` | Aplos nonprofit accounting | `finance_snapshots` (accounts, funds, transactions) | ✅ Live — RSA-decryption auth; 16K+ records; synced daily in production via EventBridge |
 | `notion` | Notion meeting transcripts database | `document_chunks` (pgvector) | ✅ Live — meeting transcript sync with embeddings |
@@ -120,7 +149,7 @@ packages/grants      → zod; deterministic grant-writing logic + seed (question
 - `prisma.config.ts` (repo root) — Prisma config pointing at the schema and migrations
 - `packages/db/src/entity-resolution.ts` — fuzzy name matching across all data sources; called by `get_student_info` and `search_by_person`
 - `packages/db/src/sync-runs.ts` — `runSync()` wrapper used by every connector
-- `apps/mcp-server/src/make-server.ts` — registers all tools (22: 16 data + `grant_match_question` + `grant_build_draft` + 4 skill); edit here to add/remove tools
+- `apps/mcp-server/src/make-server.ts` — registers all tools (24: 17 data + `grant_match_question` + `grant_build_draft` + `grant_resize_answer` + 4 skill); edit here to add/remove tools
 - `apps/mcp-server/src/tool-helpers.ts` — `runTool()` wrapper (error capture + usage logging), `parseStr()`, `parseNum()`
 - `apps/mcp-server/src/errors.ts` — `toolError()` and `notImplemented()` for structured error envelopes
 - `apps/mcp-server/src/usage-log.ts` — writes every tool call to `usage_logs` table; surfaced in HQ `/tools`

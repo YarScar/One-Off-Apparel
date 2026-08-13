@@ -295,6 +295,24 @@ model AttendanceRecord {
   @@map("attendance_records")
 }
 
+model HourLog {
+  id           String    @id @default(uuid())
+  sourceId     String    @unique @map("source_id")
+  project      String
+  sourceTab    String    @map("source_tab")
+  logDate      DateTime? @map("log_date") @db.Date
+  personName   String?   @map("person_name")
+  hours        Decimal?  @db.Decimal(8, 2)
+  task         String?
+  rowData      Json      @map("row_data")
+  lastSyncedAt DateTime  @default(now()) @map("last_synced_at")
+
+  @@index([project])
+  @@index([logDate])
+  @@index([personName])
+  @@map("hour_logs")
+}
+
 model FinanceSnapshot {
   id           String   @id @default(uuid())
   sourceId     String   @unique @map("source_id")

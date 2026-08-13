@@ -11,6 +11,7 @@ import { registerQueryDonors } from './tools/query-donors.js';
 import { registerQueryAttendance } from './tools/query-attendance.js';
 import { registerQueryEmployment } from './tools/query-employment.js';
 import { registerQueryPostsecondary } from './tools/query-postsecondary.js';
+import { registerQueryHours } from './tools/query-hours.js';
 import { registerSearchConversations } from './tools/search-conversations.js';
 import { registerSearchByPerson } from './tools/search-by-person.js';
 import { registerGetEntityBrief } from './tools/get-entity-brief.js';
@@ -49,6 +50,7 @@ export function makeServer(): McpServer {
   registerQueryAttendance(server);
   registerQueryEmployment(server);
   registerQueryPostsecondary(server);
+  registerQueryHours(server);
   registerSearchConversations(server);
   registerSearchByPerson(server);
   registerGetEntityBrief(server);
