@@ -3,12 +3,20 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseStr, parseNum, filterStr } from '../tool-helpers.js';
+import { unmatchableFilterError, type FilterDomainCheck } from '../filter-domain.js';
+import {
+  studentCurrentPhaseDomain,
+  studentEnrollmentStatusDomain,
+  studentCohortDomain,
+  studentWithdrawalCodeDomain,
+  studentHsGraduationYearDomain,
+} from '../filter-domain-loaders.js';
 
 const NAME = 'query_students';
 
 const DESCRIPTION =
-  'Population-level analytics on the students table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table.';
+  'Population-level analytics on the students table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table. enrollment_status, current_phase, cohort, hs_graduation_year and withdrawal_code are matched literally against the source values, which are short codes rather than words — enrollment_status held only E and N in production, so enrollment_status:"Active" is not a small result but a value that cannot match. A value absent from its column returns a no_records error listing the values that column does hold, instead of an empty answer; a combination of real values that no student happens to have still returns an honest empty result. school is a substring match and is not checked this way.';
 
 const inputSchema = {
   query_type: z.enum(['numeric_stats', 'breakdown', 'list']),
@@ -62,33 +70,125 @@ const NUMERIC_RANGE_FIELDS: Record<string, 'distanceToOffice' | 'hsGraduationYea
   hs_graduation_year: 'hsGraduationYear',
 };
 
+/**
+ * The exact-match filters, checked against the distinct values their own column holds
+ * before any counting (#210, extending #207 from `query_enrollment` to here).
+ *
+ * This tool is the sharp one: it filters the *same* `students.enrollment_status` and
+ * `students.current_phase` columns as `query_enrollment`, with the same short source
+ * codes, so the identical `enrollment_status: 'Active'` → confident zero was reachable
+ * through it after #207 closed the other door into those columns.
+ *
+ * Built in a fixed order so which failure is reported first is deterministic rather than
+ * payload-order dependent, and only for the filters a caller actually supplied — an
+ * unfiltered call loads no domains at all.
+ *
+ * **What is deliberately absent.** `school` is a `contains` match: a substring matching
+ * no value is not the same fact as a value absent from a column, and enumerating a
+ * free-text school column's distinct values is not a usable error message. The date
+ * bounds (`dob_*`, `withdrawal_date_*`) and the `filter_min`/`filter_max` range are
+ * windows rather than values drawn from a column, so a window outside the data is a real
+ * zero. `field` and `filter_field` are validated against their own allow-lists.
+ */
+async function buildDomainChecks(f: {
+  enrollmentStatus: string | undefined;
+  currentPhase: string | undefined;
+  cohort: number | undefined;
+  hsGraduationYear: number | undefined;
+  withdrawalCode: string | undefined;
+}): Promise<FilterDomainCheck[]> {
+  const checks: FilterDomainCheck[] = [];
+  if (f.enrollmentStatus !== undefined) {
+    checks.push({
+      field: 'enrollment_status',
+      column: 'students.enrollment_status',
+      value: f.enrollmentStatus,
+      domain: await studentEnrollmentStatusDomain(),
+    });
+  }
+  if (f.currentPhase !== undefined) {
+    checks.push({
+      field: 'current_phase',
+      column: 'students.current_phase',
+      value: f.currentPhase,
+      domain: await studentCurrentPhaseDomain(),
+    });
+  }
+  if (f.cohort !== undefined) {
+    checks.push({
+      field: 'cohort',
+      column: 'students.cohort',
+      value: f.cohort,
+      domain: await studentCohortDomain(),
+    });
+  }
+  if (f.hsGraduationYear !== undefined) {
+    checks.push({
+      field: 'hs_graduation_year',
+      column: 'students.hs_graduation_year',
+      value: f.hsGraduationYear,
+      domain: await studentHsGraduationYearDomain(),
+    });
+  }
+  if (f.withdrawalCode !== undefined) {
+    checks.push({
+      field: 'withdrawal_code',
+      column: 'students.withdrawal_code',
+      value: f.withdrawalCode,
+      domain: await studentWithdrawalCodeDomain(),
+    });
+  }
+  return checks;
+}
+
 export function registerQueryStudents(server: McpServer): void {
   server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
       const queryType = parseStr(raw, 'query_type') ?? 'list';
       const field = parseStr(raw, 'field');
-      const enrollmentStatus = parseStr(raw, 'enrollment_status');
-      const currentPhase = parseStr(raw, 'current_phase');
+      // `filterStr`, not `parseStr`: a blank filter present in the payload must mean "no
+      // filter" both in the `where` below and in the domain check, or the check errors on
+      // the empty string — a value the caller never asked to match.
+      const enrollmentStatus = filterStr(raw, 'enrollment_status');
+      const currentPhase = filterStr(raw, 'current_phase');
       const cohort = parseNum(raw, 'cohort');
-      const school = parseStr(raw, 'school');
+      const school = filterStr(raw, 'school');
       const hsGraduationYear = parseNum(raw, 'hs_graduation_year');
-      const dobStart = parseStr(raw, 'dob_start');
-      const dobEnd = parseStr(raw, 'dob_end');
-      const withdrawalCode = parseStr(raw, 'withdrawal_code');
-      const withdrawalDateStart = parseStr(raw, 'withdrawal_date_start');
-      const withdrawalDateEnd = parseStr(raw, 'withdrawal_date_end');
-      const filterField = parseStr(raw, 'filter_field');
+      const dobStart = filterStr(raw, 'dob_start');
+      const dobEnd = filterStr(raw, 'dob_end');
+      const withdrawalCode = filterStr(raw, 'withdrawal_code');
+      const withdrawalDateStart = filterStr(raw, 'withdrawal_date_start');
+      const withdrawalDateEnd = filterStr(raw, 'withdrawal_date_end');
+      const filterField = filterStr(raw, 'filter_field');
       const filterMin = parseNum(raw, 'filter_min');
       const filterMax = parseNum(raw, 'filter_max');
       const limit = Math.min(parseNum(raw, 'limit') ?? 500, 1000);
 
+      // Before any counting. A value its column does not contain makes every branch below
+      // return an empty answer that reads as a fact about the program.
+      const domainError = unmatchableFilterError(
+        await buildDomainChecks({
+          enrollmentStatus,
+          currentPhase,
+          cohort,
+          hsGraduationYear,
+          withdrawalCode,
+        }),
+      );
+      if (domainError) return domainError;
+
+      // Presence, not truthiness. `cohort ? ...` and `hsGraduationYear ? ...` dropped a
+      // zero-valued filter, which is the same silent unscoping one value wide: the query
+      // ran over everyone while the caller believed it was narrowed. Neither zero occurs
+      // in the data, so this changes no existing answer — it stops the two from
+      // disagreeing with the domain check above, which keys off presence.
       const where: Prisma.StudentWhereInput = {
-        ...(enrollmentStatus ? { enrollmentStatus } : {}),
-        ...(currentPhase ? { currentPhase } : {}),
-        ...(cohort ? { cohort } : {}),
-        ...(school ? { schoolName: { contains: school, mode: 'insensitive' } } : {}),
-        ...(hsGraduationYear ? { hsGraduationYear } : {}),
+        ...(enrollmentStatus !== undefined ? { enrollmentStatus } : {}),
+        ...(currentPhase !== undefined ? { currentPhase } : {}),
+        ...(cohort !== undefined ? { cohort } : {}),
+        ...(school !== undefined ? { schoolName: { contains: school, mode: 'insensitive' } } : {}),
+        ...(hsGraduationYear !== undefined ? { hsGraduationYear } : {}),
         ...(dobStart || dobEnd
           ? {
               dob: {
@@ -97,7 +197,7 @@ export function registerQueryStudents(server: McpServer): void {
               },
             }
           : {}),
-        ...(withdrawalCode ? { withdrawalCode } : {}),
+        ...(withdrawalCode !== undefined ? { withdrawalCode } : {}),
         ...(withdrawalDateStart || withdrawalDateEnd
           ? {
               withdrawalDate: {

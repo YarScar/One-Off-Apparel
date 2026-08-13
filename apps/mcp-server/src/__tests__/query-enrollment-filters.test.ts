@@ -5,8 +5,10 @@ import {
   NON_DATE_FILTERS,
   blankFilters,
   filterEcho,
-  filterStr,
 } from '../tools/query-enrollment.js';
+// Moved to tool-helpers when query_students / query_postsecondary / query_certifications
+// gained the same domain check and needed the same blank semantics (#210).
+import { filterStr } from '../tool-helpers.js';
 import { McpStdioClient } from './mcp-client.js';
 
 /**

@@ -3,7 +3,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
-import { runTool, parseStr } from '../tool-helpers.js';
+import { runTool, filterStr } from '../tool-helpers.js';
+import { unmatchableFilterError, type FilterDomainCheck } from '../filter-domain.js';
+import {
+  postsecondaryEnrollmentStatusDomain,
+  postsecondaryClassLevelDomain,
+} from '../filter-domain-loaders.js';
 
 const NAME = 'query_postsecondary';
 
@@ -38,7 +43,8 @@ const CLASS_LEVEL_DESCRIPTIONS = [
 
 const DESCRIPTION = `Postsecondary enrollment data from National Student Clearinghouse — colleges + universities each Launchpad student attended, enrollment status, class level, majors, and graduation outcomes. Useful for tracking college persistence and completion rates. ` +
   `Enrollment status codes: ${ENROLLMENT_STATUS_DESCRIPTIONS}. ` +
-  `Class level codes: ${CLASS_LEVEL_DESCRIPTIONS}.`;
+  `Class level codes: ${CLASS_LEVEL_DESCRIPTIONS}. ` +
+  `enrollment_status and class_level are matched literally against these codes; a value absent from its column returns a no_records error listing the codes actually present, rather than an empty answer. institution and institution_type are substring matches and are not checked that way.`;
 
 const inputSchema = {
   query_type: z.enum([
@@ -63,16 +69,51 @@ export function registerQueryPostsecondary(server: McpServer): void {
   server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
-      const queryType = parseStr(raw, 'query_type') ?? '';
+      const queryType = filterStr(raw, 'query_type') ?? '';
 
-      const institution = parseStr(raw, 'institution');
-      const institutionType = parseStr(raw, 'institution_type');
-      const enrollmentStatus = parseStr(raw, 'enrollment_status');
-      const classLevel = parseStr(raw, 'class_level');
-      const studentNumber = parseStr(raw, 'student_number');
-      const startDate = parseStr(raw, 'start_date');
-      const endDate = parseStr(raw, 'end_date');
+      const institution = filterStr(raw, 'institution');
+      const institutionType = filterStr(raw, 'institution_type');
+      const enrollmentStatus = filterStr(raw, 'enrollment_status');
+      const classLevel = filterStr(raw, 'class_level');
+      const studentNumber = filterStr(raw, 'student_number');
+      const startDate = filterStr(raw, 'start_date');
+      const endDate = filterStr(raw, 'end_date');
       const graduatedOnly = raw['graduated_only'] === true;
+
+      /**
+       * The two exact-match filters, domain-checked before any branch (#210). The NSC
+       * codes are enumerated in the description above, which makes a wrong value less
+       * likely here than on `query_students` — but only the description knows them, and
+       * a caller who sends `enrollment_status: 'Enrolled'` still got a well-formed zero
+       * from every one of the six query types.
+       *
+       * The domain read is the column's own values, not the code list: a code that is
+       * valid NSC but absent from Launchpad's data still cannot match, and telling the
+       * caller which codes are present is the answer that costs one round trip.
+       *
+       * `institution` and `institution_type` are `contains` matches and are deliberately
+       * excluded — see the note in `query-students.ts`. `graduated_only` is a boolean,
+       * and the dates are windows.
+       */
+      const checks: FilterDomainCheck[] = [];
+      if (enrollmentStatus !== undefined) {
+        checks.push({
+          field: 'enrollment_status',
+          column: 'student_postsecondary.enrollment_status',
+          value: enrollmentStatus,
+          domain: await postsecondaryEnrollmentStatusDomain(),
+        });
+      }
+      if (classLevel !== undefined) {
+        checks.push({
+          field: 'class_level',
+          column: 'student_postsecondary.class_level',
+          value: classLevel,
+          domain: await postsecondaryClassLevelDomain(),
+        });
+      }
+      const domainError = unmatchableFilterError(checks);
+      if (domainError) return domainError;
 
       const where: Prisma.StudentPostsecondaryWhereInput = {};
       if (institution) where.institution = { contains: institution, mode: 'insensitive' };

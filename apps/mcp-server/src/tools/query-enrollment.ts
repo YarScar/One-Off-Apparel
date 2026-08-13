@@ -3,8 +3,13 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseStr, parseNum, filterStr } from '../tool-helpers.js';
 import { unmatchableFilterError, type FilterDomainCheck } from '../filter-domain.js';
+import {
+  studentCurrentPhaseDomain,
+  studentEnrollmentStatusDomain,
+  studentCohortDomain,
+} from '../filter-domain-loaders.js';
 
 const NAME = 'query_enrollment';
 
@@ -92,25 +97,12 @@ function outcomePredicate(
 }
 
 /**
- * A string filter, with blank treated as absent.
- *
- * Every filter below is presence-tested, not truthiness-tested, so that `cohort: 0`
- * reaches the query and the echo. That makes `""` the one remaining hazard: an
- * empty `status` present in the payload would become a literal column match on
- * every branch that reads it directly, and a `{ not: null }` on the branches that
- * test truthiness — the same silent divergence between branches this fix exists to
- * remove. A blank filter means "no filter", uniformly, on every query type.
- *
- * Trimming is part of that: ` "Completed" ` is the value with the same intent, and
- * an untrimmed one matches nothing while reporting itself applied.
- *
- * Treating blank as absent still has to be *reported*, or it becomes its own silent
- * unscoping — see `blankFilters`.
+ * Why every filter below is presence-tested rather than truthiness-tested: so that
+ * `cohort: 0` reaches the query and the echo. That makes `""` the one remaining hazard,
+ * which is what `filterStr` handles — see its doc comment in `tool-helpers.ts`, where it
+ * now lives because `query_students`, `query_postsecondary` and `query_certifications`
+ * domain-check filters the same way and need the same blank semantics.
  */
-export function filterStr(raw: Record<string, unknown>, key: string): string | undefined {
-  const trimmed = parseStr(raw, key)?.trim();
-  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
-}
 
 /**
  * Names the filters present in the payload as strings but blank after trimming.
@@ -159,40 +151,14 @@ export function filterEcho(
 }
 
 /**
- * The distinct non-null values of one filterable column, over the whole table.
+ * The three `students` column domains this tool checks live in
+ * `filter-domain-loaders.ts`, shared with `query_students`, which filters the same
+ * columns with the same codes. The unscoped-read reasoning that governs all of them is
+ * documented there and in the header of `filter-domain.ts`.
  *
- * Deliberately unscoped — see the header of `filter-domain.ts`. Narrowing these by the
- * caller's other filters would make the last filter standing look unmatchable on every
- * query that legitimately returns nothing, which is the failure this fix must not
- * introduce while removing the opposite one.
- *
- * Written as one function per column rather than a generic taking a column name because
- * Prisma's `groupBy` result type is keyed by the literal `by` array; a dynamic key
- * erases the field off the row type and costs a cast.
+ * `phaseStatusDomain` stays here because it is this tool's own: no other tool has a
+ * `status` filter that fans out over four columns.
  */
-async function currentPhaseDomain(): Promise<string[]> {
-  const rows = await prisma.student.groupBy({
-    by: ['currentPhase'],
-    where: { currentPhase: { not: null } },
-  });
-  return rows.map((r) => r.currentPhase).filter((v): v is string => v !== null);
-}
-
-async function enrollmentStatusDomain(): Promise<string[]> {
-  const rows = await prisma.student.groupBy({
-    by: ['enrollmentStatus'],
-    where: { enrollmentStatus: { not: null } },
-  });
-  return rows.map((r) => r.enrollmentStatus).filter((v): v is string => v !== null);
-}
-
-async function cohortDomain(): Promise<number[]> {
-  const rows = await prisma.student.groupBy({
-    by: ['cohort'],
-    where: { cohort: { not: null } },
-  });
-  return rows.map((r) => r.cohort).filter((v): v is number => v !== null);
-}
 
 /**
  * The union of the four phase status columns.
@@ -253,7 +219,7 @@ async function buildDomainChecks(f: {
       field: 'current_phase',
       column: 'students.current_phase',
       value: f.currentPhase,
-      domain: await currentPhaseDomain(),
+      domain: await studentCurrentPhaseDomain(),
     });
   }
   if (f.enrollmentStatus !== undefined) {
@@ -261,7 +227,7 @@ async function buildDomainChecks(f: {
       field: 'enrollment_status',
       column: 'students.enrollment_status',
       value: f.enrollmentStatus,
-      domain: await enrollmentStatusDomain(),
+      domain: await studentEnrollmentStatusDomain(),
     });
   }
   if (f.cohort !== undefined) {
@@ -269,7 +235,7 @@ async function buildDomainChecks(f: {
       field: 'cohort',
       column: 'students.cohort',
       value: f.cohort,
-      domain: await cohortDomain(),
+      domain: await studentCohortDomain(),
     });
   }
   if (f.status !== undefined) {
