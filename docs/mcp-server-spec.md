@@ -698,19 +698,30 @@ through the `student` relation, and `phase` / `status` reach student-level queri
 Every response carries `filters_applied`, and `filters_ignored` when a supplied filter does not apply
 to the chosen `query_type`. This matters because until 2026-08-12 several branches accepted filters
 and silently discarded them — `by_phase` built a student predicate and never used it, and
-`active_during` discarded the student filters and `status` entirely — so a caller who scoped to 15
-Lightspeed completers received all 301 students with nothing in the envelope to say so. A silently
+`active_during` discarded the student filters and `status` entirely — so a caller who scoped to the
+Lightspeed completers received every student with nothing in the envelope to say so. A silently
 unscoped count is a wrong denominator, which is the specific way this tool can mislead.
 
 Filter presence is tested, not truthiness, so `cohort: 0` is a filter like any other. A blank or
 whitespace-only string is treated as **absent on every `query_type`** rather than as a literal
-column match, and string filters are trimmed; a blank filter therefore appears in neither
-`filters_applied` nor `filters_ignored`.
+column match, and string filters are trimmed. A blank filter is named in `filters_ignored`: it
+reaches no query, and a caller who believes a blank narrowed their query needs the envelope to say
+otherwise, or "treated as absent" becomes its own silent unscoping.
 
-`active_during` reports `student_count` as the number of rows matching the filters, counted
-separately from the page it returns. When the page is short of that count it adds
+`active_during` and `by_student` report `student_count` as the number of rows matching the filters,
+counted separately from the page they return. When the page is short of that count they add
 `truncated: true`, `returned` (rows in this response) and `limit`. Reporting the page size as the
-count is the same wrong denominator as a dropped filter, reached from the other direction.
+count is the same wrong denominator as a dropped filter, reached from the other direction — and with
+`limit` defaulting to 500, a caller with more matches than that sees a plausible number rather than
+an obviously clipped one.
+
+On `active_during`, `phase` is a predicate and not merely a column selector. That distinction is the
+one thing this section got wrong when it was written: `PHASE_FIELDS[phase]` chose which columns
+`status` and the dates were applied to, while `phase` itself never entered the `WHERE` clause. A call
+supplying dates hid the defect, because a non-null date column implies the phase exists; a dateless
+call — legal, since only `phase` is required — returned every outcome row in scope beside a
+`filters_applied` naming the phase. `active_during` now composes the same predicate as every other
+branch, so `phase: 'LiftOff'` cannot count a student with no LiftOff data.
 
 > **Doc drift, unfixed.** The `by_student` bullet above claims a "full student-info filter set"
 > (race, gender, withdrawal_code, entry/withdrawal date ranges, city, zip, college/workforce fields,
