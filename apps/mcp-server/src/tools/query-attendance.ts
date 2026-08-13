@@ -3,12 +3,14 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseNum, filterStr } from '../tool-helpers.js';
+import { unmatchableFilterError, type FilterDomainCheck } from '../filter-domain.js';
+import { attendanceCurrentPhaseIndex } from '../filter-domain-loaders.js';
 
 const NAME = 'query_attendance';
 
 const DESCRIPTION =
-  'Query Launchpad student attendance from the three cohort sheets (Cohort 1 / 2 / 3). Use for per-student attendance rates, aggregate rates by phase / race / cohort / school / etc., or raw event drill-downs over a date range. Cohorts are loose Launchpad groupings; rates blend cohort 1 (already-aggregated weekly %), cohort 2 (daily P/A/E codes), and cohort 3 (weekly check-in/out logs with codes). Excused absences are excluded from rate calculations.';
+  'Query Launchpad student attendance from the three cohort sheets (Cohort 1 / 2 / 3). Use for per-student attendance rates, aggregate rates by phase / race / cohort / school / etc., or raw event drill-downs over a date range. Cohorts are loose Launchpad groupings; rates blend cohort 1 (already-aggregated weekly %), cohort 2 (daily P/A/E codes), and cohort 3 (weekly check-in/out logs with codes). Excused absences are excluded from rate calculations. Every response echoes filters_applied, and filters_ignored when an input does not apply to the query_type, so a rate is never silently unscoped. current_phase and cohort are matched literally against the values those columns hold; a value absent from its column returns a no_records error listing the values present, rather than an answer covering everyone.';
 
 const inputSchema = {
   query_type: z.enum(['by_student', 'aggregate', 'events']),
@@ -17,7 +19,12 @@ const inputSchema = {
     .optional()
     .describe('LP#### (joins students.student_number).'),
   cohort: z.number().optional().describe('1, 2, or 3.'),
-  current_phase: z.string().optional(),
+  current_phase: z
+    .string()
+    .optional()
+    .describe(
+      'Restrict to students whose students.current_phase is this value, joined on student_number. Distinct from group_by:"current_phase", which breaks the whole result down by phase instead of narrowing it.',
+    ),
   start_date: z.string().optional(),
   end_date: z.string().optional(),
   group_by: z
@@ -26,21 +33,103 @@ const inputSchema = {
   limit: z.number().optional(),
 };
 
-function buildWhere(raw: Record<string, unknown>): Prisma.AttendanceRecordWhereInput {
+/**
+ * Inputs echoed back, in a fixed order so the envelope reads the same way whatever order
+ * a caller sent the keys in. `group_by` is not here: it selects a breakdown rather than
+ * narrowing the population, so it is never "ignored" in the sense this echo reports.
+ */
+const FILTERS = [
+  'student_number',
+  'cohort',
+  'current_phase',
+  'start_date',
+  'end_date',
+  'limit',
+] as const;
+
+type FilterName = (typeof FILTERS)[number];
+
+/**
+ * `limit` pages the rows returned, so only the query types that return rows honour it.
+ * `aggregate` returns one row per group and reports `limit` ignored rather than
+ * pretending to have applied it.
+ */
+const ROW_FILTERS = FILTERS;
+const AGGREGATE_FILTERS = FILTERS.filter((f) => f !== 'limit');
+
+/**
+ * Names the filters present in the payload as strings but blank after trimming.
+ *
+ * `filterStr` drops these, so they reach neither the query nor `provided`. Naming them
+ * is the difference between "blank means no filter" and silently unscoping a query the
+ * caller believes they narrowed — the same failure as the ignored `current_phase`, from
+ * the other direction. `cohort` and `limit` are absent because they are numeric and have
+ * no blank form.
+ */
+function blankFilters(raw: Record<string, unknown>): FilterName[] {
+  return FILTERS.filter((name) => {
+    const v = raw[name];
+    return typeof v === 'string' && v.trim() === '';
+  });
+}
+
+function filterEcho(
+  provided: Record<string, string | number>,
+  honoured: readonly FilterName[],
+  blanked: readonly FilterName[] = [],
+): { filters_applied: Record<string, string | number>; filters_ignored?: string[] } {
+  const applied: Record<string, string | number> = {};
+  const ignored: string[] = [];
+  for (const name of FILTERS) {
+    if (name in provided) {
+      if (honoured.includes(name)) applied[name] = provided[name]!;
+      else ignored.push(name);
+    } else if (blanked.includes(name)) {
+      ignored.push(name);
+    }
+  }
+  return { filters_applied: applied, ...(ignored.length > 0 ? { filters_ignored: ignored } : {}) };
+}
+
+/**
+ * `current_phase` arrives as a list of student numbers rather than a column predicate.
+ *
+ * `attendance_records` has no relation to `students` — see `attendanceCurrentPhaseIndex`
+ * — so the phase is resolved to its students first and matched on `student_number`.
+ *
+ * It goes in through `AND` rather than onto `where.studentNumber`, because
+ * `student_number` and `current_phase` can both be supplied and assigning the same key
+ * twice would silently keep only the second. `AND` makes the two conjunctive, so
+ * `student_number` for a student outside the phase returns zero — a truthful zero about
+ * a real pair of values, which is the boundary this whole check is built around.
+ */
+function buildWhere(
+  raw: Record<string, unknown>,
+  phaseStudentNumbers: readonly string[] | undefined,
+): Prisma.AttendanceRecordWhereInput {
   const where: Prisma.AttendanceRecordWhereInput = {};
-  const studentNumber = parseStr(raw, 'student_number');
+  const studentNumber = filterStr(raw, 'student_number');
   const cohort = parseNum(raw, 'cohort');
-  const startDate = parseStr(raw, 'start_date');
-  const endDate = parseStr(raw, 'end_date');
+  const startDate = filterStr(raw, 'start_date');
+  const endDate = filterStr(raw, 'end_date');
 
   if (studentNumber) where.studentNumber = studentNumber;
   if (cohort !== undefined) where.cohort = cohort;
+  if (phaseStudentNumbers !== undefined) {
+    where.AND = [{ studentNumber: { in: [...phaseStudentNumbers] } }];
+  }
   if (startDate || endDate) {
     where.date = {};
     if (startDate) where.date.gte = new Date(startDate);
     if (endDate) where.date.lte = new Date(endDate);
   }
   return where;
+}
+
+/** The distinct non-null cohorts present in `attendance_records`, unscoped. */
+async function attendanceCohortDomain(): Promise<number[]> {
+  const rows = await prisma.attendanceRecord.groupBy({ by: ['cohort'] });
+  return rows.map((r) => r.cohort);
 }
 
 interface AttendanceTotals {
@@ -87,8 +176,54 @@ export function registerQueryAttendance(server: McpServer): void {
   server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
-      const queryType = parseStr(raw, 'query_type') ?? 'aggregate';
-      const where = buildWhere(raw);
+      const queryType = filterStr(raw, 'query_type') ?? 'aggregate';
+      const currentPhase = filterStr(raw, 'current_phase');
+      const cohort = parseNum(raw, 'cohort');
+
+      /**
+       * The fix this tool needed (#209): `current_phase` was declared here and read
+       * nowhere, so a caller scoping attendance to one phase got every phase back in a
+       * response that named the filter as applied. Not a silent zero but a silent
+       * *superset* — any phase-scoped attendance rate ever quoted from this tool was the
+       * org-wide rate.
+       *
+       * Resolved before the branches so all three query types scope identically, and
+       * domain-checked in the same pass: a phase no attendance-carrying student holds
+       * would otherwise return an empty answer that reads as "this phase does not
+       * attend".
+       */
+      const phaseIndex = currentPhase !== undefined ? await attendanceCurrentPhaseIndex() : undefined;
+      const checks: FilterDomainCheck[] = [];
+      if (currentPhase !== undefined && phaseIndex !== undefined) {
+        checks.push({
+          field: 'current_phase',
+          column: 'students.current_phase (over students with attendance rows)',
+          value: currentPhase,
+          domain: [...phaseIndex.keys()],
+        });
+      }
+      if (cohort !== undefined) {
+        checks.push({
+          field: 'cohort',
+          column: 'attendance_records.cohort',
+          value: cohort,
+          domain: await attendanceCohortDomain(),
+        });
+      }
+      const domainError = unmatchableFilterError(checks);
+      if (domainError) return domainError;
+
+      const provided: Record<string, string | number> = {};
+      for (const name of FILTERS) {
+        const v = name === 'cohort' || name === 'limit' ? parseNum(raw, name) : filterStr(raw, name);
+        if (v !== undefined) provided[name] = v;
+      }
+      const blanked = blankFilters(raw);
+
+      // `phaseIndex.get` is non-undefined past the domain check above — an absent phase
+      // has already returned. Kept as a lookup rather than a `!` so a future reordering
+      // that moves the check degrades to "no phase predicate" rather than to a crash.
+      const where = buildWhere(raw, currentPhase !== undefined ? (phaseIndex?.get(currentPhase) ?? []) : undefined);
 
       if (queryType === 'events') {
         const limit = Math.min(parseNum(raw, 'limit') ?? 200, 500);
@@ -103,6 +238,7 @@ export function registerQueryAttendance(server: McpServer): void {
         const students = await loadStudents(rows.map((r) => r.studentNumber));
         return {
           query_type: 'events',
+          ...filterEcho(provided, ROW_FILTERS, blanked),
           total_rows_matched: totalMatched,
           records_returned: rows.length,
           truncated: rows.length < totalMatched,
@@ -145,10 +281,27 @@ export function registerQueryAttendance(server: McpServer): void {
           addRow(entry.totals, r.cohort, r.code, r.percentage ? Number(r.percentage) : null);
           entry.cohorts.add(r.cohort);
         }
+        /**
+         * `limit` was declared and read only by the `events` branch, so a caller who
+         * asked for ten students got every student — the same declared-and-ignored input
+         * as `current_phase`, one branch over. Applied here as a page over the
+         * aggregated students, with the matched total kept separate from the page size
+         * so the two can never be confused (the `student_count` trap in #195).
+         *
+         * Sorted by student number first: the rows arrive in whatever order Postgres
+         * returns, so an unsorted page is an arbitrary subset that can differ between
+         * identical calls.
+         */
+        const limit = Math.min(parseNum(raw, 'limit') ?? perStudent.size, 1000);
+        const ordered = Array.from(perStudent.entries()).sort(([a], [b]) => a.localeCompare(b));
+        const page = ordered.slice(0, limit);
         return {
           query_type: 'by_student',
+          ...filterEcho(provided, ROW_FILTERS, blanked),
           total_students: perStudent.size,
-          students: Array.from(perStudent.entries()).map(([sn, e]) => ({
+          students_returned: page.length,
+          truncated: page.length < ordered.length,
+          students: page.map(([sn, e]) => ({
             student_number: sn,
             canonical_name: students.get(sn)?.canonicalName ?? null,
             current_phase: students.get(sn)?.currentPhase ?? null,
@@ -163,7 +316,7 @@ export function registerQueryAttendance(server: McpServer): void {
         };
       }
 
-      const groupBy = parseStr(raw, 'group_by') ?? 'cohort';
+      const groupBy = filterStr(raw, 'group_by') ?? 'cohort';
       const groups = new Map<
         string,
         { totals: AttendanceTotals; students: Set<string> }
@@ -197,6 +350,7 @@ export function registerQueryAttendance(server: McpServer): void {
       return {
         query_type: 'aggregate',
         group_by: groupBy,
+        ...filterEcho(provided, AGGREGATE_FILTERS, blanked),
         overall: {
           student_count: overallStudents.size,
           attendance_rate_pct: rate(overallTotals),
