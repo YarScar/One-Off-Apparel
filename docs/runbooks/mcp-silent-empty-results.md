@@ -103,7 +103,81 @@ than a date — so the cap took an arbitrary slice, and the spec points callers 
 capped well past the real tab size, and reports
 `sheet_fund_balances_total` plus `sheet_fund_balances_truncated` when the cap bites.
 
+### 6. `query_enrollment` accepted filter values that cannot match anything
+
+Added 2026-08-13, OpenProject `#207`.
+
+`query_enrollment { query_type: 'by_phase', enrollment_status: 'Active' }` returned
+`{"breakdown":[],"filters_applied":{"enrollment_status":"Active"}}`. Unfiltered, the same
+call returns 14 populated rows and `query_type: 'total'` returns 301 students.
+`students.enrollment_status` holds short source codes — `E` and `N` were the values
+observed in production — so `'Active'` occurs in no row and never could. The input schema
+was `z.string().optional()`, the description enumerated nothing, and the codes were
+discoverable only by calling `by_student` and reading individual records. "How many active
+students" answered zero.
+
+Fix: before any counting, each supplied `current_phase`, `enrollment_status`, `cohort` and
+`status` is checked against the distinct values its own column holds. A value absent from
+that column returns `toolError('no_records', ...)` naming the field, the `table.column`,
+and the values present, so the caller retries in one round trip. Checked once ahead of the
+`switch`, so all eight query_types answer identically.
+
+`no_records` is reused rather than a new code added: `query_finances` already returns it
+for a query_type no table backs, which is the same "your input cannot be answered from
+this data" one level up.
+
+**The line, which is the whole substance of it:** a value absent from its column's domain
+is a bad input and errors; values that are each present but co-occur in no row are a
+truthful zero and still return empty. That is why every domain is read **unscoped** — the
+distinct values of one column across the whole table, never narrowed by the sibling
+filters. Scope the domain by the siblings and the last filter standing always looks
+unmatchable, so every real zero becomes an error: the false-zero defect replaced by a
+false-error one. `apps/mcp-server/src/__tests__/query-enrollment-filters.test.ts` asserts
+both directions against the live server, and the second direction is the one that fails
+when the domain is scoped.
+
+Two filters are deliberately not domain-checked. `phase` is a `z.enum`, so a bad value is
+rejected before the handler runs. `start_date` / `end_date` are windows, not values drawn
+from a column, so a window outside the data's range is a real zero.
+
+An empty domain — the column null in every row — errors too, with its own message, since a
+zero drawn from an unpopulated column is exactly the false fact this runbook is about. That
+path is covered by unit test only; it is not reachable with a fixture that populates the
+column.
+
+**Not propagated.** Sibling tools with the same shape are listed below.
+
 ## Found, not fixed, needs a decision
+
+### The unmatchable-filter check is `query_enrollment`-only
+
+Added 2026-08-13 alongside fix 6, which was deliberately scoped to one tool. These take a
+free-text filter, apply it as an exact column match, enumerate nothing, and return an empty
+answer for a value that cannot match:
+
+| Tool | Filters | Match |
+|---|---|---|
+| `query_students` | `enrollment_status`, `current_phase`, `withdrawal_code` | exact (`query-students.ts:87`, `:88`, `:100`) |
+| `query_postsecondary` | `enrollment_status`, `class_level` | exact (`:80`, `:81`) — description does enumerate the NSC codes |
+| `query_certifications` | `phase`, `type` | exact (`:34`) |
+| `query_donors` | `donor_type`, `status` | exact — moot until the tool has a data source at all (above) |
+
+`query_students` is the sharpest of these: same `students` columns, same codes, same
+`'Active'` failure available today.
+
+Substring filters — `query_employment.employer_name` / `exit_code`,
+`query_postsecondary.institution`, `query_competency.competency`, `query_hours.person`,
+`query_students.school` — are the same class with a wider net. A typo still returns a silent
+zero, but a domain list is a poor fit for a `contains` filter and needs its own thinking.
+
+### `query_attendance` declares `current_phase` and never reads it
+
+`query-attendance.ts:20` accepts `current_phase`; nothing in the handler applies it. Only
+the `group_by: 'current_phase'` path touches the column. So a caller scoping attendance to
+one phase gets every phase back, reported as if scoped — the same declared-and-ignored
+filter as `query_finances.contains` in fix 2 above, which is the opposite failure to a
+silent zero and equally quiet.
+
 
 ### `query_donors` has no data source in production
 
