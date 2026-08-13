@@ -306,9 +306,10 @@ export default async function DashboardPage(): Promise<JSX.Element> {
   // Attendance → line chart points (pivot cohort to columns)
   const attendanceByCohort = new Map<number, AttendanceMonthRow[]>();
   for (const row of monthlyRows) {
-    const c = Number(row.cohort);
-    if (!attendanceByCohort.has(c)) attendanceByCohort.set(c, []);
-    attendanceByCohort.get(c)!.push(row);
+    // `row.cohort` is already a number; the Number() call changed nothing.
+    const existing = attendanceByCohort.get(row.cohort);
+    if (existing) existing.push(row);
+    else attendanceByCohort.set(row.cohort, [row]);
   }
   for (const rows of attendanceByCohort.values()) {
     rows.sort((a, b) => a.month.localeCompare(b.month));
