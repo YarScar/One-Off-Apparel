@@ -25,6 +25,54 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-13
+
+### Changed — three data tools now error where they returned zero, which changes what a drafting run sees
+
+OpenProject `#209` and `#210`, continuing `#207`. Recorded here because the grant layer is a
+*consumer* of these tools: `docs/runs/2026-08-11/filled/FIGURE-LEDGER.md` sources live figures from
+`query_enrollment`, `query_students` and `query_attendance`, and this changes their contract.
+
+**The rule, now applied by four tools rather than one.** A filter value absent from its own column's
+distinct values returns `toolError('no_records', ...)` naming the field, the `table.column` and the
+values present. A combination of values that are each present but co-occur in no row still returns an
+honest empty result. `#207` did `query_enrollment`; `#210` adds `query_students` (five filters),
+`query_postsecondary` (two) and `query_certifications` (`phase`).
+
+**What this means for a figure check.** A drafting run that reads an empty result as "Launchpad has no
+such data" was already the failure mode this guards against — but the reverse is now possible too: a
+run that treats *any* non-empty `error` envelope as a tool outage will now see one where it used to
+see `{ total: 0 }`. `enrollment_status: 'Active'` is the live example. The column holds `E` and `N`,
+so that value cannot match; the error names the codes, so the retry costs one round trip instead of a
+wrong figure. Prefer retrying on `no_records` over aborting.
+
+**`query_attendance` was worse than a zero.** `#209`: it declared `current_phase` and read it nowhere,
+so a phase-scoped attendance rate was the org-wide rate, reported as though scoped. Any phase-scoped
+attendance figure previously quoted from this tool is wrong by construction. Nothing records which
+figures went out; if one reached a funder, re-pulling it is separate work. The tool now also pages
+`by_student` on `limit` and echoes `filters_applied` / `filters_ignored` on every response.
+
+Full reasoning, including why each domain is read **unscoped** and what was deliberately left out (the
+substring filters), is in
+[`docs/runbooks/mcp-silent-empty-results.md`](../../docs/runbooks/mcp-silent-empty-results.md) fixes 7
+and 8.
+
+### Fixed — `pnpm -r build` passes, so the deploy path is no longer blocked
+
+OpenProject `#213`. `apps/hq` had 39 type-aware lint errors and `next build` fails on lint errors, so
+`pnpm -r build` failed — which is `ci.yml`'s third step and `deploy.yml`'s gate. Because
+`@eslint/js` and `typescript-eslint` are in this branch's root `package.json` and not `main`'s, the
+merge that brings this workstream to `main` would have turned CI red in files it never touched.
+
+The caveat in [`CLAUDE.md`](CLAUDE.md) that called this "pre-existing lint-rollout work" is corrected
+there: ten of the 39 were a missing `noUncheckedIndexedAccess` in `apps/hq/tsconfig.json` making
+load-bearing `?.` guards look redundant, not dead code.
+
+**Still outstanding, and not build-failing:** `pnpm exec eslint .` reports 402 errors repo-wide, two
+of them in `packages/grants`. Only `apps/hq` fails CI, because only its build runs ESLint.
+
+---
+
 ## 2026-08-12
 
 ### Fixed — four of the seed integrity checks could not catch what they were written to catch

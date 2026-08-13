@@ -244,7 +244,20 @@ git log -1 --format='%ad %s' --date=short -- docs/mcp-server-spec.md
 git log -1 --format='%ad %s' --date=short -- apps/mcp-server/src/make-server.ts
 ```
 
-A caveat on `pnpm -r build`: it currently fails in `apps/hq` on pre-existing
-`@typescript-eslint/no-unnecessary-condition` errors, which is tracked lint-rollout work and not a
-regression. It blocks `next build`, so verifying anything in HQ needs
-`pnpm --filter @lp-ai/hq dev` rather than a production build.
+`pnpm -r build` passes as of 2026-08-13 (`#213`). It used to fail in `apps/hq` on
+`@typescript-eslint/no-unnecessary-condition` errors — worth knowing why, because the diagnosis was
+wrong: `apps/hq/tsconfig.json` does not extend `tsconfig.base.json` and was missing
+`noUncheckedIndexedAccess`, so `rows[0]` typed as the element rather than `T | undefined` and the
+`?.` guards on such lookups looked redundant. They were load-bearing. Ten of the 39 errors were the
+type lying rather than dead code, and "fixing" them by deleting the guards would have traded a lint
+error for a runtime crash.
+
+Two things follow for anyone verifying HQ. A production build is now a valid check, so
+`pnpm --filter @lp-ai/hq dev` is a convenience rather than a necessity. And `next build` runs ESLint,
+so **`apps/hq` is the only package whose lint errors fail CI** — the other packages are compiled by
+`tsc`, which does not lint.
+
+That asymmetry is why the rest of the rollout is still outstanding: `pnpm exec eslint .` reports
+**402 errors** repo-wide, none of them build-failing —
+`connectors` ~200, `apps/mcp-server` ~117, `apps/aws-mcp-server` ~67, `packages/*` 7 (two of them in
+`packages/grants`). Do not read a green CI as a clean lint.

@@ -58,6 +58,9 @@ packages/db/generated/
 # Local Claude Code config (skills, settings) — not shared with the team
 .claude/
 
+# Personal working notes. Real work gets an OpenProject work package instead.
+TODO.local.md
+
 # Raw grant source material (Drive exports). Large, and it holds funder
 # correspondence and unredacted student data — never commit it.
 packages/grants/data/
