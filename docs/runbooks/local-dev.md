@@ -138,7 +138,7 @@ psql "$DATABASE_URL" -c "SELECT tool_name, duration_ms, called_at FROM usage_log
 
 ## Building & deploying the app images
 
-Production images are built and deployed by **GitHub Actions** (`.github/workflows/deploy.yml`) — auto on push to `master`, or manually with `gh workflow run deploy.yml -f services=hq`. You do not build or push images by hand for local development; `pnpm dev` runs the apps directly against the local Postgres.
+Production images are built and deployed by **GitHub Actions** (`.github/workflows/deploy.yml`) — auto on push to `main`, or manually with `gh workflow run deploy.yml -f services=hq`. You do not build or push images by hand for local development; `pnpm dev` runs the apps directly against the local Postgres.
 
 ## Common operations
 

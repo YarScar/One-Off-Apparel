@@ -116,7 +116,7 @@ pnpm sync:all                   # all connectors in parallel
 
 # Deploy: GitHub Actions builds the image (Buildx) and ships via the lp-github-deploy
 # OIDC role — NO local Docker needed. See .github/workflows/deploy.yml.
-#   - Auto-deploys on push to master (CI-gated; only changed services deploy)
+#   - Auto-deploys on push to main (CI-gated; only changed services deploy)
 #   - Manual: gh workflow run deploy.yml -f services=hq   (or all|mcp-server|aws-mcp-server|sync)
 # Task definitions live in infra/ecs/*-taskdef.json; the workflow pins the image to the commit SHA.
 
