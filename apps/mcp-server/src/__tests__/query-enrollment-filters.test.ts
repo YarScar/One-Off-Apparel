@@ -105,32 +105,49 @@ const FIXTURE_PREFIX = 'PR50-';
 const KEPT = 'PR50Kept';
 const DROPPED = 'PR50Dropped';
 
+/**
+ * Two rows carry the status under test and two do not, so a dropped
+ * `enrollment_status` returns 3 where an applied one returns 2. Two matching rows is
+ * also what makes the `limit: 1` truncation case meaningful.
+ *
+ * The fourth student carries **no outcome row**, and that is load-bearing rather than
+ * filler: it is what makes "students with a Lightspeed outcome" strictly smaller than
+ * "all students" a property of this fixture instead of a property of `pnpm db:seed`.
+ * The seed inserts three students and zero phase outcomes, so on a developer's machine
+ * that inequality held for free — and `.github/workflows/ci.yml` generates the client
+ * and pushes the schema but never seeds, so in CI every student in the database was a
+ * fixture student with an outcome, and the inequality read `3 < 3`.
+ */
+const FIXTURE = [
+  { n: '1', status: KEPT, outcome: true },
+  { n: '2', status: KEPT, outcome: true },
+  { n: '3', status: DROPPED, outcome: true },
+  { n: '4', status: DROPPED, outcome: false },
+] as const;
+
 describeLocal('query_enrollment filter application (live DB)', () => {
   let client: McpStdioClient;
 
   beforeAll(async () => {
     const { prisma } = await import('@lp-ai/lib-db');
     await prisma.student.deleteMany({ where: { studentNumber: { startsWith: FIXTURE_PREFIX } } });
-    // Two rows carry the status under test and one does not, so a dropped filter
-    // returns 3 where an applied one returns 2. Two matching rows is also what makes
-    // the `limit: 1` truncation case meaningful.
-    for (const [n, status] of [
-      ['1', KEPT],
-      ['2', KEPT],
-      ['3', DROPPED],
-    ] as const) {
+    for (const f of FIXTURE) {
       await prisma.student.create({
         data: {
-          studentNumber: `${FIXTURE_PREFIX}${n}`,
-          canonicalName: `Fixture Student ${n}`,
-          enrollmentStatus: status,
-          phaseOutcomes: {
-            create: {
-              lightspeedStatus: 'Completed',
-              lightspeedStartDate: new Date('2025-06-01'),
-              lightspeedEndDate: new Date('2025-07-31'),
-            },
-          },
+          studentNumber: `${FIXTURE_PREFIX}${f.n}`,
+          canonicalName: `Fixture Student ${f.n}`,
+          enrollmentStatus: f.status,
+          ...(f.outcome
+            ? {
+                phaseOutcomes: {
+                  create: {
+                    lightspeedStatus: 'Completed',
+                    lightspeedStartDate: new Date('2025-06-01'),
+                    lightspeedEndDate: new Date('2025-07-31'),
+                  },
+                },
+              }
+            : {}),
         },
       });
     }
@@ -192,7 +209,7 @@ describeLocal('query_enrollment filter application (live DB)', () => {
       status: 'Completed',
     })) as { student_count: number };
 
-    expect(reference).toBeLessThan(all); // seeded students have no outcome row
+    expect(reference).toBeLessThan(all); // fixture student 4 has no outcome row
     expect(res.student_count).toBe(reference);
   });
 
