@@ -479,11 +479,10 @@ Look up financial data across multiple ingested sheets — Launchpad budgets and
   "type": "object",
   "properties": {
     "query_type": { "type": "string", "enum": ["prior_month", "ytd", "forecast", "monthly", "fund_balances", "annual", "budget_actuals", "phase_budget_dashboard", "phase_budget_monthly_liftoff", "phase_budget_monthly_hs", "q3_2026_actuals_global_pct", "q3_2026_actuals_hc_pct", "q3_2026_actuals", "phase_actuals_2025_global_pct", "phase_actuals_2025_hc_pct", "phase_actuals_2025_actuals", "rapid_dashboard", "rapid_transactions", "pex_dashboard", "pex_transactions", "dev_giving_history", "dev_prospect_pipeline", "dev_denied", "dev_launchpad_pipeline", "dev_grants_tracker", "dev_contacts", "aplos_accounts", "aplos_funds", "aplos_transactions"] },
-    "fund": { "type": "string", "description": "Filter by fund name (partial match). On dev_* types matches across the standard fund/project columns." },
-    "category": { "type": "string", "description": "Filter by account name / category (partial match)." },
-    "row_type": { "type": "string", "enum": ["detail", "summary", "all"], "description": "Default 'all'." },
-    "launchpad_only": { "type": "boolean", "description": "Default true. Applies to dev_* query types only — restricts CRM rows to those whose Fund / Project mentions 'Launchpad'. Set false to see all B21 development data. The Launchpad Pipeline tab is implicitly scoped." },
-    "donor": { "type": "string", "description": "Filter by donor name (partial, case-insensitive). Most useful on dev_giving_history, dev_prospect_pipeline, dev_denied, dev_grants_tracker, dev_launchpad_pipeline, dev_contacts." }
+    "tab_name": { "type": "string", "description": "Override the tab_name match (advanced). Matched case-insensitively, but escaped first." },
+    "period": { "type": "string", "description": "Exact match on the period column." },
+    "contains": { "type": "string", "description": "Substring match against the JSON-serialized rowData." },
+    "limit": { "type": "number", "description": "Default 500, capped at 1000." }
   },
   "required": ["query_type"]
 }
@@ -493,15 +492,58 @@ Look up financial data across multiple ingested sheets — Launchpad budgets and
 ```json
 {
   "query_type": "...",
-  "tabs_queried": ["..."],
-  "launchpad_only": true,
+  "tab_names_matched": ["phase_dashboard:2025 actuals"],
+  "tab_names_returned": ["phase_dashboard:2025 actuals"],
   "record_count": 174,
+  "total_matching": 174,
+  "total_matching_is_lower_bound": true,
+  "truncated": false,
+  "contains_applied": "…",
+  "scan_incomplete": "Searched N of M rows for \"…\" (…). total_matching is a lower bound; …",
   "records": [ /* row_data fields, vary by tab. See connector docs for column names. */ ],
-  "sources": ["google_sheets"]
+  "sources": ["google_sheets", "aplos"]
 }
 ```
 
-**Launchpad scoping:** When `launchpad_only=true` (default) and the query targets a CRM tab listed in `TABS_WITH_LAUNCHPAD_FILTER`, rows are filtered to those whose `fund`, `fund_name`, `fund_s`, `primary_fund`, `project`, `projects`, or `project_s` contains "launchpad" (case-insensitive). The `dev_launchpad_pipeline` tab is excluded from the filter (already Launchpad-scoped by construction).
+`contains_applied` appears only when `contains` was passed. `scan_incomplete` and
+`total_matching_is_lower_bound` appear only when the `contains` scan did not reach every matching
+row — either because the tab exceeds the 5000-row scan cap, or because the scan stopped as soon as it
+had enough matches to fill `limit` and prove truncation.
+
+**`tab_names_matched` vs `tab_names_returned`.** The first is computed over the filter, independent of
+`limit`; the second describes the page. They differ whenever a limit bites, and only the first can be
+read as "which tabs hold data": `budget_actuals` spans tabs whose rows sort under different `period`
+values, so one tab lands entirely ahead of the other and a small limit made the second look empty.
+
+**Why `total_matching` and `truncated` exist.** An empty or short result set used to be
+indistinguishable from a missing tab. That is the specific way this tool misled callers — see
+[the silent-empty-results runbook](runbooks/mcp-silent-empty-results.md). `record_count` is what was
+returned; `total_matching` is what the filter actually matched.
+
+**`total_matching` is a lower bound when `total_matching_is_lower_bound` is set.** With `contains`,
+matching happens in memory over a paged scan that stops early, so the count is a floor, not a total —
+quote it as "at least N" or raise `limit` to search further. Reporting a partial count as final was
+the original defect in these two fields: over the ~16K-row `aplos:transactions` tab,
+`contains: "grant"` returned `total_matching: 3, truncated: false`.
+
+**`budget_actuals` spans two tabs, so it double-counts by construction.** The same account line
+appears once for prior month and once for YTD. Split on each record's `tab_name` before summing or
+differencing.
+
+**Tab matching is exact, and deliberately not case-insensitive.** Prisma compiles
+`mode: 'insensitive'` to `ILIKE` and passes the value through unescaped, so the `%` in
+`q3_2026_actuals:global %` would become a wildcard and claim rows from any tab sharing that prefix.
+The tab names in the table above are copied from the connectors that write them, and
+`finance-tab-map.test.ts` locks the casing. Seed-only aliases (`ytd`, `fund_balances`) are matched
+alongside the live names so seeded databases stay reachable. A caller-supplied `tab_name` override
+stays case-insensitive for convenience, but is escaped before use.
+
+> **Doc drift, corrected 2026-08-12.** This section previously documented `fund`, `category`,
+> `row_type`, `launchpad_only` and `donor` input filters, a `tabs_queried` / `launchpad_only` output
+> pair, and a "Launchpad scoping" rule keyed on `TABS_WITH_LAUNCHPAD_FILTER`. **None of those exist in
+> `query-finances.ts`** — no such symbol appears in the file. Donor-scoped and Launchpad-scoped CRM
+> lookups are served by `query_donors`, which does implement them. Removed rather than recorded,
+> because unlike the tab-name casing below there was no code behaviour to preserve.
 
 ---
 
@@ -562,10 +604,17 @@ If the name resolves to multiple donors, returns `ambiguous: true` with a `candi
 
 ### `get_finance_brief`
 
-Return a comprehensive financial overview — fund balances, YTD revenue vs. expenses, top campaigns, recent transactions.
+Return a high-level financial overview — Aplos fund balances, a chart-of-accounts category summary, recent Aplos transactions, and recent donor gifts.
 
 **Description shown to Claude:**
-> Get a high-level financial overview of the organization: fund balances, year-to-date income and expenses, active fundraising campaigns, and recent Aplos transactions. Use this as a starting point for any general finance question or when asked for a financial summary.
+> Get a high-level financial overview of the organization: Aplos fund balances, chart-of-accounts summary, recent Aplos transactions, and recent donor gifts. Use this as a starting point for any general finance question.
+
+> **This tool carries no income or expense total.** The heading and the Claude-facing description both
+> claimed "YTD revenue vs. expenses" and "top campaigns" until 2026-08-12; neither is computed
+> anywhere in `get-finance-brief.ts`, and `period` only labels the response — it does not aggregate.
+> Grant drafting spent a cycle treating the absence as "the organization has no budget data". For an
+> annual budget total, read the `Combined Funds` tab via `query_finances(fund_balances)`, which holds
+> account-level totals across every fund.
 
 **Input Schema:**
 ```json
@@ -593,12 +642,30 @@ Return a comprehensive financial overview — fund balances, YTD revenue vs. exp
     "by_category": { "asset": 40, "liability": 12, "revenue": 80, "expense": 90, "equity": 10 }
   },
   "recent_transactions": [ /* last 20 Aplos transactions (date, memo, amount) */ ],
-  "sheet_fund_balances": [ /* Google Sheets fund balance rows, if any */ ],
+  "sheet_fund_balances": [ /* Google Sheets fund balance rows from the Combined Funds tab */ ],
+  "recent_gifts": [ /* recent donor gift rows */ ],
   "sources_active": ["aplos", "google_sheets"]
 }
 ```
 
 Queries Aplos (`finance_snapshots` with `aplos:*` tab names) and Google Sheets fund balances directly.
+
+**`aplos_funds` is pinned to one snapshot date.** The Aplos connector snapshots funds daily, so an
+unbounded "newest 50" spanned two `period` values and truncated the newest one — a caller reading the
+list saw duplicate fund names and an incomplete current picture. The query now resolves the newest
+`period` first and returns only that day's funds (up to 200).
+
+**`sheet_fund_balances` matches `Combined Funds`.** The dashboard sync writes that tab name; the
+seed's name is `fund_balances`. Both are matched **exactly and case-sensitively** — a tab written
+`combined funds` would still be missed, and the fix for that is another entry in the array, not a
+relaxed match. Looking for only the seed name is why this array was empty against real data.
+
+**`sheet_fund_balances` is a page, and says so.** It is ordered by `tab_name` then `source_id`, not by
+`period`: for dashboard tabs `period` is a selector-cell string shared by every row in the tab, so
+ordering by it is arbitrary. The response carries `sheet_fund_balances_total`, and
+`sheet_fund_balances_truncated` when the 500-row cap bites. Do not sum a truncated page — the note
+above points at `query_finances(fund_balances)` for an annual budget total, and that is the call to
+make for any figure that has to add up.
 
 ---
 
