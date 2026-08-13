@@ -145,38 +145,114 @@ zero drawn from an unpopulated column is exactly the false fact this runbook is 
 path is covered by unit test only; it is not reachable with a fixture that populates the
 column.
 
-**Not propagated.** Sibling tools with the same shape are listed below.
+**Propagated to the sibling tools in fix 8 below.**
+
+### 7. `query_attendance` declared `current_phase` and never read it
+
+Added 2026-08-13, OpenProject `#209`.
+
+`query-attendance.ts:20` accepted `current_phase`; nothing in the handler applied it. Every
+other occurrence of the name in the file was something else — the `group_by` enum member, or
+an output field shaped from a joined student record — which is what made it hard to see by
+reading.
+
+So a caller scoping attendance to one phase got **every phase back**, in a response whose
+own envelope named the filter. Not a silent zero but a silent **superset**, which is the
+worse direction: a zero invites suspicion, and a plausible org-wide rate presented as a
+phase rate does not. Any phase-scoped attendance rate ever quoted from this tool was the
+org-wide rate. Same class as `query_finances.contains` in fix 2 — a declared parameter the
+handler ignores.
+
+Fix: `attendance_records` carries a bare `student_number` with **no relation** to
+`students` (`schema.prisma`, `model AttendanceRecord`), so the phase cannot be a column
+predicate. It is resolved to its student numbers first — one read that yields both the
+predicate and the domain, so the two cannot disagree — and matched as
+`studentNumber: { in: [...] }`. That goes in through Prisma's `AND` rather than onto
+`where.studentNumber`, because `student_number` and `current_phase` can both be supplied and
+assigning the same key twice keeps only one: a student number outside the requested phase
+now returns a truthful zero rather than every row for that student.
+
+`current_phase` and `cohort` are domain-checked on the way in, on the same rule as fix 6.
+The `current_phase` domain is scoped to students **who have an attendance row** — that is
+the population the tool answers over at all, so offering a phase held only by students with
+no attendance data would move the false zero one round trip later rather than remove it. It
+is *not* scoped by the caller's cohort or dates, for the fix-6 reason.
+
+**Two other declared inputs on the same tool, checked while there.** `enrollment_status` is
+not a filter at all here, only a `group_by` member, so there was nothing to apply. `limit`
+was read by the `events` branch alone, so `by_student` returned every student to a caller
+who asked for ten and `aggregate` said nothing about ignoring it. `by_student` now pages on
+it, reporting `total_students` (matched), `students_returned` and `truncated` separately —
+the `student_count`-is-sometimes-a-page-size trap recorded under `#195` below — and orders
+the page by `student_number`, since the rows arrive in whatever order Postgres yields.
+
+Every response now echoes `filters_applied`, plus `filters_ignored` for an input the
+query_type cannot honour (`limit` on `aggregate`) or a blank value treated as absent,
+following the contract fix 6 established.
+
+`apps/mcp-server/src/__tests__/query-attendance-filters.test.ts`. Verified load-bearing by
+mutation: reverting the predicate fails 9 of the 14 cases, disabling the domain check fails
+the 3 error cases and nothing else. The membership assertions are the ones that pin it —
+they name the student the phase must exclude, so they fail with the filter reverted rather
+than merely on an empty table.
+
+### 8. The unmatchable-filter check reached only `query_enrollment`
+
+Added 2026-08-13, OpenProject `#210`. Fix 6 was deliberately scoped to one tool; these are
+the siblings with the same shape, now done.
+
+| Tool | Filters domain-checked | Column |
+|---|---|---|
+| `query_students` | `enrollment_status`, `current_phase`, `cohort`, `hs_graduation_year`, `withdrawal_code` | `students.*` |
+| `query_postsecondary` | `enrollment_status`, `class_level` | `student_postsecondary.*` |
+| `query_certifications` | `phase` | `student_certifications.phase` |
+
+`query_students` was the one that mattered: it filters the **same**
+`students.enrollment_status` and `students.current_phase` columns with the same short source
+codes, so the identical `enrollment_status: 'Active'` → confident zero stayed reachable
+through it after fix 6 closed the other door. `query_certifications` had the worst-*reading*
+one: `summary` answered `{ total: 0, passed: 0, pass_rate_pct: null }`, which is not "that
+phase does not exist" but "nobody in that phase has certified".
+
+Two filters listed in `#210`'s own table turned out not to belong here. `query_students`
+gained `cohort` and `hs_graduation_year` — both exact-match, same shape, so they are checked
+too. `query_certifications.type` is a `contains` match, not exact, so it falls under the
+substring class that ticket deliberately left out of scope.
+
+The check itself is unchanged: `unmatchableFilterError` in
+`apps/mcp-server/src/filter-domain.ts` was already pure and tool-agnostic. What this fix
+added is `filter-domain-loaders.ts`, the Prisma half — one loader per column, shared rather
+than copied, because `query_students` and `query_enrollment` read the *same two columns* and
+a second copy of either loader is a second place for the two tools to drift on what "the
+values present" means. `filterStr` moved from `query-enrollment.ts` to `tool-helpers.ts` for
+the same reason: all four tools need identical blank-means-absent semantics, or the domain
+check errors on an empty string the caller never asked to match.
+
+`query_students` also switched its `where` clause from truthiness to presence
+(`cohort ? ...` → `cohort !== undefined ? ...`). A zero-valued filter was silently dropped,
+which is unscoping one value wide. Neither zero occurs in the data, so this changes no
+existing answer; it stops the `where` clause from disagreeing with the domain check, which
+keys off presence. **Not covered by a test** — it is not observable without planting a
+cohort 0.
+
+**Deliberately still out of scope.** The substring filters —
+`query_employment.employer_name` / `exit_code`, `query_postsecondary.institution` /
+`institution_type`, `query_competency.competency`, `query_hours.person`,
+`query_students.school`, `query_certifications.type` — are the same class with a wider net. A
+domain list fits a `contains` filter poorly: a substring matching no value is not the same
+fact as a value absent from a column, and enumerating a free-text column's distinct values is
+not a usable error message. Each tool's suite now pins this as a decision rather than an
+oversight, asserting that a nonsense substring still returns a silent zero.
+`query_donors.donor_type` / `status` remain moot until that tool has a data source at all
+(below).
+
+`apps/mcp-server/src/__tests__/sibling-filter-domains.test.ts`, both directions per tool.
+Verified load-bearing by mutation, and the two mutations separate cleanly: neutralising the
+three checks fails exactly the 7 error-direction cases, and scoping one domain by a sibling
+filter fails exactly the 1 legitimate-zero case. That second result is the boundary — it is
+the test that stops a future change from replacing the false zero with a false error.
 
 ## Found, not fixed, needs a decision
-
-### The unmatchable-filter check is `query_enrollment`-only
-
-Added 2026-08-13 alongside fix 6, which was deliberately scoped to one tool. These take a
-free-text filter, apply it as an exact column match, enumerate nothing, and return an empty
-answer for a value that cannot match:
-
-| Tool | Filters | Match |
-|---|---|---|
-| `query_students` | `enrollment_status`, `current_phase`, `withdrawal_code` | exact (`query-students.ts:87`, `:88`, `:100`) |
-| `query_postsecondary` | `enrollment_status`, `class_level` | exact (`:80`, `:81`) — description does enumerate the NSC codes |
-| `query_certifications` | `phase`, `type` | exact (`:34`) |
-| `query_donors` | `donor_type`, `status` | exact — moot until the tool has a data source at all (above) |
-
-`query_students` is the sharpest of these: same `students` columns, same codes, same
-`'Active'` failure available today.
-
-Substring filters — `query_employment.employer_name` / `exit_code`,
-`query_postsecondary.institution`, `query_competency.competency`, `query_hours.person`,
-`query_students.school` — are the same class with a wider net. A typo still returns a silent
-zero, but a domain list is a poor fit for a `contains` filter and needs its own thinking.
-
-### `query_attendance` declares `current_phase` and never reads it
-
-`query-attendance.ts:20` accepts `current_phase`; nothing in the handler applies it. Only
-the `group_by: 'current_phase'` path touches the column. So a caller scoping attendance to
-one phase gets every phase back, reported as if scoped — the same declared-and-ignored
-filter as `query_finances.contains` in fix 2 above, which is the opposite failure to a
-silent zero and equally quiet.
 
 
 ### `query_donors` has no data source in production

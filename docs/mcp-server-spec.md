@@ -125,11 +125,31 @@ Cohorts are loose Launchpad groupings; a student may move between cohorts as the
       "enum": ["cohort", "current_phase", "race", "gender", "school", "enrollment_status", "graduation_year"],
       "description": "For 'aggregate' only. Default 'cohort'."
     },
-    "limit": { "type": "number", "description": "For 'events' only. Default 200, max 500." }
+    "limit": { "type": "number", "description": "'events': default 200, max 500. 'by_student': pages the student list, default all, max 1000. 'aggregate': reported in filters_ignored." }
   },
   "required": ["query_type"]
 }
 ```
+
+> **Implemented filter set, as of `#209`.** `student_number`, `cohort`, `current_phase`,
+> `start_date`, `end_date` and `limit` are the inputs the handler reads. `race`, `gender`,
+> `school`, `enrollment_status` and `graduation_year` above are design intent and are *not*
+> wired as filters — `enrollment_status` exists only as a `group_by` member. Treat them as
+> a backlog, not current behavior.
+>
+> `current_phase` was itself declared and never applied until `#209`, so a caller scoping
+> attendance to one phase received the org-wide result reported as if scoped. It now
+> resolves the phase to its students (`attendance_records` carries a bare `student_number`
+> with no relation to `students`) and matches on that, conjunctively with `student_number`.
+>
+> Every response echoes `filters_applied`, plus `filters_ignored` for an input the
+> query_type cannot honour (`limit` on `aggregate`) or a blank value treated as absent. A
+> `current_phase` or `cohort` value absent from its column returns a `no_records` error
+> listing the values present rather than an empty answer — see
+> [the silent-empty-results runbook](runbooks/mcp-silent-empty-results.md).
+>
+> `by_student` reports `total_students` (matched), `students_returned` (page) and
+> `truncated` separately, and orders the page by `student_number`.
 
 **Rate calculation:**
 - Cohort 1 — weighted average of the `percentage` column.
@@ -225,6 +245,12 @@ Query college enrollment data from the `student_postsecondary` table (National S
   "required": []
 }
 ```
+
+> As of `#210`, `enrollment_status` and `class_level` are matched against the distinct
+> values their own column holds — a valid NSC code that is absent from Launchpad's data
+> still cannot match, so it returns a `no_records` error listing the codes present rather
+> than a graduation rate over zero records. `institution` and `institution_type` are
+> substring matches and are not checked that way.
 
 ---
 
@@ -793,7 +819,7 @@ Population-level analytics on the `students` table. Supports numeric stats (avg/
 
 > Note: as of the current implementation, only `current_phase`, `enrollment_status`, `cohort`, `neighborhood`, `zip`, `school_name`, `hs_graduation_year`, and `withdrawal_code` are wired into `BREAKDOWN_FIELDS`. `distance_to_office` and `hs_graduation_year` are wired into the `filter_field` numeric-range filter (`filter_min`/`filter_max`); only `distance_to_office` is wired into `NUMERIC_FIELDS` (the `numeric_stats` aggregate query type). The remaining fields below describe the original design intent but are not yet implemented — treat them as a backlog, not current behavior.
 
-**Filter set (all query types):** enrollment_status, current_phase, cohort, school (partial match on school_name), hs_graduation_year (exact match; range via `filter_field=hs_graduation_year`), dob_start / dob_end (ISO date bounds on date of birth), withdrawal_code (exact match), withdrawal_date_start / withdrawal_date_end (ISO date bounds), zip, plus numeric range on distance_to_office via `filter_field` + `filter_min` / `filter_max`. Everything else in this line — race, gender, graduation_year (LP program), entry_date_start/end, city, college_enroll, university (partial), major, workforce_program_referral, workforce_referral_status, internship_status, income/parental_ed ranges — is not yet implemented (see note above).
+**Filter set (all query types):** enrollment_status, current_phase, cohort, school (partial match on school_name), hs_graduation_year (exact match; range via `filter_field=hs_graduation_year`), dob_start / dob_end (ISO date bounds on date of birth), withdrawal_code (exact match), withdrawal_date_start / withdrawal_date_end (ISO date bounds), zip, plus numeric range on distance_to_office via `filter_field` + `filter_min` / `filter_max`. The five exact-match filters — `enrollment_status`, `current_phase`, `cohort`, `hs_graduation_year`, `withdrawal_code` — are domain-checked as of `#210`: a value absent from its column returns a `no_records` error listing the values present, instead of an empty answer. `school` is a substring match and is deliberately not checked that way. See [the silent-empty-results runbook](runbooks/mcp-silent-empty-results.md). Everything else in this line — race, gender, graduation_year (LP program), entry_date_start/end, city, college_enroll, university (partial), major, workforce_program_referral, workforce_referral_status, internship_status, income/parental_ed ranges — is not yet implemented (see note above).
 
 `withdrawal_code`/`withdrawal_date` are designed as join keys for cross-tool analysis: pull a `student_number` list filtered by withdrawal reason or date here, then feed those numbers into `query_certifications`, `query_attendance`, etc. to correlate withdrawal with outcomes in other data sources.
 
@@ -806,6 +832,12 @@ Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdo
 **Query types:** `summary`, `by_type`, `by_phase`, `by_result`, `by_zip`, `scores`.
 
 **Filters:** `type`, `phase`, `result` (Pass / Fail), `start_date`, `end_date` — all apply to `by_zip` too.
+
+As of `#210`, `phase` is matched against the distinct values that column holds; an absent
+value returns a `no_records` error listing the phases present, rather than
+`{ total: 0, passed: 0, pass_rate_pct: null }`, which reads as "nobody in that phase has
+certified". `type` is a substring match and is not checked that way; `result` is an enum
+and is rejected before the handler runs.
 
 `by_zip` joins to `students.zip` (zip isn't a column on `student_certifications`) and returns `{ zip, count, avg_score }` per zip, e.g. `query_type=by_zip, type=PCEP` for average PCEP score by zip code. Rows with a null zip are excluded.
 
