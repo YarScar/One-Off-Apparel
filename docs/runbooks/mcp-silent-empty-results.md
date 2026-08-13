@@ -158,3 +158,44 @@ field needs a cohort restriction or a `note` explaining the denominator.
 count overstates the number of schools. `by_race` returns multi-select answers as
 delimited combinations inside one value, so rows cannot be summed. Both are
 correct as raw data and dangerous as reportable figures.
+
+### `query_students` and `query_enrollment` report a page size as a student count
+
+Added 2026-08-13, OpenProject `#195`. Found while porting these fixes into the
+North10 fork (`north10-ai` #193) and diffing the two repos.
+
+Fix 3 above solved this for `query_finances` — `total_matching`, `truncated`,
+`tab_names_matched`. **It was never propagated to the sibling tools.**
+`query_attendance` and `query_hours` do carry `truncated`. Three paths do not:
+
+| Site | `query_type` | `orderBy` |
+|---|---|---|
+| `apps/mcp-server/src/tools/query-students.ts:191` | `list` | `canonicalName` only |
+| `apps/mcp-server/src/tools/query-enrollment.ts:99` | `active_during` | **none** |
+| `apps/mcp-server/src/tools/query-enrollment.ts:174` | `by_student` | **none** |
+
+All three `take: limit` (default 500, cap 1000) and return
+`student_count: rows.length` with no total and no truncation flag.
+
+**The field name is the trap.** In the same tool, `query-enrollment.ts:66`
+(`query_type: 'total'`) returns `student_count` from a real `prisma.count()`. So
+`student_count` is a true total on one path and a page size on two others, with
+nothing in the response to tell them apart. Ask how many students were active
+during a window and you get a plausible number that is silently
+`min(actual, 500)` — the same shape as the empty results this runbook is about: a
+well-formed answer that reads as fact.
+
+**Ordering compounds it.** The two enrollment paths have no `orderBy`, so row
+order is whatever Postgres returns and a truncated page is an arbitrary subset
+that can differ between identical calls. `query_students` sorts on
+`canonicalName` alone, which is not unique, so duplicate names tie and reorder.
+
+Fix, following what `query_finances` established: a `count({ where })` beside the
+`findMany`, `total_matching` and `truncated` in the response, and an `orderBy`
+ending in a guaranteed-unique column. The North10 equivalents are commits
+`7e43ee8` and `d39d7f7`; the `McpStdioClient` harness there was ported *from*
+this repo and gained a `dist/`-staleness guard worth pulling back.
+
+**Severity, for prioritising:** no path here sums currency from a truncated page,
+so unlike the North10 money tools there is no wrong dollar figure. The exposure is
+headcount and completeness claims.
