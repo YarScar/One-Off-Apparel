@@ -72,7 +72,7 @@ Four logical layers: **data sources → connectors → storage → MCP server + 
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                   MCP SERVER  (25 tools)                            │
+│                   MCP SERVER  (24 tools)                            │
 │                                                                     │
 │  Exposes structured Prisma queries + pgvector semantic search       │
 │  as Model Context Protocol tools.                                   │
@@ -161,7 +161,7 @@ lp-internal-ai-v1/
 │   │   ├── auth.ts                  # NextAuth v5 config + Google provider
 │   │   ├── middleware.ts            # Route guard
 │   │   └── Dockerfile
-│   ├── mcp-server/                  # MCP server — 25 tools
+│   ├── mcp-server/                  # MCP server — 24 tools
 │   │   ├── src/
 │   │   │   ├── index.ts             # Entry: stdio (Claude Desktop)
 │   │   │   ├── serve-http.ts        # Entry: Streamable HTTP (ECS Fargate)

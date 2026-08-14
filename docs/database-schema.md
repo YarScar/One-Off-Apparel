@@ -90,14 +90,6 @@ Key columns: `id` (UUID PK), `source_id` (unique), `cohort` (1|2|3), `student_nu
 
 Indexes: `student_number`, `(cohort, date)`, `date`.
 
-#### `hour_logs`
-
-Team hour logs from the shared Hours spreadsheet. One row per spreadsheet row; the `project` column carries the engagement tab ("North10AI" or "LP Internal AI"), so both engagements stay in one table. Headers are mapped dynamically at sync time and the full source row is preserved in `row_data`.
-
-Key columns: `id` (UUID PK), `source_id` (unique, format `hours:<tabKey>:<sheetRowNumber>`), `project`, `source_tab`, `log_date`, `person_name`, `hours` (decimal), `task`, `row_data` (JSON).
-
-Indexes: `project`, `log_date`, `person_name`.
-
 #### `finance_snapshots`
 
 Generic JSON store for tabular financial and CRM data ingested from multiple Google Sheets. Each row is one source-sheet row; column shapes vary by tab.

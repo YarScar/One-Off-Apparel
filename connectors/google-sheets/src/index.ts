@@ -12,7 +12,6 @@ import { syncPhaseActualsQ3_2026, syncPhaseActuals2025 } from './sync-phase-dash
 import { syncStudentCompetency } from './sync-student-competency.js';
 import { syncAttendance } from './sync-attendance.js';
 import { syncEnrollment } from './sync-enrollment.js';
-import { syncHours } from './sync-hours.js';
 
 export type SyncResult = SyncRunRecord;
 
@@ -44,7 +43,6 @@ export async function sync(): Promise<SyncResult> {
     const devCrm = await safeRun('development CRM', syncDevelopmentCRM);
     const attendance = await safeRun('attendance', syncAttendance);
     const enrollment = await safeRun('enrollment', syncEnrollment);
-    const hours = await safeRun('hours', syncHours);
 
     let distanceUpdated = 0;
     let distanceSkipped = 0;
@@ -61,12 +59,12 @@ export async function sync(): Promise<SyncResult> {
       students + outcomes + employment + postsecondary + certifications +
       dashboard + phaseBudget + phaseQ3 + phase2025 +
       rapid + pex + competency + devCrm +
-      attendance + enrollment + hours + distanceUpdated;
+      attendance + enrollment + distanceUpdated;
 
     return {
       status: 'ok',
       recordsUpserted: total,
-      notes: `students: ${students}; outcomes: ${outcomes}; employment: ${employment}; postsecondary: ${postsecondary}; certifications: ${certifications}; dashboard: ${dashboard}; phase_budget: ${phaseBudget}; phase_q3_2026: ${phaseQ3}; phase_2025: ${phase2025}; rapid: ${rapid}; pex: ${pex}; competency: ${competency}; dev_crm: ${devCrm}; attendance: ${attendance}; enrollment: ${enrollment}; hours: ${hours}; distances: ${distanceUpdated} updated / ${distanceSkipped} skipped`,
+      notes: `students: ${students}; outcomes: ${outcomes}; employment: ${employment}; postsecondary: ${postsecondary}; certifications: ${certifications}; dashboard: ${dashboard}; phase_budget: ${phaseBudget}; phase_q3_2026: ${phaseQ3}; phase_2025: ${phase2025}; rapid: ${rapid}; pex: ${pex}; competency: ${competency}; dev_crm: ${devCrm}; attendance: ${attendance}; enrollment: ${enrollment}; distances: ${distanceUpdated} updated / ${distanceSkipped} skipped`,
     };
   }, {
     tables: [
@@ -78,7 +76,6 @@ export async function sync(): Promise<SyncResult> {
       'student_postsecondary',
       'attendance_records',
       'enrollment_snapshots',
-      'hour_logs',
       'finance_snapshots',
       'entity_aliases',
     ],
@@ -98,4 +95,3 @@ export { syncPhaseActualsQ3_2026, syncPhaseActuals2025 } from './sync-phase-dash
 export { syncStudentCompetency } from './sync-student-competency.js';
 export { syncAttendance } from './sync-attendance.js';
 export { syncEnrollment } from './sync-enrollment.js';
-export { syncHours } from './sync-hours.js';

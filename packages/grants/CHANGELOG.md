@@ -27,6 +27,56 @@ entry can be verified rather than trusted.
 
 ## 2026-08-14
 
+### Removed — `query_hours` and the hours ingestion, withdrawn from this branch
+
+Tool surface **25 → 24**; the google-sheets connector **13 → 12 spreadsheets**. Recorded here because
+it changes the tool surface, a connector's scope, the schema, the migration set, and the env contract —
+five of the six categories §5 says qualify.
+
+**Why.** It is not grant-writing work and it was not needed for this PR. Hours are handled in a separate
+project at `~/Projects/hours`, which has its own store and its own MCP server — the same one that
+records time against these work packages. Keeping a second, read-only mirror of the same spreadsheet
+inside the LP platform meant two things claiming the same fact.
+
+**What came out.** `apps/mcp-server/src/tools/query-hours.ts` and its registration;
+`connectors/google-sheets/src/sync-hours.ts` and its wiring, export, table declaration and `sync_runs`
+notes field; the `HourLog` model; migrations `20260812000000_add_hour_logs` and
+`20260812100000_add_query_hours_permission`; the seed's three `HOUR_LOGS` rows and their teardown;
+`GOOGLE_SHEETS_HOURS_ID` from `packages/config/src/schema.ts` and `.env.example`; the four
+`query_hours` integration cases; and the `hour_logs` / `query_hours` sections of
+`docs/mcp-server-spec.md`, `docs/database-schema.md`, `docs/data-sources/google-sheets-connector.md`,
+`docs/user-guides/using-the-mcp-server.md` and `docs/runbooks/mcp-silent-empty-results.md`.
+
+**What deliberately stayed.** `41b16ef` mixed two concerns, and only one was withdrawn. **The OpenProject
+work-tracking mandate stays** — the rule at the top of the root `CLAUDE.md`, and `OPENPROJECT_URL` /
+`OPENPROJECT_PROJECT_ID` / `OPENPROJECT_API_KEY` in `.env.example`. A plain `git revert 41b16ef` would
+have taken the mandate with it; this was done hunk by hunk instead.
+
+**If you have a local clone**, the two migrations were already applied. Drop the table, delete the
+permission row, and remove both `_prisma_migrations` rows, or `migrate status` reports applied
+migrations whose files no longer exist:
+
+```sql
+DROP TABLE IF EXISTS "hour_logs";
+DELETE FROM "tool_permissions" WHERE tool_name = 'query_hours';
+DELETE FROM _prisma_migrations
+ WHERE migration_name IN ('20260812000000_add_hour_logs','20260812100000_add_query_hours_permission');
+```
+
+Verified after: 14 migrations found, "Database schema is up to date", and `prisma migrate diff` shows
+only the three documented `uuid` entries — **zero mentions of `hour_logs` anywhere in the diff**.
+
+**Re-gated after the removal**, not assumed: `pnpm -r build` and `pnpm -r typecheck` clean, `pnpm test`
+**373 passed across 19 files, zero skipped** — 377 minus exactly the four `query_hours` integration
+cases, which is the arithmetic that says nothing else broke. Tool count 24 by the §6 command.
+
+**Preserved, not deleted.** `41b16ef` is on the **`feat/hours-ingestion`** branch, pushed, so re-landing
+is a cherry-pick. Two things to know if that happens: the cherry-pick must **drop** the `CLAUDE.md` and
+`.env.example` OpenProject hunks, since those are already on `main`'s side of the history; and the
+direction conflict recorded on work package **#180** still stands — **F4 (#88) retires the shared Hours
+spreadsheet** in favour of logging against work packages, so reading that sheet may never be worth
+re-landing. `CLAUDE.md` §4 item 15 carries this.
+
 ### Verified — the merged finance and filter fixes close three gaps the register listed as open
 
 OpenProject `#216`. PRs **#49** (finance tab mapping) and **#50** (`query_enrollment` filters) merged
@@ -83,8 +133,10 @@ free-text `current_phase`, and read an empty `breakdown` from a value-based filt
 Run 2026-08-14 before opening the PR: `pnpm -r build` clean across all packages **including `apps/hq`**,
 which is the only one whose build runs ESLint; `pnpm -r typecheck` clean across all fourteen;
 `pnpm test` **377 passed across 19 files, zero skipped**, in 15.4s, with the live-DB suites executing
-rather than skipping. `packages/grants` alone is 240 in 9. Tool surface is **25** on this branch against
-**21** on `main`; the four it adds are `query_hours` and the three `grant_*` tools. The §6 permission
+rather than skipping. `packages/grants` alone is 240 in 9. Tool surface was **25** on this branch against
+**21** on `main` at the time of this run; `query_hours` was withdrawn later the same day, so the figures
+below this entry are 24 and the three `grant_*` tools. Re-gated after the withdrawal — see the entry
+above. The §6 permission
 check is empty, so nothing fails closed locally — **but the grant rows are still unverified on RDS
 (A7, #163), and the registry fails closed, so those three tools will refuse every caller in production
 until that migration is applied.**

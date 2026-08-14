@@ -237,7 +237,7 @@ cohort 0.
 
 **Deliberately still out of scope.** The substring filters —
 `query_employment.employer_name` / `exit_code`, `query_postsecondary.institution` /
-`institution_type`, `query_competency.competency`, `query_hours.person`,
+`institution_type`, `query_competency.competency`,
 `query_students.school`, `query_certifications.type` — are the same class with a wider net. A
 domain list fits a `contains` filter poorly: a substring matching no value is not the same
 fact as a value absent from a column, and enumerating a free-text column's distinct values is
@@ -316,7 +316,7 @@ North10 fork (`north10-ai` #193) and diffing the two repos.
 
 Fix 3 above solved this for `query_finances` — `total_matching`, `truncated`,
 `tab_names_matched`. **It was never propagated to the sibling tools.**
-`query_attendance` and `query_hours` do carry `truncated`. Three paths do not:
+`query_attendance` does carry `truncated`. Three paths do not:
 
 | Site | `query_type` | `orderBy` |
 |---|---|---|

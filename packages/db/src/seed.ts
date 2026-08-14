@@ -110,39 +110,6 @@ const DONORS = [
   },
 ];
 
-const HOUR_LOGS = [
-  {
-    sourceId: 'seed:hours:1',
-    project: 'LP Internal AI',
-    sourceTab: 'LP Internal AI',
-    logDate: new Date('2026-08-03'),
-    personName: 'Mili',
-    hours: 6.5,
-    task: 'Hour log tracking system',
-    rowData: { date: '8/3/2026', person: 'Mili', hours: '6.5', task: 'Hour log tracking system' },
-  },
-  {
-    sourceId: 'seed:hours:2',
-    project: 'LP Internal AI',
-    sourceTab: 'LP Internal AI',
-    logDate: new Date('2026-08-04'),
-    personName: 'Mili',
-    hours: 4,
-    task: 'MCP tool review',
-    rowData: { date: '8/4/2026', person: 'Mili', hours: '4', task: 'MCP tool review' },
-  },
-  {
-    sourceId: 'seed:hours:3',
-    project: 'North10AI',
-    sourceTab: 'North10AI',
-    logDate: new Date('2026-08-05'),
-    personName: 'Jordan',
-    hours: 7,
-    task: 'Board report',
-    rowData: { date: '8/5/2026', person: 'Jordan', hours: '7', task: 'Board report' },
-  },
-];
-
 const FINANCE = [
   {
     sourceId: 'seed:fund_balances:1',
@@ -198,7 +165,6 @@ export async function seed(
   await prisma.donorPipeline.deleteMany();
   await prisma.donorContact.deleteMany();
   await prisma.financeSnapshot.deleteMany();
-  await prisma.hourLog.deleteMany();
 
   for (const s of STUDENTS) {
     const student = await prisma.student.create({
@@ -264,10 +230,6 @@ export async function seed(
 
   for (const f of FINANCE) {
     await prisma.financeSnapshot.create({ data: f });
-  }
-
-  for (const h of HOUR_LOGS) {
-    await prisma.hourLog.create({ data: h });
   }
 
   return { studentsInserted: STUDENTS.length, donorsInserted: DONORS.length };

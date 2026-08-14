@@ -352,7 +352,7 @@ tool needs a `total_matching` / `truncated` pair of the kind PR #49 adds to `que
 |---|---|---|
 | `fix/mcp-finance-tab-mapping` | **PR #49 MERGED and deployed 2026-08-13 15:25** | §1.1, §1.2, §8.2 — finance tab matching, `budget_actuals` tabs, `sheet_fund_balances`, funds-snapshot dedup, honest `record_count`, plus the `query_finances` / `get_finance_brief` spec corrections. **All verified live 2026-08-14.** |
 | `fix/query-enrollment-filter-application` | **PR #50 MERGED and deployed 2026-08-13 16:28** | §8.1 — all five non-date filters applied on all eight query types, plus the `filters_applied` / `filters_ignored` echo. **Verified live 2026-08-14.** |
-| `writing/dev` (this branch) | **44 commits ahead of `main`, PR not yet opened** | §8.4 — the `no_records` unmatchable-filter guard on `query_enrollment` and its three sibling tools, the `query_attendance` `current_phase` fix, `query_hours`, and the entire grant layer (`packages/grants`, three `grant_*` tools). **None of this is in production.** |
+| `writing/dev` (this branch) | **PR #51 open against `main`** | §8.4 — the `no_records` unmatchable-filter guard on `query_enrollment` and its three sibling tools, the `query_attendance` `current_phase` fix, and the entire grant layer (`packages/grants`, three `grant_*` tools). **None of this is in production.** |
 | `fix/google-drive-discovery` | not merged, not reviewed | the Grants corpus connector (`find_grant_documents`), which is the rung-3 prior-filings source the gap-fill ladder depends on |
 
 **#49 and #50 shipped, and the §1 finance figures were re-sourced on 2026-08-14** — they are in

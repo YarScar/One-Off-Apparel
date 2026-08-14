@@ -84,10 +84,11 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. All migrations applied. The full suite is **377 tests across 19
+`pg_trgm 1.6` via `pnpm db:up`. **14 migrations applied.** The full suite is **373 tests across 19
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
 over stdio. Measured 2026-08-14 after `pnpm -r build` and `pnpm -r typecheck`, both clean across all
-fourteen packages. (294 across 14 before three sources added five files between them: the
+fourteen packages. (377 earlier the same day, before `query_hours` was withdrawn and took its four
+integration cases with it — §4 item 15. 294 across 14 before three sources added five files: the
 `#207`/`#209`/`#210` filter work added `filter-domain.test.ts`, `query-attendance-filters.test.ts` and
 `sibling-filter-domains.test.ts`; PRs #49 and #50, merged from `main`, brought `finance-tab-map.test.ts`
 and `query-enrollment-filters.test.ts`.)
@@ -115,13 +116,14 @@ suite passed 187/187 throughout, and the break sat undetected in the working tre
 declarations can go stale while every case passes. `pnpm -r typecheck` caught exactly that on the
 same fix. The pairing is the check; neither half is.
 
-**MCP server: 25 tools registered** on this branch — 17 data, the three `grant_*` tools, and 5
-`skill_*`. Counted 2026-08-14 by the §6 command. Two arrived since the 23 this section used to record:
-`query_hours` (`41b16ef`, this branch) and `skill_grant_sourcing_evaluation` (PR #48, from `main`).
-**The root `CLAUDE.md` says 24 and is one behind** — it predates `query_hours`; §4 item 13 carries that.
+**MCP server: 24 tools registered** on this branch — 16 data, the three `grant_*` tools, and 5
+`skill_*`. Counted 2026-08-14 by the §6 command. The count moved twice in one day and both moves are
+worth knowing: `skill_grant_sourcing_evaluation` (PR #48, from `main`) took it from 23 to 24, and
+`query_hours` briefly took it to 25 before being **withdrawn from this branch** on 2026-08-14 — see §4
+item 15.
 
-**Production is at 21 of the 25.** `main` has neither `query_hours` nor the three `grant_*` tools, and
-gains all four only when this branch merges. Verify a tool's presence by reading its live *description*
+**Production is at 21 of the 24.** `main` lacks the three `grant_*` tools and
+gains them only when this branch merges. Verify a tool's presence by reading its live *description*
 rather than calling it — see `docs/INFORMATION-GAPS.md` §9.
 
 Every registered tool has a `tool_permissions` row locally — the §6 `comm -23` check is empty, run
@@ -202,7 +204,8 @@ unrecorded. Tracked build work lives in `bd` — `bd ready --json` — not here.
 | 7 | **The KB is missing the Lightspeed phase, still** | `kb_launchpad.json` `meta.connector_reconciliation` flagged this and recorded "Confirmed 2026-07-29: no answer in this file mentions Lightspeed." Re-confirmed **2026-08-11: still 0 of 29 slots**. Every drafted program description omits a phase. The connector was queried on 2026-08-11 and the facts are now in the `enrollment_by_phase` note in `src/figures.ts`, so the material to write it exists; what is left is programme copy in Launchpad's voice, which is a staff decision. **The reconciliation prose's own framing — `Foundations → 101 → Lightspeed → LiftOff` — is contradicted by the data** and must not be copied into a draft: Lightspeed is a 7-week summer intensive run twice, not a linear stage. |
 | ~~10~~ | ~~**`query_enrollment` silently drops filters it does not apply**~~ **RETIRED 2026-08-14** | PR #50 merged and deployed 2026-08-13 16:28, and verified live on 2026-08-14: `by_phase` with `phase: "Lightspeed"` returns only the four Lightspeed rows and echoes `filters_applied`. Detail in `docs/INFORMATION-GAPS.md` §8.1. **What replaced it is narrower and is item 14** — the unmatchable-*value* guard, which is a different fix and is not deployed. |
 | ~~11~~ | ~~**Finance tab-mapping fix still unmerged**~~ **RETIRED 2026-08-14** | PR #49 merged and deployed 2026-08-13 15:25. Verified live: `phase_budget_dashboard` → 163 rows, `fund_balances` → 185, `budget_actuals` → 364 across two tabs, all carrying `tab_names_matched` / `total_matching` / `truncated`. The budget figures the grant layer filed as `[DATA UNAVAILABLE]` are answered and re-sourced — `docs/runs/2026-08-11/filled/FIGURE-LEDGER.md` under "Re-source, 2026-08-14". **Two staff questions replace the tool defect:** which fiscal year the YTD tab covers (`grant-a54`), and whether the KB's `$1.34M` ever meant total expense — no live total matches it. |
-| ~~13~~ | ~~**Tool counts disagree across five files**~~ **FIXED 2026-08-14** | The set said 23 (`docs/setup/07-mcp-server.md`, `docs/setup/README.md`), 24 (root `CLAUDE.md`, `docs/mcp-server-spec.md`) and 23 (this file) against a real **25**. Two tools had landed unrecorded: `skill_grant_sourcing_evaluation` (PR #48) made the skill tools 5 rather than 4, and `query_hours` made the data tools 17. The root `CLAUDE.md` sentence was already inconsistent with its own total. All five now read 25, and the root file carries the `grep` that settles it so the next drift is one command away from being caught. |
+| ~~13~~ | ~~**Tool counts disagree across five files**~~ **FIXED 2026-08-14** | The set said 23 (`docs/setup/07-mcp-server.md`, `docs/setup/README.md`), 24 (root `CLAUDE.md`, `docs/mcp-server-spec.md`) and 23 (this file), while `skill_grant_sourcing_evaluation` (PR #48) had made the skill tools 5 rather than 4 without any file recording it. The root `CLAUDE.md` sentence was already inconsistent with its own total. All now read **24** — the figure after `query_hours` was withdrawn the same day (item 15) — and the root file carries the `grep` that settles it, so the next drift is one command away from being caught rather than found by hand. **A count in prose is a claim with a shelf life; quote the command instead.** |
+| 15 | **`query_hours` was withdrawn from this branch, and the hours capability now lives elsewhere** | Landed 2026-08-13 (`41b16ef`, work packages #180/#181) as a 17th data tool over an `hour_logs` table fed by a 13th Google Sheets spreadsheet. Removed 2026-08-14: it is not grant-writing work, it was not needed for this PR, and hours are now handled in a separate project at `~/Projects/hours`, which has its own store and its own MCP server. **The commit is preserved on the `feat/hours-ingestion` branch** (pushed), so re-landing it is a cherry-pick rather than a rewrite — but note `41b16ef` also carries the OpenProject work-tracking mandate, which **stays** on this branch, so a future cherry-pick must drop the `CLAUDE.md` and `.env.example` OpenProject hunks. The direction conflict recorded on #180 still stands: F4 (#88) retires the shared Hours spreadsheet in favour of logging against work packages, so re-landing the sheet reader may never be the right move. |
 | 14 | **The unmatchable-filter-value guard is written and not deployed** | `query_enrollment(by_phase, current_phase: "Zzzznotaphase")` returns an empty breakdown with no error **in production**. The guard is at `apps/mcp-server/src/tools/query-enrollment.ts:217-224` on this branch, tested by `filter-domain.test.ts` and `sibling-filter-domains.test.ts`, and sits in the 44 commits `main` does not have. This is not documentation debt — it is the cost of not merging, recorded so the empty answer is not re-diagnosed as a new defect. `docs/INFORMATION-GAPS.md` §8.4. |
 | 12 | **Rebuild workspace packages before believing a type error** | Not documentation debt so much as a trap that has now cost time twice. A stale `packages/db/dist/index.d.ts` (dated 2026-08-03, exporting `Prisma` as a type where `src/index.ts:3` exports it as a value) produced 8 × TS1362 in `query-certifications.ts` and 9 integration failures on 2026-08-12 that read exactly like a defect on `master`. It was reported as such and withdrawn after `pnpm --filter @lp-ai/lib-db build`. `master` was never broken. §3's insistence that `pnpm test` and `pnpm -r typecheck` are both needed is right but insufficient — **typecheck reported a stale artifact as a source error**. Add the workspace build to the pairing, or record why not. |
 | 8 | **Six KB slots cannot fill the longest ask routed to them** | The KB's own note says answers are "the LONGEST canonical version" and the pipeline resizes *down*. Measured 2026-08-11 against the largest word limit recorded on any question routing to each slot: `kb.staff_bios` 110 words vs 600, `kb.history` 119 vs 500, `kb.target_population` 86 vs 300, `kb.capacity` 129 vs 250, `kb.dei` 122 vs 250, `kb.evaluation` 116 vs 200. The `needs_expand` guard (2026-08-11) makes this visible at draft time rather than silent, but the underlying content is thin and expansion is where invention happens. |
@@ -249,7 +252,7 @@ pnpm exec prisma migrate diff \
 # Migration state
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 377 passed, 0 skipped, 19 files.
+# Full suite — expect 373 passed, 0 skipped, 19 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

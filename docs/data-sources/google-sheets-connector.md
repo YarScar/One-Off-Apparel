@@ -18,7 +18,6 @@ Syncs structured data from multiple Google Sheets into Postgres. The connector i
 | Attendance — Cohort 1 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_1` | `attendance_records` (cohort=1) |
 | Attendance — Cohort 2 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_2` | `attendance_records` (cohort=2) |
 | Attendance — Cohort 3 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_3` | `attendance_records` (cohort=3) |
-| Hours (North10AI + LP Internal AI) | `GOOGLE_SHEETS_HOURS_ID` | `hour_logs` (both tabs) |
 
 ## Read-Only Enforcement
 
@@ -124,17 +123,6 @@ Skipped headers (sheet-script metadata): `sheetName`, `sheetId`, `spreadsheetNam
 ### Student Competency
 
 The scores tab is detected by content (its name includes a date suffix that changes per export, e.g. `StudentCompetency 2026-04-29T12...`). Stored as `student_competency:scores`. The rubric tab (`Sheet1`) has a multi-row header layout (rows 2–4 combined) — stored as `student_competency:rubric`.
-
-### Hours (North10AI + LP Internal AI)
-
-One spreadsheet, one tab per engagement. Both tabs sync into the `hour_logs` table; `project` carries the tab name so cross-engagement totals work in a single table.
-
-| Tab | Destination |
-|---|---|
-| `North10AI` | `hour_logs` (project = `North10AI`) |
-| `LP Internal AI` | `hour_logs` (project = `LP Internal AI`) |
-
-Unlike the other sheets, headers are **discovered at sync time**, not pinned: each header is normalized to a snake_case key and classified into one of four slots (date / person / hours / task) by fuzzy name matching. Unknown columns are preserved verbatim in `row_data`, so a reordered or renamed sheet never drops data — only typed-field promotion is affected. `source_id` is `hours:<tabKey>:<sheetRowNumber>`; upsert + stale-cleanup removes rows deleted from the sheet. A tab with no recognizable headers is skipped with a warning.
 
 ## PII Handling Guardrails (Students tab)
 
