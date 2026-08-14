@@ -2,7 +2,7 @@
 
 ## Tool Availability
 
-The server currently exposes **24 tools** — 17 data tools, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 4 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+The server currently exposes **25 tools** — 17 data tools, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 5 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Counted 2026-08-14; `main` is at 21, and gains `query_hours` plus the three `grant_*` tools when `writing/dev` merges. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
 
 **Active tools (17):**
 - `get_student_info` — Sheets student roster + Drive student info doc
@@ -35,7 +35,7 @@ Composite tools (`get_entity_brief`, `get_finance_brief`) MUST gracefully omit s
 
 ## Overview
 
-The MCP server exposes 24 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
+The MCP server exposes 25 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
 
 Every tool call is logged to the `usage_logs` Postgres table (tool name, timestamp, duration, caller identity, token usage).
 
