@@ -27,6 +27,47 @@ entry can be verified rather than trusted.
 
 ## 2026-08-14
 
+### Corrected — the deploy pipeline does not apply migrations, and every document implying it does was wrong
+
+Work package `#220`, found while investigating `#163`. This is the §5 "correction to a documented
+procedure that was wrong" category, which that section calls the most valuable and most often skipped.
+
+**What is actually true.** `.github/workflows/deploy.yml` has a job named `migrate` that all three
+service deploys gate on (`needs: [changes, migrate]`). Its ECS one-off task runs exactly one statement:
+
+```sql
+SELECT migration_name FROM _prisma_migrations ORDER BY finished_at
+```
+
+It prints the list and exits 0. **No migration is applied by any part of the deploy path.** The step is
+titled "Run migrations via ECS one-off task" and its inline comment says it "runs each pending
+migration's SQL"; both are false. Alternatives ruled out: `infra/ecs/mcp-server-taskdef.json` sets no
+`entryPoint` and no `command`, the image `CMD` is `["node", "dist/serve-http.js"]`, no `start*` script in
+`apps/mcp-server/package.json` migrates, and `ci.yml` only ever migrates its own service container.
+
+The job's one useful output is discarded: CloudWatch logs are fetched only inside
+`if [ "$EXIT_CODE" != "0" ]`. Verified on run `31722645475` — the log contains "Waiting for migration
+task to complete...", "Migration task exit code: 0", and nothing else. **So the job can only fail if RDS
+is unreachable**; a missing migration passes it every time.
+
+**What this falsifies.** Any reading of the job graph as "migrations are applied before deploy" —
+which is the natural reading and, as far as can be told, the intended one. Concretely for this
+workstream: merging PR #51 will **not** create the grant `tool_permissions` rows on RDS, and since the
+registry fails closed, the three `grant_*` tools would deploy and refuse every caller including admin
+with a green deploy and no signal. `CLAUDE.md` §3 already said "production is less verified than local";
+it was understating the reason.
+
+**A live symptom probably already exists.** `20260812000000_add_grant_sourcing_evaluation_permission`
+merged with PR #48 on 2026-08-12, so `skill_grant_sourcing_evaluation` is registered on `main` with a
+permission row that was never applied. **Unverified** — RDS is not reachable from a developer machine
+and there is no `aws` CLI, `boto3` or `~/.aws` here. One call from a client that can reach production
+settles it, and it is the cheapest check on this page.
+
+**Two further errors in `#163`'s own text**, corrected in its comments rather than here: the migration
+it instructs you to carry, `20260806000100_add_find_grant_documents_permission`, **does not exist**; and
+**no migration anywhere inserts `find_grant_documents`**, though the row is present in the local
+database — so local state holds a `tool_permissions` row that no migration would reproduce on RDS.
+
 ### Removed — `query_hours` and the hours ingestion, withdrawn from this branch
 
 Tool surface **25 → 24**; the google-sheets connector **13 → 12 spreadsheets**. Recorded here because

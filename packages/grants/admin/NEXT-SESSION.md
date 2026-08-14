@@ -1,31 +1,109 @@
-# Next session — the database decision
+# Next session
 
 | Field | Value |
 |---|---|
 | Written | 2026-07-31, end of session |
-| Revised | 2026-07-31, following session — items 1 and 2 done |
-| Revised | 2026-08-03 — item 3's blockers cleared. Phase A closed and G1 passed. Refer to "What changed on 2026-08-03". |
-| Revised | 2026-08-04 — **D1 built and closed.** Refer to "What changed on 2026-08-04". |
-| Revised | 2026-08-04, later — **D2 settled and D3 built. G3 and G4 both passed.** Refer to "What changed at D3/G4". |
+| Revised | 2026-08-03, 2026-08-04, 2026-08-04 (later), 2026-08-06 — see the dated sections below |
+| Revised | **2026-08-14 — PR #51 is open, and the deploy pipeline does not apply migrations.** Start at "Where this stands, 2026-08-14". |
 | Purpose | Carry the plan forward so none of it is re-derived next time. |
-| Status | Items 1 and 2 done. **Item 3's blockers are gone**; its remaining question is a decision, not a task. D1 is closed and **two new decisions are open** — the G3 gate count and the knowledge-base content gap. |
-
-The previous revision listed three items. Two are closed. What remains is item 3, which was always a
-decision rather than a task. **Everything blocking this workstream is a decision, not a task.** That is
-the single most useful thing to know starting a session here.
-
-Of the two decisions D1 opened, **the G3 gate count is settled** (2026-08-04 — restated as 20, the 5
-resizer cases moved onto G4, both gates then passed). **The knowledge-base content gap has its
-mechanism now and its content remaining** — the pipeline half of `grant-miy` shipped 2026-08-10
-(per-question `structured` values plus the `fetch_figure` live-number path, `DECISIONS.md` D1a/D1b);
-what remains is Sean's content work — the ~14 values still to extract and the ~7 accepted-manual-fill
-decisions.
+| Status | **One thing to read before anything else: `#220`.** Everything else on this page is unchanged in substance. |
 
 ---
 
-## State now
+## Where this stands, 2026-08-14
 
-Checked rather than assumed, at the end of the 2026-08-06 D4 session.
+Everything below this section is the historical record and is still worth reading for the reasoning.
+This section is the current state. Four sessions landed between the 2026-08-06 revision and this one —
+the 2026-08-11 pipeline run, the 2026-08-12 live gap re-test, the 2026-08-13 tool-contract chain, and
+today.
+
+### Read this first: nothing in the deploy pipeline applies migrations
+
+`.github/workflows/deploy.yml` has a job named `migrate` that all three service deploys gate on. Its
+container command is a read-only `SELECT migration_name FROM _prisma_migrations ORDER BY finished_at`.
+It prints the list and exits 0. **It applies nothing**, despite the job name, the step title
+("Run migrations via ECS one-off task") and its own inline comment ("runs each pending migration's
+SQL"). Ruled out the alternatives: no `entryPoint`/`command` in the task definition, image `CMD` is
+`node dist/serve-http.js`, no `start*` script migrates, `ci.yml` never touches RDS.
+
+The job's one useful output — the applied-migration list — is fetched **only on failure**, so it is
+discarded on every successful run. Verified on run `31722645475`.
+
+**Why this outranks everything else here.** It changes what merging PR #51 means. The
+`tool_permissions` registry fails closed, so the three `grant_*` tools would deploy and refuse every
+caller including admin, with a green deploy and no signal anywhere. Work package **`#220`**, blocking
+**`#163`**.
+
+**Check first, because it is a live symptom rather than a pending one:** `skill_grant_sourcing_evaluation`
+merged with PR #48 on 2026-08-12 and its permission migration was never applied. It may be in production
+right now, registered and unreachable.
+
+### The state of the branch
+
+| | |
+|---|---|
+| PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard", 47 commits |
+| Suite | **373 passing across 19 files, zero skipped.** `packages/grants` alone is 240 in 9 |
+| Build / typecheck | `pnpm -r build` clean **including `apps/hq`**, the only package whose build lints. `pnpm -r typecheck` clean across fourteen |
+| Tool surface | **24** on this branch, 21 on `main`. The three it adds are the `grant_*` tools |
+| Migrations | 14 applied locally, `migrate status` clean, `migrate diff` shows only the three documented `uuid` entries |
+| Release gates | G1–G4 passed, all locally. **G5 not started and still blocked** — unchanged |
+
+### What closed since 2026-08-06
+
+- **PRs #49 and #50 merged and deployed 2026-08-13.** Re-tested live on 2026-08-14 rather than assumed:
+  `INFORMATION-GAPS.md` §1.1, §1.2, §8.1 and §8.2 are closed with figures. Total Income actuals
+  $1,572,906.30, Total Expense actuals $1,734,075.87, per-phase actuals launchpad $1,532,790 / hs
+  $459,805 / liftoff $446,220. Work package `#216`, closed.
+- **`dev_grants_tracker` answers `eligibility.prior_funding`** — 96 funder records with `lifetime_total`
+  and `received_to_date`. That was a `STRUCTURED_VALUE_DEBT` entry.
+- **`query_hours` withdrawn** (`#219`, closed). Not grant work; hours live in a separate project now.
+  The commit is preserved on the pushed `feat/hours-ingestion` branch. `CLAUDE.md` §4 item 15 has the
+  two caveats for re-landing it.
+- **Tool count corrected across six files.** It had been wrong in three directions at once. The root
+  `CLAUDE.md` now carries the `grep` that settles it.
+
+### Two findings that are staff questions, not tool questions
+
+Both came out of the figure re-source and neither is closable by code:
+
+1. **The KB's `$1.34M FY2025 expenses` matches no live total.** Nearest is Total *Administrative*
+   Expenses at $1,394,055.02 — a narrower measure. Whether the KB ever meant total expense needs a
+   person.
+2. **No finance figure carries a fiscal year.** The `YTD Budget vs Actual` tab returns `period: ""`.
+   Board `grant-a54`. **Answered is not filable.** Untested candidates that carry a period in their
+   names: `q3_2026_actuals*` and `phase_actuals_2025_*` — probe those before escalating.
+
+### Order of work next session
+
+1. **Decide what to do about `#220`** before merging PR #51, or merge knowing the three grant tools
+   land unreachable. Those are the only two honest options. North10 `#215` built the
+   serving-image-plus-migration-runner pattern already and is worth reading first.
+2. **Check `skill_grant_sourcing_evaluation` in production** — one call answers whether a live tool is
+   already broken.
+3. **Probe `q3_2026_actuals*` / `phase_actuals_2025_*`** for a fiscal-year label. Cheap, and it either
+   closes `grant-a54` or proves it needs escalating.
+4. **The two staff questions above**, which are Sean's and Chip's, not this lane's.
+5. G5 is **still blocked on `grant-k4i`**, which is still blocked on the KB content gap
+   (`grant-miy`). Unchanged since 2026-08-06 and not worth re-deriving.
+
+### Still true, still unowned
+
+`#163` needs a named owner. The investigation narrowed it — the owner's job is now "fix `#220`, or apply
+two named migrations" rather than "work out how to reach RDS" — but nobody holds it. Two errors in that
+ticket's own text are corrected in its comments: the migration it says to carry
+(`20260806000100_add_find_grant_documents_permission`) **does not exist**, and no migration anywhere
+inserts `find_grant_documents` even though the row is in the local database.
+
+**RDS cannot be reached from this machine.** No `aws` CLI, no `boto3`, no `~/.aws`. `TODO.local.md`'s
+"we have AWS credentials now" is not true of this machine's tooling.
+
+---
+
+## State now (2026-08-06 — superseded by "Where this stands, 2026-08-14")
+
+Checked rather than assumed, at the end of the 2026-08-06 D4 session. **The numbers below are that
+session's and are no longer current**; the reasoning is why they are kept.
 
 | | |
 |---|---|
@@ -282,7 +360,16 @@ So the likely answer is **both**: a local Postgres for the build and the tests, 
 
 ---
 
-## Open the PR
+## Open the PR — DONE 2026-08-14
+
+**Superseded. PR #51 is open** against `main` (not `master` — `main` became the single deploy branch on
+2026-08-13, `e3641f9`/`89c31a2`). The reasoning below is kept because the caveat in it still holds and is
+restated in the PR body: CI builds with `db push`, so `tool_permissions` never lands there, and its
+integration suite runs over stdio, which never sets a caller. **A green CI still says nothing about the
+ACL.** What the section below could not have known is `#220` — the deploy pipeline does not apply
+migrations either, so production is in the same position as CI.
+
+Original note follows.
 
 Not done, deliberately — pushing is outward-facing and was left for a decision.
 
@@ -304,8 +391,9 @@ Struck-through items record what was done, so the next session does not redo the
 
 1. ~~**Commit the D3/G4 change set.**~~ Done 2026-08-04 — `1f3a2fb` (the tool), `19ca6e9` (the B6
    bank fix), `715862e` (the documentation).
-2. **Open the PR to `master`.** `writing/dev` is pushed and in sync; the PR is not opened, and that is
-   the only outward-facing step left. Note what CI can and cannot tell you — refer to "Open the PR".
+2. ~~**Open the PR to `master`.**~~ Done 2026-08-14 — **PR #51**, against `main`. Note what CI can and
+   cannot tell you — refer to "Open the PR", and to `#220`, which is the larger version of the same
+   problem.
 3. ~~**B6, the matcher quality review.**~~ Run 2026-08-04. Read the finding before trusting the old
    framing: B6 measured misses, and misses are the safe failure. One confident wrong match fixed
    (bank v0.4.1), three recorded on `bd` `grant-h32`, and `grant-miy`'s count corrected 42 → 35. It
