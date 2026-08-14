@@ -25,6 +25,72 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-14
+
+### Verified — the merged finance and filter fixes close three gaps the register listed as open
+
+OpenProject `#216`. PRs **#49** (finance tab mapping) and **#50** (`query_enrollment` filters) merged
+and deployed on 2026-08-13, at 15:25 and 16:28. Every gap they were supposed to close was re-tested
+against production on 2026-08-14 and the figures recorded, because "the fix merged" and "the figure is
+answerable" are different claims and this workstream had been burned by asserting the second from the
+first.
+
+**Closed — `annual_budget` (§1.1).** `query_finances(budget_actuals, tab_name: "YTD Budget vs Actual")`
+returns Total Income actuals **$1,572,906.30** against FY budget $1,655,155.00, and Total Expense
+actuals **$1,734,075.87** against FY budget $1,607,803.87, plus category totals. Note `budget_actuals`
+spans two tabs and the prior-month rows are all zero — **split on `tab_name` before reading**.
+
+**Closed — `phase_costs` (§1.2).** `query_finances(phase_budget_dashboard)` matches
+`phase_dashboard:2025 actuals` with no override, 163 rows. Total Expense: `total_launchpad` **$1,532,790**,
+`hs` **$459,805**, `liftoff` **$446,220**.
+
+**Closed — the dropped-filter defect (§8.1).** `query_enrollment(by_phase, phase: "Lightspeed")` scopes
+correctly and echoes `filters_applied`. Lightspeed live: 15 Completed, 12 In Progress, 1 Dropped.
+
+**Two KB claims did not survive the check, and this is the material part.** `$1.34M FY2025 expenses`
+matches **no** total the tool returns; the nearest figure is Total *Administrative* Expenses at
+$1,394,055.02, a narrower measure. And the KB's `$519K / $455K / $362K` per-phase split has no
+counterpart in the data, which carries **two** phase columns rather than three. Neither is a tool defect
+now — both are staff questions. **Nor can any of these figures be attributed to a fiscal year**: the YTD
+tab returns `period: ""` with no FY label (board `grant-a54`). Answered is not filable.
+
+**New query types the register never saw.** `query_finances` gained ~15, and two answer recorded gaps:
+`dev_grants_tracker` (96 funder records with `lifetime_total`, `received_to_date`, lifecycle) is a live
+source for `eligibility.prior_funding`, previously a `STRUCTURED_VALUE_DEBT` entry; `dev_launchpad_pipeline`
+(59 rows) gives prior asks by funder and fiscal year. `q3_2026_actuals*` and `phase_actuals_2025_*` carry
+a period in their names and are the likely answer to the fiscal-year ambiguity — **not yet probed**.
+
+**Unchanged, and said plainly:** `query_competency(scores)` still returns exactly `record_count: 1000`
+with no `total_matching` / `truncated`; `search_documents` for a staff roster still returns 0 results.
+
+### Found — a silent empty result is still reachable in production, because the fix is not merged
+
+`query_enrollment(by_phase, current_phase: "Zzzznotaphase")` returns
+`{"breakdown":[],"filters_applied":{...}}` — no error. **This is not a new defect and must not be
+re-diagnosed as one.** The `no_records` guard is at
+`apps/mcp-server/src/tools/query-enrollment.ts:217-224` on `writing/dev`, tested, and among 44 commits
+`main` does not have. Production runs #49 and #50 only.
+
+**How to tell which build you are querying: read the tool's live description, not its response.** The
+deployed `query_enrollment` description ends at `filters_ignored`; this branch's continues into the
+`no_records` contract and names `E` and `N`. The same technique confirmed #49 is present, because the
+deployed `query_finances` already documents `tab_names_matched` and `truncated`. Recorded as
+`docs/INFORMATION-GAPS.md` §8.4 and `CLAUDE.md` §4 item 14. Until it merges, prefer the `phase` enum over
+free-text `current_phase`, and read an empty `breakdown` from a value-based filter as *unknown*, not zero.
+
+### Verified — the full gate is green on this branch
+
+Run 2026-08-14 before opening the PR: `pnpm -r build` clean across all packages **including `apps/hq`**,
+which is the only one whose build runs ESLint; `pnpm -r typecheck` clean across all fourteen;
+`pnpm test` **377 passed across 19 files, zero skipped**, in 15.4s, with the live-DB suites executing
+rather than skipping. `packages/grants` alone is 240 in 9. Tool surface is **25** on this branch against
+**21** on `main`; the four it adds are `query_hours` and the three `grant_*` tools. The §6 permission
+check is empty, so nothing fails closed locally — **but the grant rows are still unverified on RDS
+(A7, #163), and the registry fails closed, so those three tools will refuse every caller in production
+until that migration is applied.**
+
+---
+
 ## 2026-08-13
 
 ### Changed — three data tools now error where they returned zero, which changes what a drafting run sees

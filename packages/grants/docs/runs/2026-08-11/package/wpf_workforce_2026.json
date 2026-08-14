@@ -1,0 +1,454 @@
+{
+  "form": {
+    "funder": "William Penn Foundation",
+    "program": "Workforce Training Supports RFP (2026-2028)",
+    "note": "Real working draft (WPF_Workforce_Supports_Draft.docx). Character counts (with spaces) noted under each narrative field. Transcribed the field-level and narrative questions with their stated character caps. The 'Suggested Character Count 5,000-10,000' is a range, not a hard cap — recorded as the upper bound with a note.",
+    "framing": "Launchpad as fiscally sponsored initiative of Building 21",
+    "due": "2026-07-30"
+  },
+  "summary": {
+    "total": 12,
+    "by_status": {
+      "ready": 5,
+      "derive_from_reference": 1,
+      "fits": 2,
+      "compression_infeasible": 1,
+      "per_application": 3
+    },
+    "by_actor": {
+      "none": 7,
+      "llm": 2,
+      "staff": 3
+    },
+    "all_fit": false
+  },
+  "results": [
+    {
+      "incoming": "Will a Fiscal Sponsor be used for this grant?",
+      "matched_id": "cover.fiscal_sponsor",
+      "canonical": "Will a fiscal sponsor be used for this grant, or is the applicant itself a 501(c)(3)?",
+      "category": "cover",
+      "answer_type": "boolean",
+      "kb_ref": "kb.eligibility",
+      "matched_via": "WPF-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Eligibility facts for fit-scoring",
+      "verified": true,
+      "carries_figures": true,
+      "from_structured": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the stored structured value, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Yes — Building 21 is the fiscal sponsor"
+    },
+    {
+      "incoming": "Legal Name of Organization",
+      "matched_id": "cover.legal_name",
+      "canonical": "What is your organization's legal name?",
+      "category": "cover",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "matched_via": "WPF-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Org identity fields",
+      "verified": true,
+      "carries_figures": true,
+      "status": "derive_from_reference",
+      "actor": "llm",
+      "action": "This question wants a short field value, and kb.profile.identity holds narrative prose. Derive the value from the source material in handback — do not paste the prose into the field. If the source does not contain it, flag it for staff.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "handback": {
+        "task": "derive_short_value",
+        "instruction": "Give the short value this field asks for, taken from the source material below.",
+        "source_text": "Launchpad (launched 2023) is a fiscally sponsored initiative of Building 21, a Philadelphia 501(c)(3) founded in 2013 (EIN 47-2514219), and plans to spin out as its own 501(c)(3). Site/hub: 801 Market Street, Center City, Philadelphia, PA 19107. Current applications are filed with Building 21 as the named applicant/fiscal sponsor and Launchpad as the sponsored initiative or solution (framing varies by funder — e.g. GSK: 'Building 21 primary, Launchpad initiative'; Truist: 'Building 21 applicant, Launchpad solution'). Still to confirm before applying: Launchpad's own registered legal name/EIN if/when spun out, and the fiscal-year start. Building 21 also operates two high schools (Philadelphia and Allentown), so it is a broader parent/fiscal entity than Launchpad alone.",
+        "limit": null,
+        "measurement": null,
+        "context": {
+          "funder": "William Penn Foundation",
+          "emphasis": "Launchpad as fiscally sponsored initiative of Building 21",
+          "answers": "Org identity fields"
+        },
+        "rules": [
+          "Answer with the short value the field asks for and nothing else — no narrative, no preamble, no explanation.",
+          "Take the value ONLY from the source material below. Do not invent, infer, or complete it from outside knowledge, and do not guess at a plausible value.",
+          "Do not alter, round, or reformat a figure, name, or date you take from the source.",
+          "If the source material does not contain the value, say so explicitly and flag the field for staff. An invented value is worse than an unanswered field."
+        ],
+        "verify_with": "Re-measure the result before using it — pass the rewritten text back to grant_resize_answer as `rewrite`, with the same `text` and `limit`. A length claim is only true if the arithmetic says so; do not count words or characters yourself. That call also checks every figure in your rewrite against the source and rejects one the source does not state."
+      }
+    },
+    {
+      "incoming": "EIN",
+      "matched_id": "cover.ein_taxstatus",
+      "canonical": "What is your tax-exempt status and EIN?",
+      "category": "cover",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "matched_via": "GSK-STEM-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Org identity fields",
+      "verified": true,
+      "carries_figures": true,
+      "from_structured": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the stored structured value, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "501(c)(3), EIN 47-2514219"
+    },
+    {
+      "incoming": "Address",
+      "matched_id": "cover.address",
+      "canonical": "What is your organization's mailing address and contact information?",
+      "category": "cover",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "matched_via": "WPF-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Org identity fields",
+      "verified": true,
+      "carries_figures": true,
+      "from_structured": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the stored structured value, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "801 Market Street, Center City, Philadelphia, PA 19107"
+    },
+    {
+      "incoming": "Website",
+      "matched_id": "cover.address",
+      "canonical": "What is your organization's mailing address and contact information?",
+      "category": "cover",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "matched_via": "GSK-STEM-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Org identity fields",
+      "verified": true,
+      "carries_figures": true,
+      "from_structured": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the stored structured value, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "801 Market Street, Center City, Philadelphia, PA 19107"
+    },
+    {
+      "incoming": "Mission Statement",
+      "matched_id": "organization.mission",
+      "canonical": "Summarize your organization's mission.",
+      "category": "organization",
+      "answer_type": "narrative",
+      "kb_ref": "kb.mission",
+      "matched_via": "Seybert",
+      "confidence": 1,
+      "confident": true,
+      "limit": {
+        "unit": "characters",
+        "max": 700
+      },
+      "kb_label": "Mission statement",
+      "verified": true,
+      "carries_figures": true,
+      "status": "fits",
+      "actor": "none",
+      "action": "Within the limit (441/700 characters).  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Launchpad builds accelerated pathways that connect Philadelphia young adults to high-paying, future-ready tech careers. Through a paid AI-engineering program grounded in real client work, participants who arrive with a high school diploma and little else gain applied AI skills, industry certifications, a portfolio of deployed work, and the paid experience employers now demand — at no cost to them — on a path toward a $50,000 living wage.",
+      "measurement": {
+        "label": "kb.mission",
+        "unit": "characters",
+        "max": 700,
+        "count": 441,
+        "fits": true,
+        "over_by": 0,
+        "ratio": 0.6,
+        "verdict": "fits",
+        "guidance": "Within the limit (441/700 characters)."
+      }
+    },
+    {
+      "incoming": "Proposed Project Title",
+      "matched_id": "cover.project_title",
+      "canonical": "What is the project title?",
+      "category": "cover",
+      "answer_type": "field",
+      "kb_ref": "kb.program_desc",
+      "matched_via": "WPF-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": {
+        "unit": "characters",
+        "max": 120
+      },
+      "kb_label": "Program/project description",
+      "verified": true,
+      "carries_figures": false,
+      "from_structured": true,
+      "status": "fits",
+      "actor": "none",
+      "action": "Within the limit (9/120 characters).",
+      "answer": "Launchpad",
+      "measurement": {
+        "label": "kb.program_desc",
+        "unit": "characters",
+        "max": 120,
+        "count": 9,
+        "fits": true,
+        "over_by": 0,
+        "ratio": 0.1,
+        "verdict": "fits",
+        "guidance": "Within the limit (9/120 characters)."
+      }
+    },
+    {
+      "incoming": "Project description",
+      "matched_id": "program.description",
+      "canonical": "Describe the project for which you are seeking funding, including a timeline and how the funds will be used.",
+      "category": "program",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "matched_via": "DCED",
+      "confidence": 1,
+      "confident": true,
+      "limit": {
+        "unit": "characters",
+        "max": 250
+      },
+      "kb_label": "Program/project description",
+      "verified": true,
+      "carries_figures": true,
+      "status": "compression_infeasible",
+      "actor": "llm",
+      "action": "Cannot compress 1403 characters to 250 characters (5.6x) without dropping facts. This is not a rewrite — it needs a purpose-written short answer. Check whether the question actually wants a short structured value rather than a narrative. Shorten it from the handback, and state which facts you dropped so a reviewer can put them back if the funder wants them.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "handback": {
+        "task": "resize",
+        "instruction": "Rewrite the source text below to fit 250 characters, following every rule.",
+        "source_text": "Launchpad recruits Philadelphia young people from more than 30 non-selective high schools and across 30+ ZIP codes, no prior experience required, and pays them from day one so finishing is financially possible. The advanced phases most funders support are LiftOff — six months of full-time, AI-first software-development training for participants 18–24 — and Launchpad Inc., a nonprofit social enterprise that puts participants on real, paid client projects ($20/hour) building automations, dashboards, integrations, and agents for Philadelphia nonprofits and small businesses. Participants train against the AI Engineer competency framework (six competencies, 24 skills; prompting and context engineering, building automations and agents, connecting systems, structuring data, evaluating AI output, and managing cost and risk), earn industry certifications (Generative AI Foundations, PCEP), and are assessed on deployed work tracked in Beacon, so every graduate finishes with a portfolio of shipped AI systems and the client references early-career tech hiring now screens on. Wraparound supports — a guaranteed $6,000 stipend floor, transportation, food, a laptop, and Career Success Coaching that continues through the first year of employment — remove the barriers that otherwise force low-income young adults to drop out. Delivered at no cost from Launchpad's Center City hub at 801 Market Street.",
+        "limit": {
+          "unit": "characters",
+          "max": 250
+        },
+        "measurement": {
+          "label": "kb.program_desc",
+          "unit": "characters",
+          "max": 250,
+          "count": 1403,
+          "fits": false,
+          "over_by": 1153,
+          "ratio": 5.6,
+          "verdict": "compression_infeasible",
+          "truncated_preview": "Launchpad recruits Philadelphia young people from more than 30 non-selective high schools and across 30+ ZIP codes, no prior experience required, and pays them from day one so finishing is financially possible. The advanced phases most funders suppo…",
+          "guidance": "Cannot compress 1403 characters to 250 characters (5.6x) without dropping facts. This is not a rewrite — it needs a purpose-written short answer. Check whether the question actually wants a short structured value rather than a narrative."
+        },
+        "context": {
+          "funder": "William Penn Foundation",
+          "emphasis": "Launchpad as fiscally sponsored initiative of Building 21",
+          "answers": "Program/project description"
+        },
+        "rules": [
+          "This needs 5.6x compression, past the 4x point where shortening stops being compression. Facts WILL have to be dropped. Say which ones you dropped, and check first whether the field actually wants a short structured value rather than a narrative.",
+          "NEVER invent, add, infer, or embellish any fact, figure, statistic, name, date, program detail, or outcome. Use ONLY what appears in the source answer.",
+          "If everything cannot fit, DROP the least-essential supporting detail. Do not alter, round, or approximate any figure you keep.",
+          "Preserve the organization's voice and the concrete specifics that make the answer credible (named programs, real numbers, populations served).",
+          "Do not add a preamble, a title, quotation marks, meta-commentary, or a word/character count. Return ONLY the rewritten answer text, nothing else."
+        ],
+        "verify_with": "Re-measure the result before using it — pass the rewritten text back to grant_resize_answer as `rewrite`, with the same `text` and `limit`. A length claim is only true if the arithmetic says so; do not count words or characters yourself. That call also checks every figure in your rewrite against the source and rejects one the source does not state."
+      },
+      "measurement": {
+        "label": "kb.program_desc",
+        "unit": "characters",
+        "max": 250,
+        "count": 1403,
+        "fits": false,
+        "over_by": 1153,
+        "ratio": 5.6,
+        "verdict": "compression_infeasible",
+        "truncated_preview": "Launchpad recruits Philadelphia young people from more than 30 non-selective high schools and across 30+ ZIP codes, no prior experience required, and pays them from day one so finishing is financially possible. The advanced phases most funders suppo…",
+        "guidance": "Cannot compress 1403 characters to 250 characters (5.6x) without dropping facts. This is not a rewrite — it needs a purpose-written short answer. Check whether the question actually wants a short structured value rather than a narrative."
+      }
+    },
+    {
+      "incoming": "Anticipated Start Date for Project Funded by WPF",
+      "matched_id": "cover.grant_period",
+      "canonical": "What are the anticipated start and end dates and duration of the requested grant period?",
+      "category": "cover",
+      "answer_type": "field",
+      "kb_ref": null,
+      "matched_via": "WPF-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "status": "per_application",
+      "actor": "staff",
+      "action": "No stored answer — this is an application-specific value (a requested amount, a signature, a date). Fill it in for this application."
+    },
+    {
+      "incoming": "Duration of Funding (months)",
+      "matched_id": "cover.grant_period",
+      "canonical": "What are the anticipated start and end dates and duration of the requested grant period?",
+      "category": "cover",
+      "answer_type": "field",
+      "kb_ref": null,
+      "matched_via": "WPF-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "status": "per_application",
+      "actor": "staff",
+      "action": "No stored answer — this is an application-specific value (a requested amount, a signature, a date). Fill it in for this application."
+    },
+    {
+      "incoming": "Request Amount",
+      "matched_id": "cover.request_amount",
+      "canonical": "How much are you requesting, and for what period?",
+      "category": "cover",
+      "answer_type": "number",
+      "kb_ref": null,
+      "matched_via": "WPF-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "status": "per_application",
+      "actor": "staff",
+      "action": "No stored answer — this is an application-specific value (a requested amount, a signature, a date). Fill it in for this application."
+    },
+    {
+      "incoming": "Describe the proposed project. Include a detailed description of the proposed activities, including location of the work, frequency, and duration of interaction with proposed beneficiaries, the timeline for the entire project, and the number and demographics of beneficiaries/participants expected to be served. If the proposed project involves a partnership with other organizations, describe how the organizations will collaborate and the complementary roles each partner will play.",
+      "matched_id": "program.description",
+      "canonical": "Describe the project for which you are seeking funding, including a timeline and how the funds will be used.",
+      "category": "program",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "matched_via": "WPF-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Program/project description",
+      "verified": true,
+      "carries_figures": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the canonical answer, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Launchpad recruits Philadelphia young people from more than 30 non-selective high schools and across 30+ ZIP codes, no prior experience required, and pays them from day one so finishing is financially possible. The advanced phases most funders support are LiftOff — six months of full-time, AI-first software-development training for participants 18–24 — and Launchpad Inc., a nonprofit social enterprise that puts participants on real, paid client projects ($20/hour) building automations, dashboards, integrations, and agents for Philadelphia nonprofits and small businesses. Participants train against the AI Engineer competency framework (six competencies, 24 skills; prompting and context engineering, building automations and agents, connecting systems, structuring data, evaluating AI output, and managing cost and risk), earn industry certifications (Generative AI Foundations, PCEP), and are assessed on deployed work tracked in Beacon, so every graduate finishes with a portfolio of shipped AI systems and the client references early-career tech hiring now screens on. Wraparound supports — a guaranteed $6,000 stipend floor, transportation, food, a laptop, and Career Success Coaching that continues through the first year of employment — remove the barriers that otherwise force low-income young adults to drop out. Delivered at no cost from Launchpad's Center City hub at 801 Market Street."
+    }
+  ],
+  "kb_refs_used": [
+    "kb.eligibility",
+    "kb.mission",
+    "kb.profile.identity",
+    "kb.program_desc"
+  ],
+  "figure_work_order": {
+    "policy": "Live LP Internal AI connector figures supersede these knowledge-base figures by recency. Do not publish any figure below until the paired query_* call confirms it. On a drift conflict the connector wins. A DEFINITIONAL conflict is not auto-resolved — escalate it to staff with both numbers and their definitions. If a tool is denied by your role, write [DATA UNAVAILABLE] rather than quoting the frozen figure as if confirmed.",
+    "kb_snapshot_date": "2026-07-23",
+    "items": [
+      {
+        "key": "annual_budget",
+        "claim": "$1.34M FY2025 expenses; $1.68M FY2026 projected revenue",
+        "appears_in": [
+          "kb.financials",
+          "kb.budget_narrative",
+          "kb.eligibility"
+        ],
+        "tool": "get_finance_brief",
+        "args": {
+          "period": "ytd"
+        },
+        "conflict_kind": "drift",
+        "severity": "high",
+        "note": "Prefer get_finance_brief — query_finances may be denied by the role ACL. If it is, flag [DATA UNAVAILABLE] rather than quoting the frozen figure as if confirmed."
+      },
+      {
+        "key": "enrollment_by_phase",
+        "claim": "Program phases: Foundations, 101, LiftOff",
+        "appears_in": [
+          "kb.programs",
+          "kb.program_desc"
+        ],
+        "tool": "query_enrollment",
+        "args": {
+          "query_type": "by_phase"
+        },
+        "conflict_kind": "content_gap",
+        "severity": "high",
+        "note": "The platform records a Lightspeed phase that the KB program descriptions omit entirely, so a drafted program description built only from the KB is missing a phase. Queried 2026-08-11 — Lightspeed is a 7-week summer intensive, run twice: 2024-07-01 to 2024-08-19 (7 completers) and 2025-07-07 to 2025-08-27 (8), 15 of 15 completing and none dropping. 14 of the 15 sat PCEP and all 14 passed. Do NOT describe it as a linear stage between 101 and LiftOff: it runs in the summer gap between school years, no student has it as current_phase, and its completers show up later under LiftOff and Alumni. Use query_enrollment active_during with phase=Lightspeed and a wide date window for the roster — by_phase gives only the counts, and by_student cannot filter by phase at all (see the filter caveat in CLAUDE.md §4)."
+      },
+      {
+        "key": "demographics_race",
+        "claim": "85% / 90% / 100% demographic shares",
+        "appears_in": [
+          "kb.dei",
+          "kb.profile.demographics",
+          "kb.need",
+          "kb.target_population",
+          "kb.metrics",
+          "kb.eligibility"
+        ],
+        "tool": "query_enrollment",
+        "args": {
+          "query_type": "by_race"
+        },
+        "conflict_kind": "drift",
+        "severity": "medium",
+        "note": "Recompute from the connector; percentages move with each cohort."
+      },
+      {
+        "key": "employment_wage_range",
+        "claim": "$15,000–$35,000 earned; ~$20/hr",
+        "appears_in": [
+          "kb.metrics",
+          "kb.program_desc",
+          "kb.uniqueness",
+          "kb.outcomes",
+          "kb.programs",
+          "kb.budget_narrative",
+          "kb.management_plan"
+        ],
+        "tool": "query_employment",
+        "args": {
+          "query_type": "aggregate"
+        },
+        "conflict_kind": "drift",
+        "severity": "medium",
+        "note": "The same aggregate call returns avg_hourly_wage and avg_weekly_hours."
+      },
+      {
+        "key": "phase_costs",
+        "claim": "$519K / $455K / $362K per phase; ~$6,000 per participant stipend floor",
+        "appears_in": [
+          "kb.budget_narrative",
+          "kb.financials",
+          "kb.programs",
+          "kb.program_desc",
+          "kb.uniqueness"
+        ],
+        "tool": "query_finances",
+        "args": {
+          "query_type": "phase_budget_dashboard"
+        },
+        "conflict_kind": "drift",
+        "severity": "medium",
+        "note": "Note the query_type is phase_budget_dashboard — phase_budget_summary is not a valid value."
+      }
+    ],
+    "definitional_conflicts": [],
+    "blocked": [
+      {
+        "tool": "query_finances",
+        "reason": "May be denied by the role ACL (sensitive finance data). Fall back to get_finance_brief and flag [DATA UNAVAILABLE]."
+      },
+      {
+        "tool": "query_donors",
+        "reason": "May be denied by the role ACL (donor PII). Fall back to get_finance_brief and flag [DATA UNAVAILABLE]."
+      }
+    ]
+  },
+  "integrity_warnings": []
+}

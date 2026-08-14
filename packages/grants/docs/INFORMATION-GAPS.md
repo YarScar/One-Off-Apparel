@@ -22,6 +22,17 @@ stays and is updated as gaps close.
 > `[DATA UNAVAILABLE]` are answerable today. Two PRs are open: **#49** (finance tab mapping) and
 > **#50** (`query_enrollment` filters, §8.1). §9 has the detail.
 
+> **Update 2026-08-14 — #49 and #50 shipped, and §1.1, §1.2 and §8.1 are closed.** Both merged and
+> deployed 2026-08-13; re-tested live the same way. The finance totals, the per-phase actuals and the
+> enrollment filter scoping all answer now, and the figures are in
+> [`runs/2026-08-11/filled/FIGURE-LEDGER.md`](runs/2026-08-11/filled/FIGURE-LEDGER.md) under
+> "Re-source, 2026-08-14". Work package `#216`. **Two things not to over-read.** First, the answers
+> arrive without a fiscal year — the `YTD Budget vs Actual` tab returns `period: ""`, so the FY is a
+> staff fact, not a tool fact (board `grant-a54`). Second, **a silent empty result is still reachable in
+> production**: the `no_records` guard from the `#207`/`#209`/`#210` chain is written and unmerged, so
+> `current_phase` with an unmatchable value still returns an empty answer rather than an error. §8.4 is
+> new and records that. §8.3 is unchanged and §2 staff headcount is unchanged.
+
 ## How to read the markers
 
 | Marker | Meaning |
@@ -53,6 +64,20 @@ failed on 2026-08-11.
   read as an organizational data gap. That overclaim is corrected in PR #49. **The right call is
   `query_finances(fund_balances)`**, matching the `Combined Funds` tab, which returns account-level
   totals across every fund — probed live and populated. Re-source this figure before filing it.
+- **CLOSED 2026-08-14, and the better call is `budget_actuals`.** With #49 deployed,
+  `query_finances(budget_actuals, tab_name: "YTD Budget vs Actual")` returns budget-versus-actual at
+  every level: **Total Income actuals $1,572,906.30** against FY budget $1,655,155.00, **Total Expense
+  actuals $1,734,075.87** against FY budget $1,607,803.87, and category totals (Salaries $690,035.47,
+  Administrative Expenses $1,394,055.02, Stipends $196,678.01, Contributions Income $1,525,636.30,
+  Other Income $47,270.00). `fund_balances` also answers, giving **Total Income $1,569,177.10** split by
+  fund — use it when the question is *which fund*, and `budget_actuals` when the question is *how much*.
+  **`budget_actuals` spans two tabs** (`Prior Month Budget vs Actual` and `YTD Budget vs Actual`, 364
+  rows); the prior-month rows are all zero, so split on `tab_name` before reading anything.
+  **The KB claim does not survive this.** `$1.34M FY2025 expenses` matches no total returned; the
+  closest figure is Total *Administrative* Expenses at $1,394,055.02, a narrower measure than total
+  expense. Whether the KB ever meant total expense is a staff question, not a tool one.
+  **And the fiscal year is not established by the call** — the tab returns `period: ""` with no FY
+  label, which is board `grant-a54`. Answered is not the same as filable.
 
 ### 1.2 Per-phase costs — `phase_costs`
 
@@ -65,6 +90,14 @@ failed on 2026-08-11.
   `account_number`, `account_name`, `total_launchpad`, `liftoff`, `liftoff_pct`, `hs`, `hs_pct`. The
   connector writes that name in lower case (`sync-phase-budget-dashboard.ts:108-112`); the tool looked
   for Title Case. **Per-phase costs are derivable now.** Fixed in PR #49.
+- **CLOSED 2026-08-14.** With #49 deployed, `query_finances(phase_budget_dashboard)` matches
+  `phase_dashboard:2025 actuals` and returns **163 rows** with no override needed. The Total Expense
+  row: **`total_launchpad` $1,532,790, `hs` $459,805, `liftoff` $446,220**.
+  **Do not map this onto the KB's split.** The tab carries **two** phase columns; the KB's
+  `$519K / $455K / $362K` is a three-way split with no counterpart in the data, and `total_launchpad`
+  is not the sum of `hs` and `liftoff`. A per-phase cost sentence must name the two columns that exist
+  rather than restate the KB's three. The `~$6,000` stipend floor is still unconfirmed — the tab gives
+  Total Stipends, not a per-participant floor.
 
 ### 1.3 Inc. client-work bookings — `inc_client_work_booked`
 
@@ -74,8 +107,14 @@ failed on 2026-08-11.
   tool returns Inc. bookings directly.
 - **Blocked on it:** JFF Q6 (scaling narrative) and JFF Q8. Both claims are strong material if a
   person can source them, and are currently filed nowhere.
+- **Partly answerable 2026-08-14.** `query_finances(fund_balances, contains: "Total Income")` shows a
+  **`launchpad_inc`** fund column carrying **$305,000.00** of Total Income, and `Combined Funds` breaks
+  Inc. spend out by account (Social Enterprise Contractors $159,750.00 sits entirely under
+  `launchpad_inc`). **This is fund income, not bookings.** It does not confirm "$75,000 booked July
+  2026" and cannot confirm hiring intent. What changed is that an Inc. figure exists at all; a sentence
+  using it must say it is fund income for the period the tab covers.
 
-### 1.4 Root cause, and the fix in flight
+### 1.4 Root cause, and the fix — shipped 2026-08-13
 
 The `fix/mcp-finance-tab-mapping` branch documents why 1.1 and 1.2 looked like "the organization has
 no such data": the tab-name lookup in `query_finances` matched Title Case while the Google Sheets
@@ -232,7 +271,7 @@ parity regeneration.
 
 ## 8. Tool behaviour that undermines answers
 
-### 8.1 `query_enrollment` silently drops filters — fixed in PR #50
+### 8.1 `query_enrollment` silently drops filters — CLOSED, deployed 2026-08-13
 
 The input schema accepts `phase`, `status`, `current_phase`, `enrollment_status`, and `cohort` on
 every `query_type`, but each branch applies only some: `by_phase` builds `studentWhere` and never
@@ -255,10 +294,48 @@ queries through `phaseOutcomes: { some: ... }`. Every response carries `filters_
 `filters_ignored` when a filter does not apply to the chosen `query_type`, so a dropped filter can
 never again be invisible. Adds `query-enrollment-filters.test.ts` (8 cases); full suite 56/56.
 
-### 8.2 `query_finances` case-mismatch — see §1.4
+**Verified live 2026-08-14, deployed.** `query_enrollment(by_phase, phase: "Lightspeed")` returns only
+the four Lightspeed rows — 15 Completed, 12 In Progress, 1 Dropped, 272 Not Enrolled — and echoes
+`filters_applied: {"phase":"Lightspeed"}`. The unfiltered call still returns all sixteen phase/status
+rows, so the scoping is real rather than an accident of ordering. **The wrong denominator is no longer
+reachable through this tool silently** — but see §8.4 for the one way an empty answer still is.
 
-Eleven query types returned zero for a casing defect, not missing data. The fix is verified and open
-as **PR #49**.
+### 8.2 `query_finances` case-mismatch — CLOSED, deployed 2026-08-13
+
+Eleven query types returned zero for a casing defect, not missing data. **Verified live 2026-08-14:**
+`phase_budget_dashboard` matches `phase_dashboard:2025 actuals` (163 rows), `fund_balances` matches
+`Combined Funds` (185 rows), `budget_actuals` matches both budget-versus-actual tabs (364 rows), and
+every response now carries `tab_names_matched`, `tab_names_returned`, `total_matching` and `truncated`,
+so a small page is distinguishable from an empty tab. See §1.1 and §1.2 for the figures.
+
+**The same deploy brought query types this register never saw**, and two of them answer gaps recorded
+elsewhere in this file:
+
+| Query type | Rows | What it answers |
+|---|---|---|
+| `dev_grants_tracker` | 96 | Per-funder history: `funder`, `status`, `lifecycle`, `lifetime_total`, `received_to_date`, `unfunded_pledges`, `outstanding_pledge`. **This is a live source for `eligibility.prior_funding`** (§2.1) — a funder asking "have we funded you before, and how much" is now answerable per funder rather than from a narrative slot. Note many operational columns read `[VP]` rather than a value. |
+| `dev_launchpad_pipeline` | 59 | `donor_name`, `fy`, `fund`, `ask_amount`, `projected_amt`, `probability`, `status`. Does **not** supply the §5 request amount for a new application, but gives prior asks by funder and fiscal year as precedent for the person who sets it. |
+| `dev_giving_history`, `dev_prospect_pipeline`, `dev_denied`, `dev_contacts` | untested | Development-side tabs, not probed on 2026-08-14. |
+| `rapid_dashboard`, `rapid_transactions`, `pex_dashboard`, `pex_transactions` | untested | Card/spend tabs, not probed. |
+| `q3_2026_actuals*`, `phase_actuals_2025_*` | untested | Period-scoped actuals with global and headcount percentage variants. **These are the most likely answer to the fiscal-year ambiguity in §1.1** — their names carry a period where `budget_actuals` does not. Worth probing before escalating `grant-a54`. |
+
+### 8.4 An unmatchable filter value can still return an empty answer, in production
+
+Found 2026-08-14 while verifying §8.1. `query_enrollment(by_phase, current_phase: "Zzzznotaphase")`
+returns `{"breakdown":[],"filters_applied":{"current_phase":"Zzzznotaphase"}}` — no error, no signal
+that the value cannot match anything. That is the §8.1 failure mode surviving in a second form.
+
+**This is not an unfixed defect. It is a fixed defect that is not deployed.** The guard exists at
+`apps/mcp-server/src/tools/query-enrollment.ts:217-224` (`buildDomainChecks`, which loads the column's
+distinct values and returns `no_records` naming them), and the tool's own description documents it. It
+came from the `#207` / `#209` / `#210` chain, which is on `writing/dev` and not on `main`. Production
+runs #49 and #50 only — the live tool description stops at `filters_ignored` and never mentions
+`no_records`, which is the cheapest way to tell which build you are talking to.
+
+**Until that merges:** prefer the `phase` enum over free-text `current_phase`, because `phase` is a
+`z.enum` validated before the handler runs and therefore has no unmatchable form. Treat an empty
+`breakdown` from a `current_phase`, `enrollment_status`, `cohort` or `status` filter as *unknown*, not
+as zero.
 
 ### 8.3 `query_competency(scores)` is capped
 
@@ -271,15 +348,23 @@ tool needs a `total_matching` / `truncated` pair of the kind PR #49 adds to `que
 
 ## 9. Fixes in flight
 
-| Branch | State (2026-08-12) | Closes |
+| Branch | State (2026-08-14) | Closes |
 |---|---|---|
-| `fix/mcp-finance-tab-mapping` | **PR #49 open** against `master`. Verified: build clean, typecheck clean across 13 packages, 49/49 tests | §1.1, §1.2, §8.2 — finance tab matching, `budget_actuals` tabs, `sheet_fund_balances`, funds-snapshot dedup, honest `record_count`, plus the `query_finances` / `get_finance_brief` spec corrections |
-| `fix/query-enrollment-filter-application` | **PR #50 open** against `master`. Verified: typecheck clean, 56/56 tests | §8.1 — all five non-date filters applied on all eight query types, plus the `filters_applied` / `filters_ignored` echo |
+| `fix/mcp-finance-tab-mapping` | **PR #49 MERGED and deployed 2026-08-13 15:25** | §1.1, §1.2, §8.2 — finance tab matching, `budget_actuals` tabs, `sheet_fund_balances`, funds-snapshot dedup, honest `record_count`, plus the `query_finances` / `get_finance_brief` spec corrections. **All verified live 2026-08-14.** |
+| `fix/query-enrollment-filter-application` | **PR #50 MERGED and deployed 2026-08-13 16:28** | §8.1 — all five non-date filters applied on all eight query types, plus the `filters_applied` / `filters_ignored` echo. **Verified live 2026-08-14.** |
+| `writing/dev` (this branch) | **44 commits ahead of `main`, PR not yet opened** | §8.4 — the `no_records` unmatchable-filter guard on `query_enrollment` and its three sibling tools, the `query_attendance` `current_phase` fix, `query_hours`, and the entire grant layer (`packages/grants`, three `grant_*` tools). **None of this is in production.** |
 | `fix/google-drive-discovery` | not merged, not reviewed | the Grants corpus connector (`find_grant_documents`), which is the rung-3 prior-filings source the gap-fill ladder depends on |
 
-Neither PR is merged or deployed, so **the live tools still show the broken behaviour**. Re-run the
-figure checks after they ship; the §1 finance figures should then be re-sourced rather than filed as
-gaps.
+**#49 and #50 shipped, and the §1 finance figures were re-sourced on 2026-08-14** — they are in
+[`runs/2026-08-11/filled/FIGURE-LEDGER.md`](runs/2026-08-11/filled/FIGURE-LEDGER.md) under "Re-source,
+2026-08-14", and §1.1, §1.2 and §8.1 above record what each call now returns. What remains undeployed is
+this branch, and §8.4 is the gap that creates: the guard that would turn an unmatchable filter value
+into an error rather than an empty answer is written, tested and not shipped.
+
+**How to tell which build you are querying.** Read the tool description, not the response. The deployed
+`query_enrollment` description ends at `filters_ignored`; this branch's continues into the `no_records`
+contract and names `E` and `N` as the `enrollment_status` codes. Same technique for `query_finances`:
+the deployed one already documents `tab_names_matched` and `truncated`, so #49 is confirmed present.
 
 **How the finance gaps came to be misdiagnosed, and a near-repeat.** The 2026-08-11 run read "no such
 data" off an empty envelope that was actually a mapping defect. The same shape of error nearly recurred
@@ -296,8 +381,11 @@ broken.** Two habits follow: rebuild workspace packages before believing a type 
 
 | Gap | Fix | Owner |
 |---|---|---|
-| Finance totals and phase costs (§1.1, §1.2) | **merge PR #49**, then re-source. The rows are confirmed present, so treat these as answerable, not missing | eng |
-| Inc. bookings (§1.3) | new finance tool or staff sourcing | eng / staff |
+| ~~Finance totals and phase costs (§1.1, §1.2)~~ | **CLOSED 2026-08-14.** #49 merged; both re-sourced live. What is left is not a gap but two staff questions: which fiscal year the YTD tab covers, and whether the KB's `$1.34M` ever meant total expense | staff |
+| Inc. bookings (§1.3) | Partly closed — `launchpad_inc` fund income is live at $305,000.00. Bookings as a measure still need a finance tool or staff sourcing | eng / staff |
+| Fiscal year on any finance figure (§1.1) | Probe `q3_2026_actuals*` and `phase_actuals_2025_*`, whose names carry a period, before escalating `grant-a54` | eng |
+| Prior funding per funder (§2.1) | Closed by `dev_grants_tracker` — route `eligibility.prior_funding` at it instead of the narrative slot | eng |
+| Unmatchable filter returns empty, not an error (§8.4) | **Merge `writing/dev`.** The fix is written and tested; only the deploy is missing | eng |
 | Website, registered address, phone, determination year, legal name (§2) | fill `kb.profile.identity` and contacts from a person | staff |
 | Low-income / FRL shares (§2) | source from the enrollment workbook | staff |
 | Staff headcount and bios (§2) | org-chart source or staff | staff |
@@ -307,5 +395,5 @@ broken.** Two habits follow: rebuild workspace packages before believing a type 
 | Lightspeed (§6.1) | programme copy in Launchpad's voice | staff |
 | Thin slots (§6.2) | deliberate expansion, reviewed | staff |
 | Routing defects (§7) | bank wording edits + parity regeneration. Reconfirmed 2026-08-12: 92 questions, still no `cover.website` and no determination-year canonical, and `cover.address`'s FFTC variant literally contains "Organization web address" — so "Website" scores 1.00 there by construction | eng |
-| `query_enrollment` filters (§8.1) | **merge PR #50** | eng |
+| ~~`query_enrollment` filters (§8.1)~~ | **CLOSED 2026-08-14.** #50 merged and verified live | — |
 | `query_competency` cap (§8.3) | `total_matching` / `truncated` on that tool, as PR #49 adds to `query_finances` | eng |
