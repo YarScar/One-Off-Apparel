@@ -5,8 +5,9 @@
 | Written | 2026-07-31, end of session |
 | Revised | 2026-08-03, 2026-08-04, 2026-08-04 (later), 2026-08-06 — see the dated sections below |
 | Revised | **2026-08-14 — PR #51 is open, and the deploy pipeline does not apply migrations.** Start at "Where this stands, 2026-08-14". |
+| Revised | **2026-08-14 (evening) — RDS access solved; prod's real state known.** See "Resolved this evening" inside the 2026-08-14 section. |
 | Purpose | Carry the plan forward so none of it is re-derived next time. |
-| Status | **One thing to read before anything else: `#220`.** Everything else on this page is unchanged in substance. |
+| Status | **Two things before anything else: `#220`, and the `fix/google-drive-discovery` decision in "Resolved this evening".** |
 
 ---
 
@@ -38,16 +39,46 @@ caller including admin, with a green deploy and no signal anywhere. Work package
 merged with PR #48 on 2026-08-12 and its permission migration was never applied. It may be in production
 right now, registered and unreachable.
 
+**Resolved this evening — prod's true state is now known, from its own database** (fresh local copy,
+2026-08-14 evening; procedure in `docs/runbooks/rds-copy-down.md`):
+
+- **Prod is on the June-era schema.** `_prisma_migrations` ends at `20260617000000` (12 recorded
+  migrations, including the repo-foreign `20260610200000_create_student_postsecondary`). The
+  **only** migrations pending on prod are the repo's `20260729000000_add_grant_tool_permissions`,
+  `20260803000000_add_missing_postsecondary_and_aws_jobs_tables`, and — harmlessly re-runnable —
+  `20260812000000_add_grant_sourcing_evaluation_permission` (its INSERT is `ON CONFLICT DO NOTHING`).
+  So `#220`'s owner job is now exactly "run these two migrations" (`20260729`, `20260803`), no
+  exploration left.
+- **`skill_grant_sourcing_evaluation`'s permission row IS present in prod** (27 `tool_permissions`
+  rows = main's 21 tools + the 6 phantom "future" rows; the grants tools are absent). The row was
+  inserted outside the migration machinery — `20260812000000` is not in prod's `_prisma_migrations`
+  yet the row exists. Since PR #48's code deployed 2026-08-13, the tool is **registered and
+  reachable in prod right now**. One live call still settles it, but the evidence says it is not
+  broken.
+- **`find_grant_documents` is a roll-back risk, not a missing row.** Prod has no such row (27 rows
+  include it nowhere), and no migration in the repo inserts it — because the whole
+  `grant_documents` subsystem lives on the **unmerged** `fix/google-drive-discovery` branch (6
+  commits, ~4,700 lines: the catalog + the tool + the drive connector rebuild + the `20260806*`
+  migrations). It was deployed to prod on 2026-08-06, from that branch, before `main` became the
+  only deploy branch. **Merging PR #51 and deploying removes it from prod** (the merged build
+  doesn't register the tool, the merged connector doesn't fill the catalog). Decide before merge:
+  cherry-pick that branch in, or retire the feature deliberately (and clean the row if it ever
+  appears on prod).
+- **Prod's 27-row permission set is consistent with main's 21 tools + 6 phantom rows.** The three
+  `grant_*` tools will land registered-but-unreachable until `#220` is done — unchanged from the
+  paragraph above.
+
 ### The state of the branch
 
 | | |
 |---|---|
-| PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard", 47 commits |
+| PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard", 48 commits |
 | Suite | **373 passing across 19 files, zero skipped.** `packages/grants` alone is 240 in 9 |
 | Build / typecheck | `pnpm -r build` clean **including `apps/hq`**, the only package whose build lints. `pnpm -r typecheck` clean across fourteen |
 | Tool surface | **24** on this branch, 21 on `main`. The three it adds are the `grant_*` tools |
 | Migrations | 14 applied locally, `migrate status` clean, `migrate diff` shows only the three documented `uuid` entries |
 | Release gates | G1–G4 passed, all locally. **G5 not started and still blocked** — unchanged |
+| Local DB | **Faithful prod copy as of the 2026-08-14 snapshot** — 301 students, 19,128 attendance, 24,623 finance snapshots, 1,062 usage logs — with the branch's 3 migrations applied. Procedure and caveats: `docs/runbooks/rds-copy-down.md`. **Caveat: `pnpm test` wipes it** (`tools.test.ts` runs `seed({ force: true })`, whose `deleteMany`s are unfiltered). |
 
 ### What closed since 2026-08-06
 
@@ -78,25 +109,35 @@ Both came out of the figure re-source and neither is closable by code:
 
 1. **Decide what to do about `#220`** before merging PR #51, or merge knowing the three grant tools
    land unreachable. Those are the only two honest options. North10 `#215` built the
-   serving-image-plus-migration-runner pattern already and is worth reading first.
-2. **Check `skill_grant_sourcing_evaluation` in production** — one call answers whether a live tool is
-   already broken.
-3. **Probe `q3_2026_actuals*` / `phase_actuals_2025_*`** for a fiscal-year label. Cheap, and it either
+   serving-image-plus-migration-runner pattern already and is worth reading first. The job is now
+   exactly "apply `20260729` and `20260803` to prod" — see "Resolved this evening".
+2. **Decide on `fix/google-drive-discovery`** — cherry-pick it into this branch before merging, or
+   deliberately retire `find_grant_documents` + the catalog from prod. Unresolved, this is a silent
+   feature rollback on the next deploy (see "Resolved this evening").
+3. **Check `skill_grant_sourcing_evaluation` in production** — the permission row exists (27 rows
+   on prod), so this is now a one-call confirmation rather than an investigation.
+4. **Probe `q3_2026_actuals*` / `phase_actuals_2025_*`** for a fiscal-year label. Cheap, and it either
    closes `grant-a54` or proves it needs escalating.
-4. **The two staff questions above**, which are Sean's and Chip's, not this lane's.
-5. G5 is **still blocked on `grant-k4i`**, which is still blocked on the KB content gap
+5. **The two staff questions above**, which are Sean's and Chip's, not this lane's.
+6. G5 is **still blocked on `grant-k4i`**, which is still blocked on the KB content gap
    (`grant-miy`). Unchanged since 2026-08-06 and not worth re-deriving.
 
 ### Still true, still unowned
 
-`#163` needs a named owner. The investigation narrowed it — the owner's job is now "fix `#220`, or apply
-two named migrations" rather than "work out how to reach RDS" — but nobody holds it. Two errors in that
-ticket's own text are corrected in its comments: the migration it says to carry
-(`20260806000100_add_find_grant_documents_permission`) **does not exist**, and no migration anywhere
-inserts `find_grant_documents` even though the row is in the local database.
+`#163` needs a named owner. The investigation narrowed it — the owner's job is now "apply
+`20260729000000_add_grant_tool_permissions` and `20260803000000_add_missing_postsecondary_and_aws_jobs_tables`
+to prod" (the `20260812` one has already taken effect outside the migration table and re-runs as a no-op)
+rather than "work out how to reach RDS" — and reaching RDS is now solved and documented
+(`docs/runbooks/rds-copy-down.md`). Two errors in that ticket's own text are corrected in its comments:
+the migration it says to carry (`20260806000100_add_find_grant_documents_permission`) **does not exist
+in the repo**, and no migration in the repo inserts `find_grant_documents` — the row that was in the
+local database came from the unmerged `fix/google-drive-discovery` branch, which deployed its
+`20260806*` migrations to prod and is now a merge decision (see "Resolved this evening").
 
-**RDS cannot be reached from this machine.** No `aws` CLI, no `boto3`, no `~/.aws`. `TODO.local.md`'s
-"we have AWS credentials now" is not true of this machine's tooling.
+**RDS access from this machine is solved** — the previous claim (no `aws` CLI, no credentials) is
+obsolete. `.env` carries working keys, and the snapshot-restore-to-temp-instance path in the runbook
+is validated end to end. Prod itself stays unreachable (private by design); the runbook goes around
+that rather than through it.
 
 ---
 
