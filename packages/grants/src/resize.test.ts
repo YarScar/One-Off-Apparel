@@ -337,3 +337,60 @@ describe('resizeAnswer — the data-honesty warnings', () => {
     expect(out.action).not.toContain('grounded');
   });
 });
+
+// --------------------------------------------------------------------------- a rewrite that is not one
+
+/**
+ * The verify path treated any non-`undefined` `rewrite` as a candidate, and every check downstream
+ * waves a blank one through: it measures 0 units, so it fits any limit, and it states no figure, so
+ * nothing is invented. The result was `notes: 'fits'`, `accepted: true`, `text: '   '`, with the action
+ * line "Accepted: 0/10 words, down from 95, and every figure traces to the source."
+ *
+ * Guarded in the library rather than only at the MCP boundary because `resizeAnswer` is a public export
+ * and `.min(1)` on the tool schema is satisfied by a single space. Work package #251.
+ */
+describe('resizeAnswer — a blank rewrite is not a shorter answer', () => {
+  const SOURCE = 'We served 145 young people and placed 88 of them into jobs at $21.50 an hour.';
+  const WORDS_10 = { unit: 'words', max: 10 } as const;
+
+  it.each([
+    ['empty', ''],
+    ['a single space', ' '],
+    ['spaces and tabs', '  \t  '],
+    ['newlines', '\n\n'],
+  ])('rejects %s rather than accepting it as fitting', (_label, rewrite) => {
+    const out = resizeAnswer({ text: SOURCE, limit: WORDS_10, rewrite });
+    expect(out.notes).toBe<ResizeNote>('rewrite_empty');
+    expect(out.accepted).toBe(false);
+    expect(out.text).toBeNull();
+    expect(out.action).not.toContain('Accepted');
+    expect(out.action).toContain('REJECTED');
+  });
+
+  it('hands the source back so the caller can try again, and says why it was rejected', () => {
+    const out = resizeAnswer({ text: SOURCE, limit: WORDS_10, rewrite: '   ' });
+    expect(out.handback?.task).toBe('resize');
+    expect(out.handback?.source_text).toBe(SOURCE);
+    expect(out.handback?.rules.join(' ')).toContain('whitespace only');
+    // The rules the caller was already meant to follow must still be there — the rejection notice is
+    // prepended to them, not a replacement for them.
+    expect(out.handback?.rules.join(' ')).toContain('NEVER invent');
+    expect(out.trace.join(' ')).toContain('blank');
+  });
+
+  it('echoes the source measurement, not the blank rewrite as a 0-unit success', () => {
+    const out = resizeAnswer({ text: SOURCE, limit: WORDS_10, rewrite: '   ' });
+    expect(out.units_before).toBe(countUnits(SOURCE, 'words'));
+    expect(out.measurement.fits).toBe(false);
+    // `fits_after_resize` stays null: there is no rewrite to have fitted or not. Reporting `true`
+    // here is exactly what made the old behaviour look like a successful resize.
+    expect(out.fits_after_resize).toBeNull();
+  });
+
+  it('still checks a rewrite that is only nearly empty, rather than treating short as blank', () => {
+    const out = resizeAnswer({ text: SOURCE, limit: WORDS_10, rewrite: 'We served 145.' });
+    expect(out.notes).toBe<ResizeNote>('fits');
+    expect(out.accepted).toBe(true);
+    expect(out.text).toBe('We served 145.');
+  });
+});

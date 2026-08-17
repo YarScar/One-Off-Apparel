@@ -90,7 +90,19 @@ export function registerGrantResizeAnswer(server: McpServer): void {
         }
         const limit = limitSchema.parse(raw['limit']);
 
-        const rewrite = parseStr(raw, 'rewrite');
+        // Same trap as `text` above, on the other input: `.min(1)` accepts a single space, and a blank
+        // rewrite measures 0 units, fits every limit, and invents no figure — so it was accepted as a
+        // faithful resize. Rejected at the boundary as a caller error rather than passed through as a
+        // verdict. `resizeAnswer` guards it too, being a public export. Work package #251.
+        const rewriteRaw = parseStr(raw, 'rewrite');
+        if (rewriteRaw !== undefined && rewriteRaw.trim() === '') {
+          return toolError(
+            'no_records',
+            'Pass `rewrite` as your rewritten answer, or omit it to get the handback. Whitespace is ' +
+              'not a rewrite — it measures as fitting every limit while answering nothing.',
+          );
+        }
+        const rewrite = rewriteRaw;
         const context: ResizeContextInput = {
           funder: parseStr(raw, 'funder'),
           emphasis: parseStr(raw, 'framing'),

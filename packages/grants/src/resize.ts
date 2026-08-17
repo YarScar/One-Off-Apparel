@@ -60,7 +60,13 @@ export type ResizeNote =
   /** A rewrite came back and is still over. The handback carries the overflow feedback. */
   | 'still_over_limit'
   /** A rewrite states a figure its source does not. Not acceptable at any length. */
-  | 'figures_altered';
+  | 'figures_altered'
+  /**
+   * A rewrite came back empty or whitespace only. Not a prototype value — the prototype never saw a
+   * rewrite it had not just generated itself, and an MCP caller can send one. Distinct from
+   * `rewrite_owed` so the caller learns its rewrite was discarded rather than never noticed.
+   */
+  | 'rewrite_empty';
 
 /** What the caller may tell this module about where the text came from. Every field is optional. */
 export interface ResizeContextInput {
@@ -256,6 +262,51 @@ export function resizeAnswer(input: ResizeInput): ResizeResult {
   }
 
   // ------------------------------------------------------------- the verify call: a rewrite came back
+  //
+  // A blank rewrite is not a rewrite, and every downstream check waves it through: it measures 0 units
+  // so it fits any limit, and it states no figure so nothing is invented. Before this guard, a 95-word
+  // answer with figures plus `rewrite: '   '` came back `accepted: true`, `text: '   '`, with the
+  // action line "Accepted: 0/10 words, down from 95, and every figure traces to the source."
+  //
+  // Checked here rather than only at the tool boundary because this is a public export, and because
+  // `.min(1)` on the MCP schema is satisfied by a single space — the same reason `text` is guarded in
+  // `grant-resize-answer.ts`. Work package #251.
+  if (input.rewrite.trim() === '') {
+    const attempts = input.attempt ?? 2;
+    return {
+      ...base,
+      notes: 'rewrite_empty',
+      accepted: false,
+      text: null,
+      attempts,
+      units_after: 0,
+      fits_after_resize: null,
+      measurement: sourceMeasurement,
+      figure_check: null,
+      trace: [
+        `source: ${String(unitsBefore)}/${String(limit.max)} ${limit.unit}`,
+        `attempt ${String(attempts)}: rewrite was blank — discarded`,
+      ],
+      handback: buildHandback({
+        task: 'resize',
+        sourceText: text,
+        limit,
+        measurement: sourceMeasurement,
+        context: handbackContext,
+        extraRules: [
+          'REJECTED. Your rewrite was empty or whitespace only. An empty answer measures as fitting ' +
+            'every limit and is not an answer. Rewrite the source text below.',
+        ],
+      }),
+      action: addWarnings(
+        `REJECTED — the rewrite was empty or whitespace only. That is not a shorter answer, it is no ` +
+          `answer. Rewrite the source text from the handback and call this tool again.`,
+        verified,
+        carriesFigures,
+      ),
+    };
+  }
+
   const rewrite = input.rewrite;
   const attempts = input.attempt ?? 2;
   const rewriteMeasurement = measure({
