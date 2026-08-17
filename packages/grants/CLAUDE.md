@@ -78,21 +78,26 @@ Do not restate these; link to them. Duplication is how the set drifts.
 
 ---
 
-## 3 Where we are — verified 2026-08-14
+## 3 Where we are — verified 2026-08-17
 
 Re-verify before trusting this section; it is a snapshot, not a contract. Every claim here was
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. **14 migrations applied.** The full suite is **373 tests across 19
+`pg_trgm 1.6` via `pnpm db:up`. **16 migrations applied.** The full suite is **397 tests across 19
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
-over stdio. Measured 2026-08-14 after `pnpm -r build` and `pnpm -r typecheck`, both clean across all
-fourteen packages. (377 earlier the same day, before `query_hours` was withdrawn and took its four
+over stdio. Measured 2026-08-17 after `pnpm -r build` and `pnpm -r typecheck`, both clean across all
+fourteen packages. (373 across 19 and 14 migrations before the 2026-08-17 pre-merge pass — work package
+#249 — which added 24 cases, restored `20260610200000_create_student_postsecondary` from
+`feat/query-postsecondary-tool`, and added `20260817000000_align_postsecondary_fk_with_schema`; see
+`CHANGELOG.md`. 377 earlier on 2026-08-14, before `query_hours` was withdrawn and took its four
 integration cases with it — §4 item 15. 294 across 14 before three sources added five files: the
 `#207`/`#209`/`#210` filter work added `filter-domain.test.ts`, `query-attendance-filters.test.ts` and
 `sibling-filter-domains.test.ts`; PRs #49 and #50, merged from `main`, brought `finance-tab-map.test.ts`
 and `query-enrollment-filters.test.ts`.)
-`packages/grants` alone is **240 in 9 files**, with no database and no network. (230 in 9
+`packages/grants` alone is **262 in 9 files**, with no database and no network. (240 in 9
+before the 2026-08-17 pre-merge pass added 22 — the narrative `needs_expand` guard, the blank-rewrite
+rejection, the marked sentence preview, and the Markdown render of an `expand` handback. 230 in 9
 before 2026-08-12, when the code review of the seed-audit checks added 10 cases to `data.test.ts`;
 217 in 9 before the seed audit added four integrity checks on 2026-08-11; 192 in 9
 before the `needs_expand` guard landed earlier the same day; 187 in 9
@@ -176,15 +181,26 @@ accounting, and the 3 cases with no analogue anywhere are named there rather tha
   Read those passes as narrowly as G1's: they say the parity that can be re-expressed is re-expressed
   and the tools behave, not that the ACL was exercised. G5 not started.
 
-**Known schema drift.** `prisma migrate diff` is not empty even on a correctly migrated database:
-`id` columns on `student_employment`, `student_postsecondary`, and `aws_resource_jobs` show native
-`uuid`/`gen_random_uuid()` against `String @default(uuid())` in `schema.prisma`. Representational
-only — Prisma maps Postgres `uuid` to `String`. **Expected. Do not "fix" it**; closing it means
-dropping and recreating live primary keys.
+**Known schema drift, now down to one table.** `prisma migrate diff` is not empty even on a correctly
+migrated database, but as of 2026-08-17 the only remaining entry is **`student_employment`**: its `id`
+shows native `uuid`/`gen_random_uuid()` against `String @default(uuid())` in `schema.prisma`, and its FK
+is `ON DELETE SET NULL` where Prisma generates `RESTRICT`. Representational only for the `id` — Prisma
+maps Postgres `uuid` to `String`. **Expected. Do not "fix" it**: that table is live in production with
+data, it was created by `20260527000000` which is applied there, and closing either gap means editing an
+applied migration or dropping and recreating a live primary key.
 
-**Production is less verified than local.** Two open unknowns, both needing an ECS one-off task or the
-bastion because RDS is not publicly reachable: whether the grant `tool_permissions` rows exist there,
-and whether `student_postsecondary` / `aws_resource_jobs` exist there.
+`student_postsecondary` and `aws_resource_jobs` used to appear in this list. They no longer do — work
+package #254 corrected `20260803000000` to emit what Prisma generates, and added
+`20260817000000_align_postsecondary_fk_with_schema` for the FK. **If the diff grows past the
+`student_employment` entries again, that is real drift, not the documented residue.** Re-measure with the
+`--from-migrations` command in §6; the `--from-schema --to-config-datasource` form answers a different
+question (what the live database differs by) and will also report whatever `db push` did to your clone.
+
+**Production is less verified than local.** Open unknowns, needing an ECS one-off task or the bastion
+because RDS is not publicly reachable: whether the grant `tool_permissions` rows exist there, and whether
+`aws_resource_jobs` exists there. **`student_postsecondary` is settled** — production's
+`_prisma_migrations` records `20260610200000_create_student_postsecondary`, applied by hand ahead of
+commit `129903c`, and that migration creates it. That commit's own message says so.
 
 ---
 
@@ -208,7 +224,7 @@ unrecorded. Tracked build work lives in `bd` — `bd ready --json` — not here.
 | 15 | **`query_hours` was withdrawn from this branch, and the hours capability now lives elsewhere** | Landed 2026-08-13 (`41b16ef`, work packages #180/#181) as a 17th data tool over an `hour_logs` table fed by a 13th Google Sheets spreadsheet. Removed 2026-08-14: it is not grant-writing work, it was not needed for this PR, and hours are now handled in a separate project at `~/Projects/hours`, which has its own store and its own MCP server. **The commit is preserved on the `feat/hours-ingestion` branch** (pushed), so re-landing it is a cherry-pick rather than a rewrite — but note `41b16ef` also carries the OpenProject work-tracking mandate, which **stays** on this branch, so a future cherry-pick must drop the `CLAUDE.md` and `.env.example` OpenProject hunks. The direction conflict recorded on #180 still stands: F4 (#88) retires the shared Hours spreadsheet in favour of logging against work packages, so re-landing the sheet reader may never be the right move. |
 | 14 | **The unmatchable-filter-value guard is written and not deployed** | `query_enrollment(by_phase, current_phase: "Zzzznotaphase")` returns an empty breakdown with no error **in production**. The guard is at `apps/mcp-server/src/tools/query-enrollment.ts:217-224` on this branch, tested by `filter-domain.test.ts` and `sibling-filter-domains.test.ts`, and sits in the 44 commits `main` does not have. This is not documentation debt — it is the cost of not merging, recorded so the empty answer is not re-diagnosed as a new defect. `docs/INFORMATION-GAPS.md` §8.4. |
 | 12 | **Rebuild workspace packages before believing a type error** | Not documentation debt so much as a trap that has now cost time twice. A stale `packages/db/dist/index.d.ts` (dated 2026-08-03, exporting `Prisma` as a type where `src/index.ts:3` exports it as a value) produced 8 × TS1362 in `query-certifications.ts` and 9 integration failures on 2026-08-12 that read exactly like a defect on `master`. It was reported as such and withdrawn after `pnpm --filter @lp-ai/lib-db build`. `master` was never broken. §3's insistence that `pnpm test` and `pnpm -r typecheck` are both needed is right but insufficient — **typecheck reported a stale artifact as a source error**. Add the workspace build to the pairing, or record why not. |
-| 8 | **Six KB slots cannot fill the longest ask routed to them** | The KB's own note says answers are "the LONGEST canonical version" and the pipeline resizes *down*. Measured 2026-08-11 against the largest word limit recorded on any question routing to each slot: `kb.staff_bios` 110 words vs 600, `kb.history` 119 vs 500, `kb.target_population` 86 vs 300, `kb.capacity` 129 vs 250, `kb.dei` 122 vs 250, `kb.evaluation` 116 vs 200. The `needs_expand` guard (2026-08-11) makes this visible at draft time rather than silent, but the underlying content is thin and expansion is where invention happens. |
+| 8 | **Six KB slots cannot fill the longest ask routed to them** | The KB's own note says answers are "the LONGEST canonical version" and the pipeline resizes *down*. Measured 2026-08-11 against the largest word limit recorded on any question routing to each slot: `kb.staff_bios` 110 words vs 600, `kb.history` 119 vs 500, `kb.target_population` 86 vs 300, `kb.capacity` 129 vs 250, `kb.dei` 122 vs 250, `kb.evaluation` 116 vs 200. **The claim that the `needs_expand` guard made this visible was false until 2026-08-17** — the guard was wired only into the structured-value branch, so a *narrative* slot underfilling a roomy field still reported `fits` / `actor: none`, which is this exact row. Work package #252 wired it into the narrative path, so the draft now routes these to the calling model instead of reporting them done. **The content debt is untouched and is the real item here:** the slots are thin, and expansion is where invention happens. The handback carries no anchor on this path and `EXPAND_RULES_NO_ANCHOR`' ceiling-not-a-target rule is the only thing between a thin slot and a padded one. |
 | 9 | **`kb_launchpad.json` snapshot is older than the bank** | `kb.meta.updated` is `2026-07-23`; `questions.json` `meta.updated` is `2026-08-11`. The connector reconciliation prose is dated the same 2026-07-23 and its four staff flags — served count, PCEP denominator, Lightspeed, postsecondary — are all still open. Nothing enforces a maximum age, and a date-based check would be flaky in the suite; this is the record instead. |
 
 ---
@@ -244,15 +260,37 @@ docker exec lp-internal-postgres psql -U lpapp -d lpinternal -tAc \
   'select tool_name from tool_permissions order by 1;' | sed 's/[[:space:]]*$//' | sort -u > /tmp/perms.txt
 comm -23 /tmp/reg.txt /tmp/perms.txt   # empty is correct
 
-# Schema drift: migrations vs schema.prisma (expect only the documented uuid entries)
+# Schema drift: what the MIGRATIONS build vs what schema.prisma declares. This is the one that
+# answers "will a teammate's fresh clone drift" — expect ONLY the student_employment entries (§3).
+# Prisma 7 requires a shadow database for --from-migrations, and it must come from the config file,
+# so this needs a throwaway config; there is no --shadow-database-url flag any more.
+cat > /tmp/prisma.diff.ts <<'TS'
+import { defineConfig } from "prisma/config";
+export default defineConfig({
+  schema: "packages/db/prisma/schema.prisma",
+  migrations: { path: "packages/db/prisma/migrations" },
+  datasource: {
+    url: "postgresql://lpapp:lpapp@localhost:5433/shadowdiff?sslmode=disable",
+    shadowDatabaseUrl: "postgresql://lpapp:lpapp@localhost:5433/shadowdiff?sslmode=disable",
+  },
+});
+TS
+docker exec lp-internal-postgres psql -U lpapp -d postgres \
+  -c 'DROP DATABASE IF EXISTS shadowdiff;' -c 'CREATE DATABASE shadowdiff;'
+pnpm exec prisma migrate diff --config /tmp/prisma.diff.ts \
+  --from-migrations packages/db/prisma/migrations \
+  --to-schema packages/db/prisma/schema.prisma --script
+
+# Drift of YOUR clone specifically. A different question from the one above — it also reports whatever
+# `db push` did locally, so a non-empty result here is not necessarily a repository problem.
 pnpm exec prisma migrate diff \
   --from-schema packages/db/prisma/schema.prisma \
   --to-config-datasource --config ./prisma.config.ts
 
-# Migration state
+# Migration state — expect 16 migrations, "Database schema is up to date!"
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 373 passed, 0 skipped, 19 files.
+# Full suite — expect 397 passed, 0 skipped, 19 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

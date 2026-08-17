@@ -25,6 +25,187 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-17
+
+Pre-merge pass on `writing/dev` before it goes to `main`, from a code review of the branch. Parent work
+package `#249`. Gates were already green — `pnpm -r typecheck` clean, `pnpm lint` clean, `pnpm test`
+373/373 — so none of this was caught by CI, and that is the common thread: every item below is a case
+where the code and a document disagreed, and the document was the one being believed.
+
+### Fixed — `deploy.yml`'s `migrate` job now applies migrations
+
+Work package `#220`, recorded as a correction on 2026-08-14 (below) and now closed in code.
+`.github/workflows/deploy.yml`'s ECS one-off task runs `prisma migrate deploy` followed by
+`prisma migrate status`, in place of the read-only `SELECT` that applied nothing.
+
+Two details that took verifying and are worth not re-deriving:
+
+- **`prisma.config.ts` resolves `schema` and `migrations.path` relative to itself, not to the process
+  cwd.** So `--config prisma.config.ts` from `/workspace` is correct regardless of the image's
+  `WORKDIR` (which is `/workspace/apps/mcp-server`). Confirmed by running the same command from
+  `packages/db` with `--config ../../prisma.config.ts`.
+- **The image already carries everything needed.** `prisma` is a devDependency of `@lp-ai/lib-db` and
+  the runner stage copies `node_modules` wholesale from the builder; `packages/db/prisma/migrations`
+  and `prisma.config.ts` are both copied; `DATABASE_URL` is already injected from Secrets Manager.
+  Nothing about the Dockerfile or the task definition had to change.
+
+**The applied-migration list is now fetched from CloudWatch unconditionally**, not only on failure.
+That alone is why the old job's uselessness went unnoticed for as long as it did: a successful run left
+no record anywhere outside CloudWatch, so `#163` could not be answered from a workflow log.
+
+### Fixed — `20260610200000_create_student_postsecondary` is restored to the branch
+
+**Production had a migration this repository did not contain.** `20260610200000` exists only on
+`origin/feat/query-postsecondary-tool` (commit `129903c`), whose message records that it was applied to
+RDS by hand via a one-off ECS task. The local prod copy shows it: 15 rows in `_prisma_migrations`
+against 14 migration directories.
+
+`prisma migrate deploy` tolerates that asymmetry — verified, it does not error, which is why nothing
+surfaced it — but the repository's migration history no longer described how production was built. The
+file is restored verbatim, and its checksum matches the recorded row (verified: `migrate deploy` accepts
+it and reports 15 migrations found).
+
+It also happens to be the Prisma-generated DDL, with none of the drift in the next entry.
+
+### Fixed — `20260803000000` no longer drifts from `schema.prisma`, and its FK is no longer unusable
+
+Work package `#254`. That migration's header predicted **one** persistent `migrate diff` entry. Measured
+with `prisma migrate diff --from-migrations … --to-schema …` against a shadow database, the real answer
+was **eight statements across six objects**. Two defects:
+
+1. It wrote native `uuid` primary keys with `gen_random_uuid()`, and a DB-side default on
+   `aws_resource_jobs.updated_at`. `schema.prisma` declares `String @default(uuid())` — a client-side
+   default, so `text` with no DB default — and `@updatedAt`, which Prisma generates with no default at
+   all. Any developer running `prisma migrate dev` on a migrate-built database got a drift prompt
+   offering to reset.
+2. The FK on `student_postsecondary.student_number` was `ON DELETE SET NULL` **on a column the same
+   file declares `NOT NULL`**. Deleting a `students` row with postsecondary rows raised a not-null
+   violation from inside the FK trigger rather than a clean referential error.
+
+Both corrected. `20260817000000_align_postsecondary_fk_with_schema` is added for the FK created by
+`20260610200000` (`NO ACTION`, where Prisma generates `RESTRICT`) — a new migration rather than an edit,
+because that file's checksum is recorded in production and editing an applied migration is what
+`migrate deploy` refuses on principle.
+
+**The diff is now down to `student_employment` alone**, which is the only entry that should persist: that
+table is live in production with data, it was created by `20260527000000` which is applied there, and
+closing it means dropping and recreating a live primary key. `CLAUDE.md` §3's "known schema drift"
+paragraph is updated accordingly — it named three tables and should now name one.
+
+**If you have an existing local clone:** `20260803000000`'s checksum changed. `pnpm db:migrate` will
+refuse with a modified-migration error. Either recompute the recorded checksum —
+
+```bash
+NEW=$(sha256sum packages/db/prisma/migrations/20260803000000_*/migration.sql | cut -d' ' -f1)
+docker exec lp-internal-postgres psql -U lpapp -d lpinternal -c \
+  "UPDATE _prisma_migrations SET checksum='$NEW' WHERE migration_name LIKE '20260803000000%';"
+pnpm db:migrate
+```
+
+— or rebuild the database from scratch. Both migrations are guarded and idempotent, so re-applying
+changes nothing. **Production is unaffected**: neither `20260803000000` nor `20260817000000` has ever
+been applied there.
+
+### Fixed — `grant_build_draft` hid three statuses from both work lists
+
+Work package `#250`. `your_tasks` and `staff_actions` were built from two hand-written
+`Record<string, string>` maps and the builder iterated **the map's** keys, so a status absent from both
+maps counted toward `by_actor` and appeared in neither list. Three were missing: `fetch_figure` and
+`needs_expand` (`llm`), and `figure_definitional` (`staff`).
+
+Verified before the fix: `grant_build_draft {form_id:'hamilton_loi_2025'}` returned `by_actor.llm = 1`
+with `your_tasks: []`. `jevs_c2l_2024` reported 2 of its 3 staff items, hiding a definitional figure
+conflict from the people meant to resolve it — the one status where a wrong number reaches a funder.
+
+Now one map keyed on `AnswerStatus`, split by `STATUS_ACTOR` at read time rather than by hand, so the
+compiler rejects a new status with no next step and the split cannot disagree with the pipeline's own
+routing. Pinned by a conservation law over all ten stored fixtures rather than by naming the three
+statuses, because the failure is structural.
+
+### Fixed — `grant_resize_answer` accepted a whitespace-only rewrite as a faithful resize
+
+Work package `#251`. The verify path treated any non-`undefined` `rewrite` as a candidate, and every
+check downstream waves a blank one through: it measures 0 units so it fits every limit, and it states no
+figure so nothing is invented. A 95-word answer with figures plus `rewrite: '   '` came back
+`notes: 'fits'`, `accepted: true`, `text: '   '`, with the action line "Accepted: 0/10 words, down from
+95, and every figure traces to the source."
+
+`grant-resize-answer.ts` already guarded exactly this on `text`, and its comment named the failure mode.
+The guard was never applied to the other input. Now guarded in both places — the tool boundary and
+`resizeAnswer` itself, which is a public export — with a new `ResizeNote`, `rewrite_empty`, so the caller
+learns its rewrite was discarded rather than silently ignored.
+
+### Fixed — the `needs_expand` guard now fires on the narrative path
+
+Work package `#252`, and this one falsifies a claim in `CLAUDE.md` §4 item 8. That item says the guard
+"makes this visible at draft time rather than silent". It did not: the guard was wired only into the
+structured-value branch, which left unguarded the case it was written about.
+
+The knowledge base's own note says its answers are "the LONGEST canonical version" and the pipeline
+resizes *down*, so a thin slot against a roomy field is the common shape. Measured against the real seed:
+`kb.staff_bios` 110/600 words, `kb.history` 119/500, `kb.target_population` 86/600, `kb.dei` 122/600,
+`kb.evaluation` 116/600 — every one reporting `fits` / `actor: none` while `underfillsProseField` returned
+`true`.
+
+The narrative path carries **no anchor**, and that is not cosmetic: there is no separately confirmed short
+value, so `EXPAND_RULES`' "the confirmed value MUST appear unchanged" rule has no referent, and stating it
+anyway asks a model to preserve verbatim something it would have to invent first — on the one task in this
+layer most likely to produce invented statistics. `EXPAND_RULES_NO_ANCHOR` is the same set minus that
+rule, expressed by reference so the two cannot drift, and the `expand` instruction has a second wording
+for the unanchored case.
+
+### Fixed — `renderMarkdown` mislabelled an expand handback and dropped `anchor_value`
+
+Work package `#253`. The collapsed-block heading was a ternary on `task === 'resize'`, so everything else
+fell through to the `derive_short_value` wording: an `expand` handback rendered as "Source material to
+derive the value from — NOT the answer to this field", which is the opposite instruction.
+
+Worse, `anchor_value` was emitted nowhere. A `needs_expand` result deliberately withholds the confirmed
+value from `answer`, so the rendered artifact told the reviewer to keep a value verbatim while that value
+appeared nowhere in the document. It is now rendered first and outside the collapsed block. The heading is
+a `switch` over `HandbackTask`, so the compiler catches the next task added.
+
+### Fixed — a sentence-limit truncation preview could come back unmarked and byte-identical
+
+Work package `#255`. `pyCountSentences` breaks on `[.!?]` alone and `pySplitSentences` breaks on `[.!?]`
+followed by whitespace — a documented, deliberate prototype divergence that neither rule may move. Where
+the only over-limit break is a decimal point or an abbreviation, the splitter sees one chunk and the
+counter sees two: nothing was dropped, so the old `kept.length === chunks.length` test said "not cut" and
+returned the preview **byte-identical to the over-limit input, with no `…`**.
+
+`measure` calls `truncatePreview` only when the text is over the limit, so an unmarked identical preview
+lies in the one direction that matters — it reads as text already trimmed to fit, on a field where
+overrunning the cap means rejection. Verified on `'We spent 1.5 million dollars.'` at `max: 1`, and
+`cover.project_summary` and `organization.mission` both carry 3-sentence limits.
+
+The cut is now marked whenever the preview does not actually measure within `max`, not only when chunks
+were dropped. **The counting rules are unchanged** — the inflated count is prototype parity and is
+intended; the unmarked preview was not.
+
+### Fixed — `.gitignore`'s `data/` pattern was unanchored
+
+`data/` matched a directory named `data` at any depth. `git check-ignore` confirmed it swallowing
+`apps/hq/app/data/` and `connectors/google-sheets/src/data/`. Nothing lived there, so nothing was lost,
+but the next source directory named `data` would have gone uncommitted with no error anywhere. Now
+`/data/`.
+
+### Changed — `grant_build_draft`'s `form_id` description no longer risks taking down the tool surface
+
+`listFormIds()` ran at module evaluation to build the `form_id` description, doing a `readdirSync` on
+`packages/grants/seed/forms`. An unguarded throw there happens while `make-server.ts` is still importing,
+which takes down **all 24 tools** rather than degrading one — the opposite of the lazy-load invariant
+`data.ts` documents. It works today only because the Dockerfile copies `packages/` wholesale, and
+`.dockerignore` already excludes two `packages/grants/*` paths. Now wrapped, and the description omits the
+list rather than the server omitting every tool.
+
+### Verified — counts after this pass
+
+`pnpm test` is **397 across 19 files, 0 skipped** (was 373). `packages/grants` alone is **262 in 9 files**
+(was 240). `pnpm -r build`, `pnpm -r typecheck` and `pnpm lint` all clean. `pnpm db:migrate` applies
+**16 migrations** (was 14). Tool count unchanged at 24.
+
+---
+
 ## 2026-08-14
 
 ### Corrected — the deploy pipeline does not apply migrations, and every document implying it does was wrong

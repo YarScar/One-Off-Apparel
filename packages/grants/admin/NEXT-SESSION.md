@@ -72,11 +72,12 @@ right now, registered and unreachable.
 
 | | |
 |---|---|
-| PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard", 48 commits |
-| Suite | **373 passing across 19 files, zero skipped.** `packages/grants` alone is 240 in 9 |
-| Build / typecheck | `pnpm -r build` clean **including `apps/hq`**, the only package whose build lints. `pnpm -r typecheck` clean across fourteen |
+| PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard", 49 commits. **2 behind `origin/main`** (PR #46, `package.json` + `pnpm-lock.yaml`); no textual conflict, but re-run `pnpm install --frozen-lockfile` after merging since both sides touched the lockfile |
+| Suite | **397 passing across 19 files, zero skipped.** `packages/grants` alone is 262 in 9 |
+| Build / typecheck / lint | `pnpm -r build` clean **including `apps/hq`**, the only package whose build lints. `pnpm -r typecheck` clean across fourteen. `pnpm lint` clean — but it covers only `apps/hq` and `packages/grants`; `pnpm exec eslint apps/mcp-server` still reports errors (`#168`/`#169`) |
 | Tool surface | **24** on this branch, 21 on `main`. The three it adds are the `grant_*` tools |
-| Migrations | 14 applied locally, `migrate status` clean, `migrate diff` shows only the three documented `uuid` entries |
+| Migrations | **16** applied locally, `migrate status` clean. `migrate diff --from-migrations` shows only the **`student_employment`** entries — down from three tables, work package `#254`. **A checksum changed:** see the CHANGELOG's 2026-08-17 clone note before running `pnpm db:migrate` on an existing clone |
+| Pre-merge review | Code review 2026-08-17, work package `#249`. Seven correctness fixes landed (`#250`–`#255` + `#220`); the two remaining blockers are `#220`'s deploy verification and the `find_grant_documents` decision below |
 | Release gates | G1–G4 passed, all locally. **G5 not started and still blocked** — unchanged |
 | Local DB | **Faithful prod copy as of the 2026-08-14 snapshot** — 301 students, 19,128 attendance, 24,623 finance snapshots, 1,062 usage logs — with the branch's 3 migrations applied. Procedure and caveats: `docs/runbooks/rds-copy-down.md`. **Caveat: `pnpm test` wipes it** (`tools.test.ts` runs `seed({ force: true })`, whose `deleteMany`s are unfiltered). |
 
@@ -107,13 +108,22 @@ Both came out of the figure re-source and neither is closable by code:
 
 ### Order of work next session
 
-1. **Decide what to do about `#220`** before merging PR #51, or merge knowing the three grant tools
-   land unreachable. Those are the only two honest options. North10 `#215` built the
-   serving-image-plus-migration-runner pattern already and is worth reading first. The job is now
-   exactly "apply `20260729` and `20260803` to prod" — see "Resolved this evening".
+1. **Verify `#220`'s fix on the first real deploy.** The code is done (2026-08-17): `deploy.yml`'s
+   `migrate` job runs `prisma migrate deploy` and dumps the applied-migration list from CloudWatch
+   unconditionally. **What cannot be verified from here is the run** — RDS is private, so the proof is a
+   deploy whose workflow log lists `20260729000000` and `20260803000000` as applied. Watch that log; do
+   not assume a green job means what it used to fail to mean. `#163` closes on the same evidence.
+   Two things to expect and not misread:
+   - Production's `_prisma_migrations` holds `20260610200000`, which this repo now also holds — restored
+     verbatim, checksum verified against the recorded row, so it re-runs as a no-op rather than
+     tripping a checksum error.
+   - `20260817000000_align_postsecondary_fk_with_schema` will apply too. It swaps one FK's delete
+     action; it touches no data.
 2. **Decide on `fix/google-drive-discovery`** — cherry-pick it into this branch before merging, or
    deliberately retire `find_grant_documents` + the catalog from prod. Unresolved, this is a silent
-   feature rollback on the next deploy (see "Resolved this evening").
+   feature rollback on the next deploy (see "Resolved this evening"). **This is now the only blocker
+   that is a decision rather than a task**, and it is the one thing the 2026-08-17 review pass could
+   not close.
 3. **Check `skill_grant_sourcing_evaluation` in production** — the permission row exists (27 rows
    on prod), so this is now a one-call confirmation rather than an investigation.
 4. **Probe `q3_2026_actuals*` / `phase_actuals_2025_*`** for a fiscal-year label. Cheap, and it either
