@@ -100,6 +100,19 @@ export const EXPAND_RULES: readonly string[] = [
     'Return ONLY the answer text, nothing else.',
 ];
 
+/**
+ * {@link EXPAND_RULES} for the expansion that has no confirmed value to build around.
+ *
+ * The narrative path underfills a field with the slot's own prose — there is no separately verified
+ * short value, so {@link EXPAND_RULES}' first rule has no referent, and stating it anyway invites a
+ * model to invent the "confirmed value" it is told must appear verbatim. The remaining four rules are
+ * the ones that matter here, and the ceiling-not-a-target rule most of all: this task hands a model a
+ * thin slot and a large empty field, which is the shape that produces invented statistics.
+ *
+ * Identical to `EXPAND_RULES` minus the anchor rule, expressed by reference so the two cannot drift.
+ */
+export const EXPAND_RULES_NO_ANCHOR: readonly string[] = EXPAND_RULES.slice(1);
+
 export type HandbackTask = 'resize' | 'derive_short_value' | 'expand';
 
 /**
@@ -185,18 +198,30 @@ function instructionFor(task: HandbackTask, limit: FormLimit | null, anchor: str
         limit === null ? '' : `, within ${describeLimit(limit)}`
       }.`;
     case 'expand':
-      return (
-        `This field has room for more than the confirmed value${
-          anchor === undefined ? '' : ` (“${anchor}”)`
-        } answers on its own. Write the full answer around that value, drawing ONLY on the source ` +
-        `material below${limit === null ? '' : `, up to ${describeLimit(limit)}`}. Use less if that ` +
-        `is all the material supports.`
-      );
+      // Two shapes, because the anchored and unanchored expansions are different tasks. With an
+      // anchor there is a checked value to build around; without one — the narrative path, where the
+      // slot's own prose underfills the field — the work is writing the fuller answer from that prose,
+      // and telling a model to preserve a "confirmed value" that does not exist invites it to invent
+      // one.
+      return anchor === undefined
+        ? `The stored answer fills only a fraction of this field. Write the fuller answer from the ` +
+            `source material below, drawing ONLY on it${
+              limit === null ? '' : `, up to ${describeLimit(limit)}`
+            }. Use less if that is all the material supports, and say what is missing rather than ` +
+            `padding.`
+        : `This field has room for more than the confirmed value (“${anchor}”) answers on its own. ` +
+            `Write the full answer around that value, drawing ONLY on the source material below${
+              limit === null ? '' : `, up to ${describeLimit(limit)}`
+            }. Use less if that is all the material supports.`;
   }
 }
 
 export function buildHandback(input: BuildHandbackInput): Handback {
   const { task, sourceText, limit, measurement, context, anchorValue } = input;
+  const rules =
+    task === 'expand' && anchorValue === undefined
+      ? EXPAND_RULES_NO_ANCHOR
+      : RULES_FOR_TASK[task];
   return {
     task,
     instruction: instructionFor(task, limit, anchorValue),
@@ -204,7 +229,7 @@ export function buildHandback(input: BuildHandbackInput): Handback {
     limit,
     measurement,
     context,
-    rules: [...(input.extraRules ?? []), ...RULES_FOR_TASK[task]],
+    rules: [...(input.extraRules ?? []), ...rules],
     verify_with: VERIFY,
     ...(task === 'expand' && anchorValue !== undefined ? { anchor_value: anchorValue } : {}),
   };

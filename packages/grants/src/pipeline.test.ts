@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { listFormIds, loadBank, loadForm, loadKnowledgeBase } from './data.js';
-import { DERIVE_RULES, EXPAND_RULES, RESIZE_RULES } from './handback.js';
+import {
+  DERIVE_RULES,
+  EXPAND_RULES,
+  EXPAND_RULES_NO_ANCHOR,
+  RESIZE_RULES,
+} from './handback.js';
 import {
   STATUS_ACTOR,
   STATUS_NOTE,
@@ -669,5 +674,107 @@ describe('needs_expand — a stored value that fits a field but does not answer 
     );
     expect(out.status).toBe('needs_resize');
     expect(out.handback?.task).toBe('resize');
+  });
+});
+
+// ------------------------------------------------- the same guard on the narrative path (WP #254/#252)
+
+/**
+ * The `needs_expand` guard landed on the structured branch only, which left unguarded the case it was
+ * actually written about.
+ *
+ * The knowledge base's own note says its answers are "the LONGEST canonical version" and this module
+ * resizes *down* — so a thin slot against a roomy field is the common shape, not the exotic one.
+ * Measured against the real seed on 2026-08-17: `kb.staff_bios` 110/600 words, `kb.history` 119/500,
+ * `kb.target_population` 86/600, `kb.dei` 122/600, `kb.evaluation` 116/600. Every one reported `fits` /
+ * `actor: none` while `underfillsProseField` returned `true`, and `packages/grants/CLAUDE.md` §4 item 8
+ * claimed the guard already made exactly this visible. It did not. Work package #252.
+ *
+ * The difference from the structured path is the anchor, and it is not cosmetic: there is no separately
+ * confirmed short value here, so `EXPAND_RULES`' "the confirmed value MUST appear unchanged" rule has no
+ * referent. Stating it anyway would ask a model to preserve verbatim something it would have to invent
+ * first, on the one task in this layer most likely to produce invented statistics.
+ */
+describe('needs_expand — a narrative slot that fits a field but barely fills it', () => {
+  const THIN = 'Launchpad recruits from more than 30 Philadelphia high schools.';
+
+  const run = (answerType: AnswerType, limit: FormLimit, text = THIN): AnswerPlan =>
+    buildAnswer(
+      match({ matched_id: 'program.history', kb_ref: 'kb.history', answer_type: answerType }),
+      limit,
+      kbWith('kb.history', text, true),
+    );
+
+  it('routes to the calling model instead of reporting the field done', () => {
+    const out = run('narrative', WORDS(500));
+    expect(out.status).toBe<AnswerStatus>('needs_expand');
+    expect(out.actor).toBe('llm');
+    expect(out.actor).toBe(STATUS_ACTOR.needs_expand);
+  });
+
+  it('withholds the thin text as `answer`, for the same reason the structured branch does', () => {
+    const out = run('narrative', WORDS(500));
+    expect(out.answer).toBeUndefined();
+    expect(out.handback?.task).toBe('expand');
+    expect(out.handback?.source_text).toBe(THIN);
+  });
+
+  it('carries no anchor, and drops the rule that would have no referent', () => {
+    const out = run('narrative', WORDS(500));
+    expect(out.handback?.anchor_value).toBeUndefined();
+    expect(out.handback?.rules).toEqual(EXPAND_RULES_NO_ANCHOR);
+    expect(out.handback?.rules.join(' ')).not.toContain('MUST appear in your answer unchanged');
+    // The rules that DO matter here are still every one of them — most of all the ceiling rule, which
+    // is what stops this branch from trading a silent under-answer for a padded invented one.
+    expect(out.handback?.rules.join(' ')).toMatch(/CEILING, NOT A TARGET/);
+    expect(out.handback?.rules.join(' ')).toMatch(/NEVER invent/);
+    expect(out.handback?.instruction).not.toContain('confirmed value');
+  });
+
+  it('names the shortfall in the funder’s own units and refuses to license padding', () => {
+    const out = run('narrative', WORDS(500));
+    expect(out.action).toContain('/500 words');
+    expect(out.action).toMatch(/no further than that material supports/);
+  });
+
+  // ---- what it must NOT do, mirroring the structured cases ------------------------------------
+
+  it('leaves a slot that already fills the field alone', () => {
+    const out = run('narrative', WORDS(10));
+    expect(out.status).toBe<AnswerStatus>('fits');
+    expect(out.answer).toBe(THIN);
+  });
+
+  it('leaves a non-expandable type alone however generous the box', () => {
+    // `field` is not in EXPANDABLE_ANSWER_TYPES, so this reaches derive_from_reference instead —
+    // the field wants a short value and the slot holds prose, which is a different kind of work.
+    const out = run('field', WORDS(500));
+    expect(out.status).toBe<AnswerStatus>('derive_from_reference');
+  });
+
+  it('leaves a field below the prose floor alone', () => {
+    const out = run('narrative', { unit: 'characters', max: 200 });
+    expect(out.status).toBe<AnswerStatus>('fits');
+  });
+
+  it('leaves an over-limit slot on the resize path', () => {
+    const long = Array.from({ length: 700 }, () => 'word').join(' ');
+    const out = run('narrative', WORDS(500), long);
+    expect(out.status).toBe<AnswerStatus>('needs_resize');
+    expect(out.handback?.task).toBe('resize');
+  });
+
+  it('fires on at least one stored fixture, so the seed is covered and not only the unit cases', () => {
+    const seen = listFormIds().flatMap((id) =>
+      runPipeline(loadForm(id), loadBank(), loadKnowledgeBase()).results.filter(
+        (r) => r.status === 'needs_expand',
+      ),
+    );
+    expect(seen.length).toBeGreaterThan(0);
+    for (const r of seen) {
+      expect(r.answer).toBeUndefined();
+      expect(r.handback?.task).toBe('expand');
+      expect(r.measurement?.fits).toBe(true);
+    }
   });
 });

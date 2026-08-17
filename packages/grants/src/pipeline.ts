@@ -440,6 +440,45 @@ export function buildAnswer(
   const measurement = measureAgainst(text, limit, match.kb_ref);
 
   if (measurement.fits) {
+    // FITTING IS NOT ANSWERING — the same test as the structured branch above, and it belongs here
+    // too. The guard landed on the structured path only, which left the case it was actually written
+    // about unguarded: the KB's own note says its answers are "the LONGEST canonical version" and this
+    // module resizes *down*, so a thin slot against a roomy field reported `fits` / `actor: none`.
+    // Measured against the real seed: kb.staff_bios 110/600 words, kb.history 119/500,
+    // kb.target_population 86/600, kb.dei 122/600, kb.evaluation 116/600 — five slots reporting no
+    // work owed on fields they fill less than a quarter of. `CLAUDE.md` §4 item 8 claimed this guard
+    // already made that visible; it did not. Work package #252.
+    //
+    // No `anchor_value` on this path, and that is the real difference from the structured branch:
+    // there is no separately confirmed short value here. The slot prose IS the material, so it travels
+    // as `source_text` and EXPAND_RULES_NO_ANCHOR's ceiling-not-a-target rule is what keeps the model
+    // from padding it.
+    if (underfillsProseField(measurement, match.answer_type)) {
+      return {
+        ...withEntry,
+        status: 'needs_expand',
+        actor: STATUS_ACTOR.needs_expand,
+        action: addWarnings(
+          `The stored answer fits (${String(measurement.count)}/${String(measurement.max)} ` +
+            `${measurement.unit}) but fills only a fraction of a field this size. Write the fuller ` +
+            `answer from ${match.kb_ref} — up to the limit, and no further than that material ` +
+            `supports. If it does not support more, say what is missing rather than padding.`,
+          verified,
+          carriesFigures,
+        ),
+        // Deliberately no `answer`, matching the structured branch: present, the thin text reads as a
+        // finished answer to anything rendering the package, and the point of this branch is that it
+        // is not one yet.
+        handback: buildHandback({
+          task: 'expand',
+          sourceText: text,
+          limit,
+          measurement,
+          context,
+        }),
+        measurement,
+      };
+    }
     return {
       ...withEntry,
       status: 'fits',
