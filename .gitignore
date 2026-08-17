@@ -55,8 +55,15 @@ packages/db/generated/
 # Sentry
 .sentryclirc
 
-# Local Claude Code config (skills, settings) — not shared with the team
-.claude/
+# Local Claude Code config — not shared with the team, EXCEPT the project skills below.
+#
+# `.claude/skills/` holds four skills that are about this repository rather than about one
+# machine: add-mcp-tool (the tool_permissions migration and admin-category steps a new tool
+# needs before any role can reach it), implement-connector (the runSync shape and the
+# never-TRUNCATE rule), and grant-writing / grant-writing-mcp. Ignoring all of `.claude/`
+# meant those could never reach main, so every clone but this one lacked them.
+.claude/*
+!.claude/skills/
 
 # Personal working notes. Real work gets an OpenProject work package instead.
 TODO.local.md

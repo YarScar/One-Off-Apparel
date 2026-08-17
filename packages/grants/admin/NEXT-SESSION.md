@@ -73,7 +73,7 @@ right now, registered and unreachable.
 | | |
 |---|---|
 | PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard", 49 commits. **2 behind `origin/main`** (PR #46, `package.json` + `pnpm-lock.yaml`); no textual conflict, but re-run `pnpm install --frozen-lockfile` after merging since both sides touched the lockfile |
-| Suite | **470 passing across 23 files, zero skipped.** `packages/grants` alone is 290 in 10 |
+| Suite | **480 passing across 23 files, zero skipped.** `packages/grants` alone is 299 in 10 |
 | Build / typecheck / lint | `pnpm -r build` clean **including `apps/hq`**, the only package whose build lints. `pnpm -r typecheck` clean across fourteen. `pnpm lint` clean — but it covers only `apps/hq` and `packages/grants`; `pnpm exec eslint apps/mcp-server` still reports errors (`#168`/`#169`) |
 | Tool surface | **25** on this branch, 21 on `main` — and **prod is not a subset**: it lacks the three `grant_*` tools and the fifth `skill_*`, and it *has* `find_grant_documents`, deployed from `fix/google-drive-discovery` on 2026-08-06 and merged here only on 2026-08-17 |
 | Migrations | **19** applied locally, `migrate status` clean. `migrate diff --from-migrations` shows only the **`student_employment`** entries — down from three tables (`#254`) plus the Drive index rename (`#256`). **A checksum changed:** see the CHANGELOG's 2026-08-17 clone note before running `pnpm db:migrate` on an existing clone |
@@ -318,6 +318,8 @@ Seven commits on `writing/dev`, in the planned order:
 | `f810f30` | `chore(grants)` — make the linter runnable, get the package clean |
 
 One change from the plan: commit 6 was going to add the two project skills under `.claude/`. The decision was **local, not shared**, so `.claude/` went into `.gitignore` instead. Nothing is left untracked and undecided.
+
+**Reversed 2026-08-17, work package `#259`.** "Local, not shared" was the wrong call for the skills specifically: `add-mcp-tool` and `implement-connector` are procedures the root `CLAUDE.md` requires, and blanket-ignoring `.claude/` meant no other clone could ever have them. The ignore is now `.claude/*` with a `!.claude/skills/` exception — four skills tracked, everything machine-local still ignored.
 
 ### Item 2 — the linter runs, and the rollout number is known
 
