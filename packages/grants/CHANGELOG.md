@@ -27,6 +27,57 @@ entry can be verified rather than trusted.
 
 ## 2026-08-17
 
+### Fixed — `pyRound` now rounds half-to-even, because the tie case it argued was unreachable is not
+
+Work package `#258`. `packages/grants/src/py.ts` implemented Python's `round(x, ndigits)` as
+`Number(value.toFixed(ndigits))`, justified by an argument in its own doc comment: an exact half-way
+tie at 3 decimals needs a denominator of 5⁴, no binary double can represent that, so half-up and
+half-even can never disagree.
+
+**The argument was inverted.** A tie needs 5⁴ to divide the *numerator* of `n / 10⁴`, and that is
+precisely what makes it representable. There are eight exact ties in [0, 1] at 3 decimals — the odd
+multiples of 1/16 — and CPython 3.14.6 disagrees with `toFixed` on four of them:
+
+| value | `round(v, 3)` | `(v).toFixed(3)` |
+|---|---|---|
+| 0.0625 | 0.062 | 0.063 |
+| 0.3125 | 0.312 | 0.313 |
+| 0.5625 | 0.562 | 0.563 |
+| 0.8125 | 0.812 | 0.813 |
+
+`matchQuestion` reports `pyRound(bestScore, 3)` as `confidence`, and the score is
+`0.7 * jaccard + 0.3 * sequenceRatio`, so hitting one of the eight is remote — but "remote" is not a
+parity contract, and the comment claimed impossible. The rule is now implemented rather than argued:
+the double is decomposed into `m · 2^e`, the remainder compared against half the divisor in `BigInt`,
+and an exact tie broken to the even quotient. The result is assembled as a decimal string so the
+final conversion lands on the nearest double to the rounded decimal, as Python's does.
+
+**No recorded confidence moved.** The `matchQuestion` prototype-parity suite, which reproduces every
+recorded `MatchResult` field for field, passes unchanged — so this is a closed hole rather than a
+changed match. Nine cases added to `py.test.ts` pin all eight ties plus the sign and zero paths.
+
+### Fixed — `query_attendance` echoed the caller's `limit` instead of the clamp it applied
+
+Work package `#257`. `apps/mcp-server/src/tools/query-attendance.ts` builds its `filters_applied`
+echo from the raw input, but both row-returning branches clamp: `events` at 500, `by_student` at
+1000. A caller sending `limit: 5000` was told `filters_applied.limit: 5000` while 500 rows came back
+and `truncated: true` sat in the same envelope contradicting it. The echo now reports the effective
+limit, and only when the caller actually sent one, so an absent `limit` still reads as absent rather
+than as the branch default. Case added to `query-attendance-filters.test.ts`.
+
+### Changed — `.gitignore` no longer hides the project skills from every other clone
+
+Work package `#259`. `.gitignore` ignored all of `.claude/` as "local Claude Code config", but four
+of the skills beneath it describe *this repository* and belong in it: `add-mcp-tool` (the
+`tool_permissions` migration and admin-category steps a new tool needs before any role can reach it),
+`implement-connector` (the `runSync` shape and the never-TRUNCATE rule), and `grant-writing` /
+`grant-writing-mcp`. They could never reach `main`, so only this machine had them — including the
+two whose whole content is a procedure the root `CLAUDE.md` says must be followed.
+
+Now `.claude/*` with a `!.claude/skills/` exception, so `settings.local.json` and anything else
+machine-local stays ignored. 108 KiB, scanned for credentials before committing. **If you have an
+existing clone, `git pull` gives you four skills you did not have; nothing you had is removed.**
+
 ### Merged — `fix/google-drive-discovery`, so `find_grant_documents` survives the deploy
 
 Work package `#256`, and this was the second of the two pre-merge blockers — the one that was a

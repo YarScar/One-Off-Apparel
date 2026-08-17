@@ -84,10 +84,12 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. **19 migrations applied.** The full suite is **470 tests across 23
+`pg_trgm 1.6` via `pnpm db:up`. **19 migrations applied.** The full suite is **480 tests across 23
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
 over stdio. Measured 2026-08-17 after `pnpm -r build`, `pnpm -r typecheck` and `pnpm lint`, all clean
-across all fifteen packages. (397 across 19 and 16 migrations before `fix/google-drive-discovery` merged
+across all fifteen packages. (470 across 23 before the same day's low-severity fold — work package
+`#257`/`#258` — which added the clamped-`limit` echo case and nine `pyRound` half-even cases.
+397 across 19 and 16 migrations before `fix/google-drive-discovery` merged
 in later the same day — work package #256 — which brought `catalog.test.ts` and three
 `connectors/google-drive` suites, the two `20260806*` migrations that were already applied in
 production, and `20260817000100_rename_grant_documents_archive_ext_index`. 373 across 19 and 14
@@ -99,7 +101,8 @@ integration cases with it — §4 item 15. 294 across 14 before three sources ad
 `#207`/`#209`/`#210` filter work added `filter-domain.test.ts`, `query-attendance-filters.test.ts` and
 `sibling-filter-domains.test.ts`; PRs #49 and #50, merged from `main`, brought `finance-tab-map.test.ts`
 and `query-enrollment-filters.test.ts`.)
-`packages/grants` alone is **290 in 10 files**, with no database and no network. (262 in 9 before the
+`packages/grants` alone is **299 in 10 files**, with no database and no network. (290 in 10 before
+`#258` added nine `pyRound` cases. 262 in 9 before the
 Drive merge added `catalog.test.ts`. 240 in 9
 before the 2026-08-17 pre-merge pass added 22 — the narrative `needs_expand` guard, the blank-rewrite
 rejection, the marked sentence preview, and the Markdown render of an `expand` handback. 230 in 9
@@ -321,7 +324,7 @@ pnpm exec prisma migrate diff \
 # Migration state — expect 19 migrations, "Database schema is up to date!"
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 470 passed, 0 skipped, 23 files.
+# Full suite — expect 480 passed, 0 skipped, 23 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 
