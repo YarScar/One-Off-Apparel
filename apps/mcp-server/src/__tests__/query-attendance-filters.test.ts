@@ -392,6 +392,27 @@ describeLocal('query_attendance limit (live DB)', () => {
     expect(res.overall?.student_count).toBe(PHASE_A_STUDENTS.length);
   });
 
+  /**
+   * Both row-returning branches clamp — `events` at 500, `by_student` at 1000 — and the echo used
+   * to report the caller's number, so an envelope could say `limit: 5000` while `truncated: true`
+   * in the same object said the opposite. The echo is the clamp now.
+   */
+  it('echoes the clamped limit rather than an over-large ask', async () => {
+    const events = (await client.callTool('query_attendance', {
+      query_type: 'events',
+      current_phase: PHASE_A,
+      limit: 5000,
+    })) as Envelope;
+    expect(events.filters_applied).toEqual({ current_phase: PHASE_A, limit: 500 });
+
+    const byStudent = (await client.callTool('query_attendance', {
+      query_type: 'by_student',
+      current_phase: PHASE_A,
+      limit: 5000,
+    })) as Envelope;
+    expect(byStudent.filters_applied).toEqual({ current_phase: PHASE_A, limit: 1000 });
+  });
+
   it('returns every matched student when no limit is given', async () => {
     const res = (await client.callTool('query_attendance', {
       query_type: 'by_student',

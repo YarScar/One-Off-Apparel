@@ -227,6 +227,11 @@ export function registerQueryAttendance(server: McpServer): void {
 
       if (queryType === 'events') {
         const limit = Math.min(parseNum(raw, 'limit') ?? 200, 500);
+        // Echo the clamp, not the ask. `provided` is built from the raw input, so a caller who
+        // sent `limit: 5000` was told `filters_applied.limit: 5000` while 500 rows came back —
+        // `truncated` said otherwise in the same envelope. Only overwritten when the caller
+        // actually sent one, so an absent `limit` still reads as absent rather than as the default.
+        if ('limit' in provided) provided['limit'] = limit;
         const [totalMatched, rows] = await Promise.all([
           prisma.attendanceRecord.count({ where }),
           prisma.attendanceRecord.findMany({
@@ -293,6 +298,8 @@ export function registerQueryAttendance(server: McpServer): void {
          * identical calls.
          */
         const limit = Math.min(parseNum(raw, 'limit') ?? perStudent.size, 1000);
+        // Clamped echo, as in the `events` branch above — the ceiling here is 1000.
+        if ('limit' in provided) provided['limit'] = limit;
         const ordered = Array.from(perStudent.entries()).sort(([a], [b]) => a.localeCompare(b));
         const page = ordered.slice(0, limit);
         return {
