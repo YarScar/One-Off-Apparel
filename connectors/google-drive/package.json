@@ -8,12 +8,15 @@
   "scripts": {
     "sync": "node --env-file=../../.env dist/cli.js",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "authorize": "node --env-file=../../.env --import tsx scripts/authorize.ts"
   },
   "dependencies": {
     "@lp-ai/lib-config": "workspace:*",
     "@lp-ai/lib-db": "workspace:*",
     "@lp-ai/lib-embedding": "workspace:*",
+    "@lp-ai/lib-grants": "workspace:*",
+    "googleapis": "^140.0.1",
     "zod": "^3.23.0"
   },
   "devDependencies": {

@@ -12,6 +12,11 @@
 // zod schemas + inferred types for each seed file.
 export * from './schemas.js';
 
+// Grant corpus classification: a Drive/mirror path -> funder, year, kind, and the honesty
+// flags the catalog stores. Shared so the Drive walk and the local index cannot disagree
+// about the same file.
+export * from './catalog.js';
+
 // Counting primitives that reproduce Python semantics. The port depends on these for parity.
 export * from './py.js';
 

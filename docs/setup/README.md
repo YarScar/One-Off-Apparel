@@ -25,7 +25,7 @@ Status legend: ✅ Complete · 🟡 Built (awaiting credential to activate) · �
 | 4 | Prisma schema — all tables | [04-prisma-schema.md](04-prisma-schema.md) | ✅ Complete | 30 models incl. NextAuth, MCP OAuth, employment, postsecondary |
 | 5 | Google connectors — Sheets + Drive | [05-google-connectors.md](05-google-connectors.md) | ✅ Sheets live | All 12 sheet syncs ported; 26K+ records; Drive still skeleton |
 | 6 | Embeddings + pgvector search | [06-embeddings-pgvector.md](06-embeddings-pgvector.md) | ✅ Complete | OpenAI `text-embedding-3-large` verified and live |
-| 7 | MCP server — 24 tools | [07-mcp-server.md](07-mcp-server.md) | ✅ Complete | 16 data tools wired to Prisma; the 3 grant tools and 5 skill tools read seed data only; stdio + HTTP + MCP OAuth transports |
+| 7 | MCP server — 25 tools | [07-mcp-server.md](07-mcp-server.md) | ✅ Complete | 16 data tools wired to Prisma; `find_grant_documents` reads the `grant_documents` catalog; the 3 grant tools and 5 skill tools read seed data only; stdio + HTTP + MCP OAuth transports |
 | 8 | HQ dashboard — Next.js + NextAuth | [08-hq-dashboard.md](08-hq-dashboard.md) | ✅ Complete | All pages live incl. analytic dashboard, admin panel |
 | 9 | ECS Fargate deployment | [09-ecs-express-mode.md](09-ecs-express-mode.md) | 🟡 In progress | 4 Dockerfiles + 5 ECS task defs built; deployment in progress |
 | 10 | AWS EventBridge cron scheduling | [10-eventbridge-cron.md](10-eventbridge-cron.md) | 🔲 Pending | |

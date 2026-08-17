@@ -2,7 +2,13 @@
 
 ## Tool Availability
 
-The server currently exposes **24 tools** — 16 data tools, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 5 `skill_*` tools — backed by Google Sheets, Aplos, and Notion connectors. Counted 2026-08-14; `main` is at 21 and gains the three `grant_*` tools when `writing/dev` merges. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+The server currently exposes **25 tools** — 16 data tools, `find_grant_documents`, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 5 `skill_*` tools — backed by Google Sheets, Aplos, Notion, and Google Drive connectors. Counted 2026-08-17 on `writing/dev` after `fix/google-drive-discovery` merged in; `main` is at 21. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+
+`main`'s 21 do **not** map onto a subset of these 25 in the obvious way, and the difference matters when reasoning about what production can answer. `main` lacks the three `grant_*` tools and the fifth `skill_*` tool, and it *has* `find_grant_documents` — which was deployed to production from `fix/google-drive-discovery` on 2026-08-06, before `main` became the only deploy branch. Merging this branch is what finally makes the repository and production agree on that tool. Verify the count with:
+
+```bash
+grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print s}'
+```
 
 **Active tools (16):**
 - `get_student_info` — Sheets student roster + Drive student info doc
@@ -27,6 +33,9 @@ The server currently exposes **24 tools** — 16 data tools, `grant_match_questi
 - `grant_build_draft` — captured funder form → reviewable draft package + figure verification work order
 - `grant_resize_answer` — one stored answer + one stated limit → the measurement, the rewrite rules, and a check on the rewrite the caller sends back
 
+**Grant document discovery (1):** listed apart from the three above because it is *not* one of them — it queries the `grant_documents` Postgres catalog, not the seed files, so it is a data tool that happens to serve grant work.
+- `find_grant_documents` — funder / year / kind filters over the Drive Grants catalog → matching files and their Drive file IDs
+
 **Still pending:**
 - Slack connector for `search_conversations`
 
@@ -34,7 +43,7 @@ Composite tools (`get_entity_brief`, `get_finance_brief`) MUST gracefully omit s
 
 ## Overview
 
-The MCP server exposes 24 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
+The MCP server exposes 25 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
 
 Every tool call is logged to the `usage_logs` Postgres table (tool name, timestamp, duration, caller identity, token usage).
 
@@ -672,6 +681,40 @@ will silently skip work:
 - **Nothing it returns is submittable.** A person always reviews and always submits.
 
 ---
+
+### `find_grant_documents`
+
+Find grant documents in the Google Drive "Grants" tree by funder, year, and document kind. Returns a **catalog listing — no document text**. Reads the `grant_documents` table; touches neither Drive nor pgvector.
+
+**Why it exists.** Drive discovery does not work for this tree. Listing a subfolder's children returns an empty set and `title`/`fullText` search never matches inside it, while fetching a *known* file ID returns full content. Only the discovery half is broken, so this tool replaces it: filter here to get Drive file IDs, then fetch those IDs with a Google Drive read tool. That keeps 3.5+ GiB of grant material reachable with nothing embedded.
+
+**Inputs:** all optional — `funder` (case-insensitive substring, so `truist` matches `Truist Foundation`), `year`, `year_min`, `year_max`, `doc_kind`, `collection`, `title_contains`, `include_archive`, `include_external`, `only_fetchable`, `limit` (default 25, max 100).
+
+**Returns:** `total_matching`, `returned`, `facets` (counts by funder and by kind, for narrowing a broad hit list without a second call), `results[]`, and `usage_note`. Each result carries `drive_file_id`, `drive_url`, `fetchable`, `path`, `filename`, `funder`, `year`, `doc_kind`, `collection`, `mime_type`, `archive_only`, `external_reference`, `needs_review`, `size_bytes`, `modified_at`.
+
+| `doc_kind` | Meaning |
+|---|---|
+| `application_response` | Narrative answers submitted to a funder |
+| `budget` | Budgets, financials, invoices, 990s |
+| `report` | Grant reports and performance measures |
+| `letter_of_support` | Letters of support |
+| `loi` | Letters of inquiry / intent |
+| `agreement` | Executed grant agreements |
+| `program_description` | Launchpad describing its own programs — prime drafting context |
+| `template` | Blank templates |
+| `attachment` | Consent forms, signature requests, supporting paperwork |
+| `transcript` | Interview and meeting transcripts |
+| `meeting_notes` | Meeting notes |
+| `external_reference` | **Not written by Launchpad** — funder rules, other grantees' applications |
+| `other` | Not confidently classified; see `needs_review` |
+
+**Three contracts worth knowing before you call it:**
+
+- **Two exclusions are on by default, and they are not the same risk.** `archive_only` hides applications predating the current program (`ARCHIVE_BEFORE_YEAR = 2025`), which describe a program Launchpad no longer runs — the failure is a confidently outdated draft. `external_reference` hides documents Launchpad did not author — the failure there is **plagiarism**, putting another organization's narrative in a Launchpad submission. Pass `include_archive` / `include_external` for research, never for drafting.
+- **`excluded` rows are never returned, on any flag combination.** Those files sit under `Project Management (do not ingest)` or `Ignore` and were marked by an explicit human instruction rather than by inference, so no argument overrides them.
+- **`funder`, `year`, and `doc_kind` are inferred from folder and file names only** — nothing is read from file contents. `needs_review` marks rows where inference was not decisive (no year, or `doc_kind = other`). Treat a filter built on them as a good shortlist, not a guarantee of completeness.
+
+**`fetchable=false` means the row has no Drive file ID recorded yet**, so it can be seen but not read. IDs come from the `google-drive` connector (`pnpm sync:drive`, or `packages/grants/scripts/drive-walk-grants.ts --dry-run` to look first), which needs an identity with shared-drive membership — see [docs/data-sources/google-drive-connector.md](data-sources/google-drive-connector.md).
 
 ### `grant_resize_answer`
 

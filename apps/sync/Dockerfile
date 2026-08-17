@@ -43,6 +43,10 @@ RUN DATABASE_URL="postgresql://placeholder" pnpm --filter @lp-ai/lib-db generate
 RUN pnpm --filter @lp-ai/lib-config build
 RUN pnpm --filter @lp-ai/lib-db build
 RUN pnpm --filter @lp-ai/lib-embedding build
+# google-drive imports the corpus classifier from here, so this must precede the
+# connector build — without it `tsc` cannot resolve the package's types and the
+# image build fails.
+RUN pnpm --filter @lp-ai/lib-grants build
 # Build every connector — runtime image picks one per task invocation.
 RUN pnpm --filter "@lp-ai/connector-*" build
 

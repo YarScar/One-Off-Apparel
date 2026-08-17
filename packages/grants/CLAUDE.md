@@ -84,18 +84,23 @@ Re-verify before trusting this section; it is a snapshot, not a contract. Every 
 checked by running something.
 
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. **16 migrations applied.** The full suite is **397 tests across 19
+`pg_trgm 1.6` via `pnpm db:up`. **19 migrations applied.** The full suite is **470 tests across 23
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
-over stdio. Measured 2026-08-17 after `pnpm -r build` and `pnpm -r typecheck`, both clean across all
-fourteen packages. (373 across 19 and 14 migrations before the 2026-08-17 pre-merge pass — work package
-#249 — which added 24 cases, restored `20260610200000_create_student_postsecondary` from
-`feat/query-postsecondary-tool`, and added `20260817000000_align_postsecondary_fk_with_schema`; see
-`CHANGELOG.md`. 377 earlier on 2026-08-14, before `query_hours` was withdrawn and took its four
+over stdio. Measured 2026-08-17 after `pnpm -r build`, `pnpm -r typecheck` and `pnpm lint`, all clean
+across all fifteen packages. (397 across 19 and 16 migrations before `fix/google-drive-discovery` merged
+in later the same day — work package #256 — which brought `catalog.test.ts` and three
+`connectors/google-drive` suites, the two `20260806*` migrations that were already applied in
+production, and `20260817000100_rename_grant_documents_archive_ext_index`. 373 across 19 and 14
+migrations before the 2026-08-17 pre-merge pass — work package #249 — which added 24 cases, restored
+`20260610200000_create_student_postsecondary` from `feat/query-postsecondary-tool`, and added
+`20260817000000_align_postsecondary_fk_with_schema`; see `CHANGELOG.md`.
+377 earlier on 2026-08-14, before `query_hours` was withdrawn and took its four
 integration cases with it — §4 item 15. 294 across 14 before three sources added five files: the
 `#207`/`#209`/`#210` filter work added `filter-domain.test.ts`, `query-attendance-filters.test.ts` and
 `sibling-filter-domains.test.ts`; PRs #49 and #50, merged from `main`, brought `finance-tab-map.test.ts`
 and `query-enrollment-filters.test.ts`.)
-`packages/grants` alone is **262 in 9 files**, with no database and no network. (240 in 9
+`packages/grants` alone is **290 in 10 files**, with no database and no network. (262 in 9 before the
+Drive merge added `catalog.test.ts`. 240 in 9
 before the 2026-08-17 pre-merge pass added 22 — the narrative `needs_expand` guard, the blank-rewrite
 rejection, the marked sentence preview, and the Markdown render of an `expand` handback. 230 in 9
 before 2026-08-12, when the code review of the seed-audit checks added 10 cases to `data.test.ts`;
@@ -121,26 +126,52 @@ suite passed 187/187 throughout, and the break sat undetected in the working tre
 declarations can go stale while every case passes. `pnpm -r typecheck` caught exactly that on the
 same fix. The pairing is the check; neither half is.
 
-**MCP server: 24 tools registered** on this branch — 16 data, the three `grant_*` tools, and 5
-`skill_*`. Counted 2026-08-14 by the §6 command. The count moved twice in one day and both moves are
-worth knowing: `skill_grant_sourcing_evaluation` (PR #48, from `main`) took it from 23 to 24, and
-`query_hours` briefly took it to 25 before being **withdrawn from this branch** on 2026-08-14 — see §4
-item 15.
+**MCP server: 25 tools registered** on this branch — 16 data, `find_grant_documents`, the three
+`grant_*` tools, and 5 `skill_*`. Counted 2026-08-17 by the §6 command, after
+`fix/google-drive-discovery` merged in (work package #256) and brought `find_grant_documents` with it.
+The count has moved four times in four days and each move is worth knowing:
+`skill_grant_sourcing_evaluation` (PR #48, from `main`) took it 23 → 24; `query_hours` briefly took it
+to 25 before being **withdrawn from this branch** on 2026-08-14 (§4 item 15); and the Drive merge took
+it 24 → 25 on 2026-08-17. **Quote the command, not the number.**
 
-**Production is at 21 of the 24.** `main` lacks the three `grant_*` tools and
-gains them only when this branch merges. Verify a tool's presence by reading its live *description*
-rather than calling it — see `docs/INFORMATION-GAPS.md` §9.
+**Production is at 21, and it is NOT a subset of the 25.** `main` lacks the three `grant_*` tools and
+the fifth `skill_*` tool, and it *has* `find_grant_documents` — deployed on 2026-08-06 from
+`fix/google-drive-discovery`, before `main` became the only deploy branch, and never merged until
+2026-08-17. **That asymmetry is why "merging removes a live feature" was true right up to that merge**,
+and it is the shape to check for before assuming a branch is a superset of production. Verify a tool's
+presence by reading its live *description* rather than calling it — see `docs/INFORMATION-GAPS.md` §9.
 
 Every registered tool has a `tool_permissions` row locally — the §6 `comm -23` check is empty, run
-2026-08-14 — so nothing fails closed **on this machine**. Seven rows have no registered tool, all
-placeholders: `find_grant_documents`, `query_clients`, `query_github_issues`, `query_github_prs`,
-`query_hubspot_contacts`, `query_hubspot_deals`, `query_policy`. Whether the grant rows exist on RDS is
-still unverified — board A7 (#163) — and the registry fails closed, so **merging ships three tools that
-will refuse every caller until that migration is applied**.
+2026-08-14 — so nothing fails closed **on this machine**. The remaining rows with no registered tool are
+placeholders: `query_clients`, `query_github_issues`, `query_github_prs`, `query_hubspot_contacts`,
+`query_hubspot_deals`, `query_policy`. (`find_grant_documents` was on that list until the Drive merge
+gave it a real registration.) Whether the grant rows exist on RDS is still unverified — board A7
+(#163) — and the registry fails closed, so **until #220's fix is proven on a real deploy, merging still
+ships three tools that will refuse every caller**.
 
 **Connectors** (root `CLAUDE.md` holds the detail): `google-sheets`, `aplos`, and `notion` are live.
-`google-drive` and `slack` are skeletons that return `status: "noop"` — Drive has credentials and no
-implementation; Slack awaits `SLACK_BOT_TOKEN`.
+`google-drive` is **implemented and verified end to end against real Drive and the local database** on
+2026-08-06: `sync_runs` shows `status ok`, 1253 files upserted, and `grant_documents` went from 9 rows
+with a Drive ID to **1248**, 1181 fetchable. Re-running is idempotent (1243 matched on `drive_file_id`).
+It discovers into `grant_documents` and writes no text or embeddings. The runs used a *user* identity
+(`GOOGLE_OAUTH_CLIENT_ID` + `_SECRET` + `GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN`, via
+`connectors/google-drive/scripts/authorize.ts`), which is local-testing only — the service account
+still has no access to that tree, so **the production identity remains unverified** — though the
+production *path* is: the `apps/sync` image builds and runs the sync from its task definition's own
+command, checked by building and running that image locally on 2026-08-06. `slack` is still a skeleton
+returning `status: "noop"`, awaiting `SLACK_BOT_TOKEN`.
+
+**Drive discovery is broken through the Claude Drive connector; our own path around it now works.**
+Verified 2026-08-06: `get_file_metadata` on `Prospects and Proposals` succeeds, listing its children
+returns `{}`, and `title`/`fullText` search never matches inside the tree — while reading a known file
+ID returns full content. **Root cause confirmed the same day: `Grants` is in a Shared Drive
+(`driveId=0AAj6r5Nb_TnNUk9PVA`)**, and with `supportsAllDrives` + `includeItemsFromAllDrives` set, the
+*same* human identity enumerated 1257 files across 617 folders. `connectors/google-drive` sets those
+flags on every call, falls back to a per-folder walk when a drive-scoped sweep is refused, probes
+shortcut targets, and refuses to treat an empty listing as success. Consequence unchanged: the
+`grant_documents` catalog is how those files are found, and `document_chunks` was **empty for every
+source** when checked. **The corpus is ~1.5 GiB / 1257 files — the "3.5+ GiB" figure repeated in
+earlier documents was never measured.** Detail in `docs/data-sources/google-drive-discovery.md` §5.2.
 
 **Grant writing layer:** **G1, G2, G3 and G4 have all passed. G5 not started.** All three grant tools
 are registered. G3 and G4 both passed on **restated conditions**, and the restatement is the same
@@ -212,7 +243,7 @@ unrecorded. Tracked build work lives in `bd` — `bd ready --json` — not here.
 | # | Item | Detail |
 |---|---|---|
 | 1 | **`docs/architecture.md` does not exist** | The root `CLAUDE.md` links it as "Architecture — system overview and data flow" and instructs reading it before modifying any component. The link is dead, so that instruction cannot be followed. Either write it or drop the reference — but a broken pointer in an instruction file is the worst of the three states. **`packages/grants/admin/ARCHITECTURE.md` is not this document** and must not be pointed at from the root as if it were: it is scoped to the grant workstream, and a platform-wide instruction resolving into one package's folder is the confusion it was written to avoid. |
-| 2 | **Eight dead links, five missing targets** | Found by the §6 link check on 2026-08-03. Targets: `docs/architecture.md` (from `CLAUDE.md`); `HOW-SKILLS-WORK.md` (from `README.md` and `docs/setup/README.md`); `docs/reference/connector-capability-matrix.md` and `docs/reference/new-developer-playbook.md` (each from both `README.md` and `docs/setup/README.md`); `docs/embedding-pipeline.md` (from `docs/data-sources/google-drive-connector.md`). `docs/reference/` contains only `v0-migrations/`. Each needs a decision: write it, or remove the pointer. Do not leave them dangling. |
+| 2 | **Seven dead links, four missing targets** | Found by the §6 link check on 2026-08-03; one retired 2026-08-06. Targets: `docs/architecture.md` (from `CLAUDE.md`); `HOW-SKILLS-WORK.md` (from `README.md` and `docs/setup/README.md`); `docs/reference/connector-capability-matrix.md` and `docs/reference/new-developer-playbook.md` (each from both `README.md` and `docs/setup/README.md`). `docs/reference/` contains only `v0-migrations/`. Each needs a decision: write it, or remove the pointer. Do not leave them dangling. **Retired:** `docs/embedding-pipeline.md`, whose only referrer (`docs/data-sources/google-drive-connector.md`) was rewritten. |
 | 3 | **`docs/setup/` is unaudited against reality** | 25 phase-numbered files, most last revised 2026-06-24 or earlier, describing AWS build-out. Numbering skips 16, 19, 20. Nothing has confirmed these still match the deployed infrastructure. Treat as historical until audited. |
 | 4 | **Connector status claims spread across files** | Live/skeleton status appears in the root `CLAUDE.md`, `docs/data-sources/*`, and `docs/runbooks/local-dev.md`. A connector changing status requires all three. Candidate for collapsing into one owner. |
 | 5 | **Grant layer under-documented in `docs/`** | Partly retired 2026-08-04: `docs/mcp-server-spec.md` now carries entries for all three grant tools — `grant_match_question`, `grant_build_draft`, and `grant_resize_answer`. Still missing: any `docs/data-sources/` or user-guide coverage. All other grant documentation lives in `packages/grants/`, aimed at the build rather than at consumers — `admin/ARCHITECTURE.md` included, which orients a developer and does not serve a staff user. |
@@ -287,10 +318,10 @@ pnpm exec prisma migrate diff \
   --from-schema packages/db/prisma/schema.prisma \
   --to-config-datasource --config ./prisma.config.ts
 
-# Migration state — expect 16 migrations, "Database schema is up to date!"
+# Migration state — expect 19 migrations, "Database schema is up to date!"
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 397 passed, 0 skipped, 19 files.
+# Full suite — expect 470 passed, 0 skipped, 23 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

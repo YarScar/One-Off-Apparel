@@ -73,11 +73,11 @@ right now, registered and unreachable.
 | | |
 |---|---|
 | PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard", 49 commits. **2 behind `origin/main`** (PR #46, `package.json` + `pnpm-lock.yaml`); no textual conflict, but re-run `pnpm install --frozen-lockfile` after merging since both sides touched the lockfile |
-| Suite | **397 passing across 19 files, zero skipped.** `packages/grants` alone is 262 in 9 |
+| Suite | **470 passing across 23 files, zero skipped.** `packages/grants` alone is 290 in 10 |
 | Build / typecheck / lint | `pnpm -r build` clean **including `apps/hq`**, the only package whose build lints. `pnpm -r typecheck` clean across fourteen. `pnpm lint` clean — but it covers only `apps/hq` and `packages/grants`; `pnpm exec eslint apps/mcp-server` still reports errors (`#168`/`#169`) |
-| Tool surface | **24** on this branch, 21 on `main`. The three it adds are the `grant_*` tools |
-| Migrations | **16** applied locally, `migrate status` clean. `migrate diff --from-migrations` shows only the **`student_employment`** entries — down from three tables, work package `#254`. **A checksum changed:** see the CHANGELOG's 2026-08-17 clone note before running `pnpm db:migrate` on an existing clone |
-| Pre-merge review | Code review 2026-08-17, work package `#249`. Seven correctness fixes landed (`#250`–`#255` + `#220`); the two remaining blockers are `#220`'s deploy verification and the `find_grant_documents` decision below |
+| Tool surface | **25** on this branch, 21 on `main` — and **prod is not a subset**: it lacks the three `grant_*` tools and the fifth `skill_*`, and it *has* `find_grant_documents`, deployed from `fix/google-drive-discovery` on 2026-08-06 and merged here only on 2026-08-17 |
+| Migrations | **19** applied locally, `migrate status` clean. `migrate diff --from-migrations` shows only the **`student_employment`** entries — down from three tables (`#254`) plus the Drive index rename (`#256`). **A checksum changed:** see the CHANGELOG's 2026-08-17 clone note before running `pnpm db:migrate` on an existing clone |
+| Pre-merge review | Code review 2026-08-17, work package `#249`. Seven correctness fixes landed (`#250`–`#255` + `#220`), and `fix/google-drive-discovery` merged in (`#256`). **One blocker left: `#220`'s deploy verification**, which needs a real deploy log |
 | Release gates | G1–G4 passed, all locally. **G5 not started and still blocked** — unchanged |
 | Local DB | **Faithful prod copy as of the 2026-08-14 snapshot** — 301 students, 19,128 attendance, 24,623 finance snapshots, 1,062 usage logs — with the branch's 3 migrations applied. Procedure and caveats: `docs/runbooks/rds-copy-down.md`. **Caveat: `pnpm test` wipes it** (`tools.test.ts` runs `seed({ force: true })`, whose `deleteMany`s are unfiltered). |
 
@@ -119,11 +119,15 @@ Both came out of the figure re-source and neither is closable by code:
      tripping a checksum error.
    - `20260817000000_align_postsecondary_fk_with_schema` will apply too. It swaps one FK's delete
      action; it touches no data.
-2. **Decide on `fix/google-drive-discovery`** — cherry-pick it into this branch before merging, or
-   deliberately retire `find_grant_documents` + the catalog from prod. Unresolved, this is a silent
-   feature rollback on the next deploy (see "Resolved this evening"). **This is now the only blocker
-   that is a decision rather than a task**, and it is the one thing the 2026-08-17 review pass could
-   not close.
+2. ~~**Decide on `fix/google-drive-discovery`**~~ **DONE 2026-08-17 — merged in, work package `#256`.**
+   Decision was: keep the feature. The merge had a shared base at `0998ca3` and produced **five
+   conflicts, all in documentation and none in code**; the tool surface is now 25 and the two
+   `20260806*` migrations it brought are the ones production already has. One new drift entry came with
+   it (a hand-written index name) and is closed by
+   `20260817000100_rename_grant_documents_archive_ext_index`. **What is still unverified is the
+   production Drive identity** — the service account has no access to that tree, so the catalog sync has
+   only ever run under a user identity. That is board H3 (`#167`), unchanged, and it is a credential
+   question rather than a merge question.
 3. **Check `skill_grant_sourcing_evaluation` in production** — the permission row exists (27 rows
    on prod), so this is now a one-call confirmation rather than an investigation.
 4. **Probe `q3_2026_actuals*` / `phase_actuals_2025_*`** for a fiscal-year label. Cheap, and it either
