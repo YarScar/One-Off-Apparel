@@ -103,7 +103,157 @@ than a date — so the cap took an arbitrary slice, and the spec points callers 
 capped well past the real tab size, and reports
 `sheet_fund_balances_total` plus `sheet_fund_balances_truncated` when the cap bites.
 
+### 6. `query_enrollment` accepted filter values that cannot match anything
+
+Added 2026-08-13, OpenProject `#207`.
+
+`query_enrollment { query_type: 'by_phase', enrollment_status: 'Active' }` returned
+`{"breakdown":[],"filters_applied":{"enrollment_status":"Active"}}`. Unfiltered, the same
+call returns 14 populated rows and `query_type: 'total'` returns 301 students.
+`students.enrollment_status` holds short source codes — `E` and `N` were the values
+observed in production — so `'Active'` occurs in no row and never could. The input schema
+was `z.string().optional()`, the description enumerated nothing, and the codes were
+discoverable only by calling `by_student` and reading individual records. "How many active
+students" answered zero.
+
+Fix: before any counting, each supplied `current_phase`, `enrollment_status`, `cohort` and
+`status` is checked against the distinct values its own column holds. A value absent from
+that column returns `toolError('no_records', ...)` naming the field, the `table.column`,
+and the values present, so the caller retries in one round trip. Checked once ahead of the
+`switch`, so all eight query_types answer identically.
+
+`no_records` is reused rather than a new code added: `query_finances` already returns it
+for a query_type no table backs, which is the same "your input cannot be answered from
+this data" one level up.
+
+**The line, which is the whole substance of it:** a value absent from its column's domain
+is a bad input and errors; values that are each present but co-occur in no row are a
+truthful zero and still return empty. That is why every domain is read **unscoped** — the
+distinct values of one column across the whole table, never narrowed by the sibling
+filters. Scope the domain by the siblings and the last filter standing always looks
+unmatchable, so every real zero becomes an error: the false-zero defect replaced by a
+false-error one. `apps/mcp-server/src/__tests__/query-enrollment-filters.test.ts` asserts
+both directions against the live server, and the second direction is the one that fails
+when the domain is scoped.
+
+Two filters are deliberately not domain-checked. `phase` is a `z.enum`, so a bad value is
+rejected before the handler runs. `start_date` / `end_date` are windows, not values drawn
+from a column, so a window outside the data's range is a real zero.
+
+An empty domain — the column null in every row — errors too, with its own message, since a
+zero drawn from an unpopulated column is exactly the false fact this runbook is about. That
+path is covered by unit test only; it is not reachable with a fixture that populates the
+column.
+
+**Propagated to the sibling tools in fix 8 below.**
+
+### 7. `query_attendance` declared `current_phase` and never read it
+
+Added 2026-08-13, OpenProject `#209`.
+
+`query-attendance.ts:20` accepted `current_phase`; nothing in the handler applied it. Every
+other occurrence of the name in the file was something else — the `group_by` enum member, or
+an output field shaped from a joined student record — which is what made it hard to see by
+reading.
+
+So a caller scoping attendance to one phase got **every phase back**, in a response whose
+own envelope named the filter. Not a silent zero but a silent **superset**, which is the
+worse direction: a zero invites suspicion, and a plausible org-wide rate presented as a
+phase rate does not. Any phase-scoped attendance rate ever quoted from this tool was the
+org-wide rate. Same class as `query_finances.contains` in fix 2 — a declared parameter the
+handler ignores.
+
+Fix: `attendance_records` carries a bare `student_number` with **no relation** to
+`students` (`schema.prisma`, `model AttendanceRecord`), so the phase cannot be a column
+predicate. It is resolved to its student numbers first — one read that yields both the
+predicate and the domain, so the two cannot disagree — and matched as
+`studentNumber: { in: [...] }`. That goes in through Prisma's `AND` rather than onto
+`where.studentNumber`, because `student_number` and `current_phase` can both be supplied and
+assigning the same key twice keeps only one: a student number outside the requested phase
+now returns a truthful zero rather than every row for that student.
+
+`current_phase` and `cohort` are domain-checked on the way in, on the same rule as fix 6.
+The `current_phase` domain is scoped to students **who have an attendance row** — that is
+the population the tool answers over at all, so offering a phase held only by students with
+no attendance data would move the false zero one round trip later rather than remove it. It
+is *not* scoped by the caller's cohort or dates, for the fix-6 reason.
+
+**Two other declared inputs on the same tool, checked while there.** `enrollment_status` is
+not a filter at all here, only a `group_by` member, so there was nothing to apply. `limit`
+was read by the `events` branch alone, so `by_student` returned every student to a caller
+who asked for ten and `aggregate` said nothing about ignoring it. `by_student` now pages on
+it, reporting `total_students` (matched), `students_returned` and `truncated` separately —
+the `student_count`-is-sometimes-a-page-size trap recorded under `#195` below — and orders
+the page by `student_number`, since the rows arrive in whatever order Postgres yields.
+
+Every response now echoes `filters_applied`, plus `filters_ignored` for an input the
+query_type cannot honour (`limit` on `aggregate`) or a blank value treated as absent,
+following the contract fix 6 established.
+
+`apps/mcp-server/src/__tests__/query-attendance-filters.test.ts`. Verified load-bearing by
+mutation: reverting the predicate fails 9 of the 14 cases, disabling the domain check fails
+the 3 error cases and nothing else. The membership assertions are the ones that pin it —
+they name the student the phase must exclude, so they fail with the filter reverted rather
+than merely on an empty table.
+
+### 8. The unmatchable-filter check reached only `query_enrollment`
+
+Added 2026-08-13, OpenProject `#210`. Fix 6 was deliberately scoped to one tool; these are
+the siblings with the same shape, now done.
+
+| Tool | Filters domain-checked | Column |
+|---|---|---|
+| `query_students` | `enrollment_status`, `current_phase`, `cohort`, `hs_graduation_year`, `withdrawal_code` | `students.*` |
+| `query_postsecondary` | `enrollment_status`, `class_level` | `student_postsecondary.*` |
+| `query_certifications` | `phase` | `student_certifications.phase` |
+
+`query_students` was the one that mattered: it filters the **same**
+`students.enrollment_status` and `students.current_phase` columns with the same short source
+codes, so the identical `enrollment_status: 'Active'` → confident zero stayed reachable
+through it after fix 6 closed the other door. `query_certifications` had the worst-*reading*
+one: `summary` answered `{ total: 0, passed: 0, pass_rate_pct: null }`, which is not "that
+phase does not exist" but "nobody in that phase has certified".
+
+Two filters listed in `#210`'s own table turned out not to belong here. `query_students`
+gained `cohort` and `hs_graduation_year` — both exact-match, same shape, so they are checked
+too. `query_certifications.type` is a `contains` match, not exact, so it falls under the
+substring class that ticket deliberately left out of scope.
+
+The check itself is unchanged: `unmatchableFilterError` in
+`apps/mcp-server/src/filter-domain.ts` was already pure and tool-agnostic. What this fix
+added is `filter-domain-loaders.ts`, the Prisma half — one loader per column, shared rather
+than copied, because `query_students` and `query_enrollment` read the *same two columns* and
+a second copy of either loader is a second place for the two tools to drift on what "the
+values present" means. `filterStr` moved from `query-enrollment.ts` to `tool-helpers.ts` for
+the same reason: all four tools need identical blank-means-absent semantics, or the domain
+check errors on an empty string the caller never asked to match.
+
+`query_students` also switched its `where` clause from truthiness to presence
+(`cohort ? ...` → `cohort !== undefined ? ...`). A zero-valued filter was silently dropped,
+which is unscoping one value wide. Neither zero occurs in the data, so this changes no
+existing answer; it stops the `where` clause from disagreeing with the domain check, which
+keys off presence. **Not covered by a test** — it is not observable without planting a
+cohort 0.
+
+**Deliberately still out of scope.** The substring filters —
+`query_employment.employer_name` / `exit_code`, `query_postsecondary.institution` /
+`institution_type`, `query_competency.competency`,
+`query_students.school`, `query_certifications.type` — are the same class with a wider net. A
+domain list fits a `contains` filter poorly: a substring matching no value is not the same
+fact as a value absent from a column, and enumerating a free-text column's distinct values is
+not a usable error message. Each tool's suite now pins this as a decision rather than an
+oversight, asserting that a nonsense substring still returns a silent zero.
+`query_donors.donor_type` / `status` remain moot until that tool has a data source at all
+(below).
+
+`apps/mcp-server/src/__tests__/sibling-filter-domains.test.ts`, both directions per tool.
+Verified load-bearing by mutation, and the two mutations separate cleanly: neutralising the
+three checks fails exactly the 7 error-direction cases, and scoping one domain by a sibling
+filter fails exactly the 1 legitimate-zero case. That second result is the boundary — it is
+the test that stops a future change from replacing the false zero with a false error.
+
 ## Found, not fixed, needs a decision
+
 
 ### `query_donors` has no data source in production
 
@@ -158,3 +308,44 @@ field needs a cohort restriction or a `note` explaining the denominator.
 count overstates the number of schools. `by_race` returns multi-select answers as
 delimited combinations inside one value, so rows cannot be summed. Both are
 correct as raw data and dangerous as reportable figures.
+
+### `query_students` and `query_enrollment` report a page size as a student count
+
+Added 2026-08-13, OpenProject `#195`. Found while porting these fixes into the
+North10 fork (`north10-ai` #193) and diffing the two repos.
+
+Fix 3 above solved this for `query_finances` — `total_matching`, `truncated`,
+`tab_names_matched`. **It was never propagated to the sibling tools.**
+`query_attendance` does carry `truncated`. Three paths do not:
+
+| Site | `query_type` | `orderBy` |
+|---|---|---|
+| `apps/mcp-server/src/tools/query-students.ts:191` | `list` | `canonicalName` only |
+| `apps/mcp-server/src/tools/query-enrollment.ts:99` | `active_during` | **none** |
+| `apps/mcp-server/src/tools/query-enrollment.ts:174` | `by_student` | **none** |
+
+All three `take: limit` (default 500, cap 1000) and return
+`student_count: rows.length` with no total and no truncation flag.
+
+**The field name is the trap.** In the same tool, `query-enrollment.ts:66`
+(`query_type: 'total'`) returns `student_count` from a real `prisma.count()`. So
+`student_count` is a true total on one path and a page size on two others, with
+nothing in the response to tell them apart. Ask how many students were active
+during a window and you get a plausible number that is silently
+`min(actual, 500)` — the same shape as the empty results this runbook is about: a
+well-formed answer that reads as fact.
+
+**Ordering compounds it.** The two enrollment paths have no `orderBy`, so row
+order is whatever Postgres returns and a truncated page is an arbitrary subset
+that can differ between identical calls. `query_students` sorts on
+`canonicalName` alone, which is not unique, so duplicate names tie and reorder.
+
+Fix, following what `query_finances` established: a `count({ where })` beside the
+`findMany`, `total_matching` and `truncated` in the response, and an `orderBy`
+ending in a guaranteed-unique column. The North10 equivalents are commits
+`7e43ee8` and `d39d7f7`; the `McpStdioClient` harness there was ported *from*
+this repo and gained a `dist/`-staleness guard worth pulling back.
+
+**Severity, for prioritising:** no path here sums currency from a truncated page,
+so unlike the North10 money tools there is no wrong dollar figure. The exposure is
+headcount and completeness claims.

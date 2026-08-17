@@ -1,0 +1,2543 @@
+{
+  "meta": {
+    "name": "Canonical Grant Question Bank",
+    "version": "0.4.3",
+    "updated": "2026-08-11",
+    "description": "Normalized, deduplicated grant application questions synthesized from real, publicly published funder forms. Each canonical question aggregates the real-world variants that map to it, so an incoming funder question can be matched to one canonical entry and routed to the Knowledge Base answer that satisfies it. v0.2 extends the bank with the Philadelphia/regional, corporate, federal, and PA-state forms captured in sources/philadelphia-regional-and-sector-forms.md, adding eligibility-gate, innovation, risk, capacity, and federal/state structured-field questions. v0.3 adds the two Aug-7 pilot forms (GSK STEM Access, Truist Foundation Inspire Awards) as variants; see sources/aug7-pilot-forms.md.",
+    "sources": [
+      {
+        "id": "NNG",
+        "name": "National Network of Grantmakers Common Grant Application"
+      },
+      {
+        "id": "FFTC",
+        "name": "Foundation For The Carolinas Sample Application"
+      },
+      {
+        "id": "NewAlliance",
+        "name": "NewAlliance Foundation Narrative Questions"
+      },
+      {
+        "id": "Instrumentl",
+        "name": "Instrumentl 26 Questions Grant Funders Love To Ask"
+      },
+      {
+        "id": "CGA",
+        "name": "Philanthropy Network Greater Philadelphia Common Grant Application"
+      },
+      {
+        "id": "Seybert",
+        "name": "The Seybert Foundation Core Grant Application"
+      },
+      {
+        "id": "Barra",
+        "name": "Barra Foundation Catalyst Fund LOI & Application"
+      },
+      {
+        "id": "PatriciaKind",
+        "name": "Patricia Kind Family Foundation Application"
+      },
+      {
+        "id": "Lindback",
+        "name": "Christian R. & Mary F. Lindback Foundation guidelines"
+      },
+      {
+        "id": "BofA",
+        "name": "Bank of America Charitable Foundation grant application"
+      },
+      {
+        "id": "Comcast",
+        "name": "Comcast NBCUniversal Foundation Local Impact Grants"
+      },
+      {
+        "id": "Truist",
+        "name": "Truist Foundation grant application"
+      },
+      {
+        "id": "SF-424",
+        "name": "Grants.gov SF-424 federal application family"
+      },
+      {
+        "id": "ED-75.210",
+        "name": "U.S. Dept. of Education selection criteria (34 CFR 75.210)"
+      },
+      {
+        "id": "GEPA-427",
+        "name": "GEPA Section 427 equitable-access statement"
+      },
+      {
+        "id": "YouthBuild",
+        "name": "DOL/ETA YouthBuild FOA rating criteria"
+      },
+      {
+        "id": "DCED",
+        "name": "PA DCED Electronic Single Application for Assistance"
+      },
+      {
+        "id": "PAsmart",
+        "name": "PA PAsmart CTE / Computer Science Grants"
+      },
+      {
+        "id": "PhilaWorks",
+        "name": "Philadelphia Works Career Connected Learning (WIOA Youth) RFP"
+      },
+      {
+        "id": "JEVS-C2L",
+        "name": "JEVS Human Services C2L-PHL Youth Provider RFP (2024-2025)"
+      },
+      {
+        "id": "WPF-2026",
+        "name": "William Penn Foundation Workforce Training Supports RFP (2026-2028)"
+      },
+      {
+        "id": "Hamilton-2025",
+        "name": "Hamilton Family Charitable Trust LOI (2025)"
+      },
+      {
+        "id": "JFF-AI-2026",
+        "name": "JFF & Google Advancing AI Resilient Early Career Pathways RFP (2026)"
+      },
+      {
+        "id": "AllenHiles-2024",
+        "name": "Allen Hiles Fund grant application (2024)"
+      },
+      {
+        "id": "DolfMcM-2023",
+        "name": "Dolfinger-McMahon Foundation grant application (2023)"
+      },
+      {
+        "id": "GSK-STEM-2026",
+        "name": "GSK US Charitable Investments — STEM Access (2026 Aug-7 pilot form)"
+      },
+      {
+        "id": "Truist-Inspire-2026",
+        "name": "Truist Foundation Inspire Awards via MIT Solve (2026 Aug-7 pilot form)"
+      }
+    ],
+    "answer_types": [
+      "field",
+      "number",
+      "boolean",
+      "single_select",
+      "multi_select",
+      "demographic",
+      "narrative",
+      "attachment"
+    ],
+    "frequency_scale": [
+      "low",
+      "medium",
+      "high",
+      "very_high"
+    ],
+    "notes": "kb_ref points to a LaunchPad Knowledge Base entry (see research/Wireframes.md). Entries prefixed kb.profile.* are structured org-profile fields, not narrative answers. limits are the real caps observed in sources; the pipeline resizes canonical answers to whichever limit an incoming form imposes. The 'eligibility' category holds hard pass/fail funder-fit gates (kb.eligibility) intended to feed the prospecting/fit-scoring path (C1), not just form-filling."
+  },
+  "categories": [
+    {
+      "id": "cover",
+      "label": "Cover sheet / applicant summary",
+      "description": "Identifying fields and top-line request details."
+    },
+    {
+      "id": "organization",
+      "label": "Organization background",
+      "description": "Mission, history, programs, board, DEI, goals."
+    },
+    {
+      "id": "need",
+      "label": "Statement of need",
+      "description": "The problem, population needs, supporting data."
+    },
+    {
+      "id": "program",
+      "label": "Program / project description",
+      "description": "What the project is, who it serves, activities, timeline, partners."
+    },
+    {
+      "id": "outcomes",
+      "label": "Outcomes & evaluation",
+      "description": "Committed results, success measures, evaluation methods, prior results."
+    },
+    {
+      "id": "sustainability",
+      "label": "Sustainability & future funding",
+      "description": "Long-term funding, other sources, future fundraising."
+    },
+    {
+      "id": "financials",
+      "label": "Financials & budget",
+      "description": "Operating and project budgets, audit, net assets, solvency."
+    },
+    {
+      "id": "attachments",
+      "label": "Attachments & compliance",
+      "description": "Required documents and certifications."
+    },
+    {
+      "id": "eligibility",
+      "label": "Eligibility & funder-fit gates",
+      "description": "Hard pass/fail gates (org type, geography, budget size, population, prior funding, support type) asked up front by eligibility quizzes; feed the prospecting/fit-scoring filter."
+    },
+    {
+      "id": "innovation",
+      "label": "Innovation & significance",
+      "description": "What is new/different about the approach, why now, and its broader significance or potential to scale."
+    },
+    {
+      "id": "risk",
+      "label": "Risk & challenges",
+      "description": "Anticipated risks, limitations, and challenges, with mitigation."
+    }
+  ],
+  "kb_entries": [
+    {
+      "id": "kb.profile.identity",
+      "label": "Org identity fields (legal name, EIN, address, founded, fiscal year)"
+    },
+    {
+      "id": "kb.profile.contacts",
+      "label": "Contacts & leadership (ED, application contact)"
+    },
+    {
+      "id": "kb.profile.demographics",
+      "label": "Demographic breakdowns (service pop, board, staff, leadership)"
+    },
+    {
+      "id": "kb.mission",
+      "label": "Mission statement"
+    },
+    {
+      "id": "kb.history",
+      "label": "Org history & major accomplishments"
+    },
+    {
+      "id": "kb.programs",
+      "label": "Current programs & activities"
+    },
+    {
+      "id": "kb.dei",
+      "label": "Diversity, equity & inclusion practices"
+    },
+    {
+      "id": "kb.goals",
+      "label": "Short- and long-term organizational goals"
+    },
+    {
+      "id": "kb.need",
+      "label": "Statement of need / problem statement"
+    },
+    {
+      "id": "kb.program_desc",
+      "label": "Program/project description (per program)"
+    },
+    {
+      "id": "kb.target_population",
+      "label": "Target population & who is served"
+    },
+    {
+      "id": "kb.partnerships",
+      "label": "Community partnerships & roles"
+    },
+    {
+      "id": "kb.uniqueness",
+      "label": "What makes the org unique/effective"
+    },
+    {
+      "id": "kb.staff_bios",
+      "label": "Key staff qualifications & bios"
+    },
+    {
+      "id": "kb.outcomes",
+      "label": "Outcomes, results committed & success measures"
+    },
+    {
+      "id": "kb.evaluation",
+      "label": "Evaluation methods & data collection"
+    },
+    {
+      "id": "kb.metrics",
+      "label": "Metrics store (served, graduated, placed, wages, pre/post)"
+    },
+    {
+      "id": "kb.sustainability",
+      "label": "Sustainability & future funding narrative"
+    },
+    {
+      "id": "kb.budget_narrative",
+      "label": "Budget narrative & justification"
+    },
+    {
+      "id": "kb.financials",
+      "label": "Financial figures (operating budget, net assets, audit)"
+    },
+    {
+      "id": "kb.docs",
+      "label": "Compliance documents (501c3, board list, org chart, letters)"
+    },
+    {
+      "id": "kb.innovation",
+      "label": "What is new/different about the model + significance/scale"
+    },
+    {
+      "id": "kb.theory_of_change",
+      "label": "Theory of change & an impact example"
+    },
+    {
+      "id": "kb.risk",
+      "label": "Risks, challenges & mitigation"
+    },
+    {
+      "id": "kb.capacity",
+      "label": "Organizational capacity & past performance"
+    },
+    {
+      "id": "kb.management_plan",
+      "label": "Management plan (milestones, timeline, responsibilities) & logic model"
+    },
+    {
+      "id": "kb.profile.federal",
+      "label": "Federal identifiers (UEI, SAM.gov, EIN, authorized rep, congressional district)"
+    },
+    {
+      "id": "kb.profile.state_pa",
+      "label": "PA identifiers (Vendor/SAP number, NAICS, PA House/Senate districts)"
+    },
+    {
+      "id": "kb.eligibility",
+      "label": "Eligibility facts for fit-scoring (org type, geography, budget size, population thresholds, prior funding, support types)"
+    }
+  ],
+  "questions": [
+    {
+      "id": "cover.legal_name",
+      "category": "cover",
+      "canonical": "What is your organization's legal name?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Organization Name:",
+          "source": "NNG"
+        },
+        {
+          "text": "Organization legal name:",
+          "source": "FFTC"
+        },
+        {
+          "text": "Organization Name.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Legal Name of Organization",
+          "source": "WPF-2026"
+        }
+      ]
+    },
+    {
+      "id": "cover.ein_taxstatus",
+      "category": "cover",
+      "canonical": "What is your tax-exempt status and EIN?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Tax exempt status:",
+          "source": "NNG"
+        },
+        {
+          "text": "Is your organization a 501(c)(3) nonprofit organization with valid EIN from the IRS? EIN:",
+          "source": "FFTC"
+        },
+        {
+          "text": "EIN #",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Year your organization received 501(c)(3) status",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Federal Tax ID (Organization or Legal Entity).",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "EIN",
+          "source": "WPF-2026"
+        }
+      ]
+    },
+    {
+      "id": "cover.address",
+      "category": "cover",
+      "canonical": "What is your organization's mailing address and contact information?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Address / Telephone number / Fax number:",
+          "source": "NNG"
+        },
+        {
+          "text": "Mailing address / Organization phone / Organization web address:",
+          "source": "FFTC"
+        },
+        {
+          "text": "Registered Address",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Website",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Organization Address.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Program Address (if different from organization).",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Please include all additional program addresses.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Address",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Does your program have multiple addresses?",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "cover.contact_and_ed",
+      "category": "cover",
+      "canonical": "Who is the application contact and the executive director?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.contacts",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Director / Contact person and title (if not director):",
+          "source": "NNG"
+        },
+        {
+          "text": "Contact first/last name, title, phone, email; is contact also the executive director?; ED name:",
+          "source": "FFTC"
+        },
+        {
+          "text": "Your contact details for this application (name, title, phone, email)",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Contact person (name and title).",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Contract signatory (name and title).",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "cover.year_founded",
+      "category": "cover",
+      "canonical": "What year was your organization founded?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Year organization was founded:",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "cover.request_amount",
+      "category": "cover",
+      "canonical": "How much are you requesting, and for what period?",
+      "answer_type": "number",
+      "kb_ref": null,
+      "frequency": "very_high",
+      "notes": "Per-application value; not a KB answer.",
+      "variants": [
+        {
+          "text": "Grant request: / Period grant will cover:",
+          "source": "NNG"
+        },
+        {
+          "text": "Grant request amount:",
+          "source": "FFTC"
+        },
+        {
+          "text": "Request Amount",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Amount Requested",
+          "source": "Hamilton-2025"
+        }
+      ],
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 20,
+          "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "cover.request_type",
+      "category": "cover",
+      "canonical": "What type of support are you requesting (general operating, program, capital, etc.)?",
+      "answer_type": "single_select",
+      "kb_ref": null,
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Type of request (general support, start-up, technical assistance, etc.):",
+          "source": "NNG"
+        },
+        {
+          "text": "Type of Funding Requested (Select One)",
+          "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "cover.project_title",
+      "category": "cover",
+      "canonical": "What is the project title?",
+      "answer_type": "field",
+      "kb_ref": "kb.program_desc",
+      "frequency": "high",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 8,
+          "source": "FFTC"
+        },
+        {
+          "unit": "characters",
+          "max": 120,
+          "source": "WPF-2026"
+        },
+        {
+          "unit": "characters",
+          "max": 250,
+          "source": "Hamilton-2025"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Project title (if project funding is requested):",
+          "source": "NNG"
+        },
+        {
+          "text": "Project title: (8 word max.)",
+          "source": "FFTC"
+        },
+        {
+          "text": "Name of Program or Activity",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "What is the name of your solution?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Program Name.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Proposed Project Title",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Project/ Program/ Campaign Name",
+          "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "cover.project_summary",
+      "category": "cover",
+      "canonical": "Provide a brief summary of your project or grant request.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "frequency": "very_high",
+      "limits": [
+        {
+          "unit": "sentences",
+          "max": 3,
+          "source": "NNG"
+        },
+        {
+          "unit": "words",
+          "max": 50,
+          "source": "FFTC"
+        },
+        {
+          "unit": "characters",
+          "max": 250,
+          "source": "WPF-2026"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Summary of project or grant request (two to three sentences):",
+          "source": "NNG"
+        },
+        {
+          "text": "Brief project summary: (50 word max.)",
+          "source": "FFTC"
+        },
+        {
+          "text": "Provide a one-line summary or tagline for your solution.",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Describe your solution in 10-20 words.",
+          "source": "Truist-Inspire-2026"
+        }
+      ]
+    },
+    {
+      "id": "cover.budget_totals",
+      "category": "cover",
+      "canonical": "What are your total project budget and total organizational budget?",
+      "answer_type": "number",
+      "kb_ref": "kb.financials",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Total project budget / Total organizational budget (current year):",
+          "source": "NNG"
+        },
+        {
+          "text": "Annual operating budget: / Total project budget:",
+          "source": "FFTC"
+        },
+        {
+          "text": "Total Cost",
+          "source": "Hamilton-2025"
+        }
+      ],
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 20,
+          "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "cover.fiscal_year",
+      "category": "cover",
+      "canonical": "When does your fiscal year start?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.identity",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Starting date of fiscal year:",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "organization.mission",
+      "category": "organization",
+      "canonical": "Summarize your organization's mission.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.mission",
+      "frequency": "very_high",
+      "limits": [
+        {
+          "unit": "sentences",
+          "max": 3,
+          "source": "NNG"
+        },
+        {
+          "unit": "words",
+          "max": 100,
+          "source": "FFTC"
+        },
+        {
+          "unit": "characters",
+          "max": 1000,
+          "source": "Barra"
+        },
+        {
+          "unit": "characters",
+          "max": 700,
+          "source": "WPF-2026"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Summarize the organization's mission (two to three sentences):",
+          "source": "NNG"
+        },
+        {
+          "text": "Organization mission:",
+          "source": "FFTC"
+        },
+        {
+          "text": "Can you provide a brief overview of your organization's mission and history?",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "State your organization's mission.",
+          "source": "CGA"
+        },
+        {
+          "text": "Mission statement",
+          "source": "Seybert"
+        },
+        {
+          "text": "Mission (1,000 characters).",
+          "source": "Barra"
+        },
+        {
+          "text": "State your Organization's Mission.",
+          "source": "PatriciaKind"
+        },
+        {
+          "text": "Tell us your organization's main purpose.",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Mission Statement",
+          "source": "WPF-2026"
+        }
+      ]
+    },
+    {
+      "id": "organization.history",
+      "category": "organization",
+      "canonical": "Describe your organization's history and major accomplishments.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.history",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Briefly describe your organization's history and major accomplishments.",
+          "source": "NNG"
+        },
+        {
+          "text": "Can you provide a brief overview of your organization's mission and history?",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "Give a brief summary of your organization's history.",
+          "source": "CGA"
+        },
+        {
+          "text": "How long have you been working on your solution?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Describe the organization's qualifications and history of operating youth workforce and education programs, especially to those identified as priority populations by this RFP. Please include specific types of services provided, dates, locations, partnerships, contract values, and related performance outcomes.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Organizational background and history (if a first time applicant)",
+          "source": "AllenHiles-2024"
+        }
+      ],
+      "limits": [
+        {
+          "unit": "words",
+          "max": 500,
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "organization.current_programs",
+      "category": "organization",
+      "canonical": "Describe your current programs, activities, and core services.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.programs",
+      "frequency": "very_high",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 100,
+          "source": "FFTC"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Describe your current programs and activities.",
+          "source": "NNG"
+        },
+        {
+          "text": "Organization core services: (100 word max.)",
+          "source": "FFTC"
+        },
+        {
+          "text": "Describe your current programs, activities, and service statistics, highlighting the past year, and cite how your programs fulfill the mission.",
+          "source": "CGA"
+        },
+        {
+          "text": "What are your major programs for youth, and how do they work? For each: name; length/frequency; cost to run; brief description; what you evaluate and how.",
+          "source": "Seybert"
+        },
+        {
+          "text": "Briefly describe your organization's main services or work areas.",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Is this a new program or an existing program?",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "Services provided",
+          "source": "AllenHiles-2024"
+        }
+      ]
+    },
+    {
+      "id": "organization.constituency",
+      "category": "organization",
+      "canonical": "Who is your constituency/service population, and how are they involved in and benefiting from your work?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.target_population",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Who is your constituency (be specific about demographics)? How are they actively involved and how do they benefit?",
+          "source": "NNG"
+        },
+        {
+          "text": "Can you describe the primary population served through this request?",
+          "source": "Instrumentl"
+        }
+      ]
+    },
+    {
+      "id": "organization.demographics",
+      "category": "organization",
+      "canonical": "Provide demographic breakdowns of your service population, board, leadership, and staff (race/ethnicity and gender).",
+      "answer_type": "demographic",
+      "kb_ref": "kb.profile.demographics",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Service Population / Board of Directors / Leadership / Staff race/ethnicity and gender breakdowns.",
+          "source": "FFTC"
+        },
+        {
+          "text": "Provide a list of your board of directors with related demographic information.",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "organization.board",
+      "category": "organization",
+      "canonical": "Describe your board of directors and how they are involved and selected.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.docs",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "How is the board selected, who selects them and how often?",
+          "source": "NNG"
+        },
+        {
+          "text": "Who are the members of your board, and how are they involved in the organization?",
+          "source": "Instrumentl"
+        }
+      ]
+    },
+    {
+      "id": "organization.dei",
+      "category": "organization",
+      "canonical": "Describe your diversity, equity, and inclusion practices, and how your work addresses inequality.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.dei",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "How does your work promote diversity and address inequality, oppression and discrimination within your organization and society?",
+          "source": "NNG"
+        },
+        {
+          "text": "Describe the diversity and inclusion practices within your organization.",
+          "source": "Instrumentl"
+        }
+      ]
+    },
+    {
+      "id": "organization.goals",
+      "category": "organization",
+      "canonical": "What are your short-term and long-term organizational goals, and how will you achieve them?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.goals",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "What are your short-term (1-5 years) and long-term (5-25 years) organizational goals? How do you plan to achieve them?",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "What are your organization's goals and objectives for the year and how will this grant help you implement these goals?",
+          "source": "AllenHiles-2024"
+        }
+      ]
+    },
+    {
+      "id": "organization.uniqueness",
+      "category": "organization",
+      "canonical": "What makes your organization unique and effective compared with others serving similar populations, and how do you avoid duplication?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.uniqueness",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "FFTC"
+        }
+      ],
+      "variants": [
+        {
+          "text": "What makes your organization unique and effective, as compared with other organizations...? What is your organization doing to limit duplication? (200 word max.)",
+          "source": "FFTC"
+        }
+      ]
+    },
+    {
+      "id": "organization.prior_grant_results",
+      "category": "organization",
+      "canonical": "If previously funded by this funder, what did you accomplish with the award?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.outcomes",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "FFTC"
+        }
+      ],
+      "variants": [
+        {
+          "text": "What services or programs were provided? What were you able to accomplish with this award...? (200 words max.)",
+          "source": "FFTC"
+        }
+      ]
+    },
+    {
+      "id": "need.problem_statement",
+      "category": "need",
+      "canonical": "What problem, need, or issue does this request address, and who is affected?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.need",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Problem statement: what problems, needs or issues does it address?",
+          "source": "NNG"
+        },
+        {
+          "text": "Describe the needs of the population you intend to engage, serve or affect with the funds you are requesting.",
+          "source": "NewAlliance"
+        },
+        {
+          "text": "Identify the issue or need to be addressed, providing evidence of size and/or severity.",
+          "source": "CGA"
+        },
+        {
+          "text": "Tell us about the problem or opportunity your idea addresses.",
+          "source": "Barra"
+        },
+        {
+          "text": "Specific problems to be addressed or improvement to be financed.",
+          "source": "DCED"
+        },
+        {
+          "text": "A clear and concise problem statement.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "What specific problem are you solving? What is the scale of the problem in the communities you are working in?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "What is the need for the project? Who will benefit from it, including number of people served? How will the project help those served? What do you expect to be its impact?",
+          "source": "AllenHiles-2024"
+        }
+      ]
+    },
+    {
+      "id": "need.root_causes",
+      "category": "need",
+      "canonical": "What systemic or root causes of the problem does your work address?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.need",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Describe systemic or social change you are trying to achieve: how does your work address the underlying or root causes of the problem?",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "program.description",
+      "category": "program",
+      "canonical": "Describe the project for which you are seeking funding, including a timeline and how the funds will be used.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "frequency": "very_high",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "FFTC"
+        },
+        {
+          "unit": "characters",
+          "max": 6000,
+          "source": "Barra"
+        },
+        {
+          "unit": "characters",
+          "max": 250,
+          "source": "WPF-2026"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Describe the program for which you seek funding, why you decided to pursue this project, and whether it is new or ongoing.",
+          "source": "NNG"
+        },
+        {
+          "text": "Describe your project in detail, including proposed timeline and specifically how you would use the funds: (200 word max.)",
+          "source": "FFTC"
+        },
+        {
+          "text": "Can you describe the project for which you are seeking funding?",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "How will your project work? Who will it serve? Who will be involved? What resources will it require? (6,000 characters)",
+          "source": "Barra"
+        },
+        {
+          "text": "A program narrative describing the activities for which funding will be used.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "Project Description.",
+          "source": "DCED"
+        },
+        {
+          "text": "Describe the program in detail: What problem or opportunity does your program address? Who are the main clients of this program? What specific interventions will this program deliver? How will this program help people in the Philadelphia area find, keep or improve current and future STEM-related fields?",
+          "source": "GSK-STEM-2026"
+        },
+        {
+          "text": "What is your solution and how does it work?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Describe the proposed project. Include a detailed description of the proposed activities, including location of the work, frequency, and duration of interaction with proposed beneficiaries, the timeline for the entire project, and the number and demographics of beneficiaries/participants expected to be served. If the proposed project involves a partnership with other organizations, describe how the organizations will collaborate and the complementary roles each partner will play.",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Project description",
+          "source": "WPF-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.alignment",
+      "category": "program",
+      "canonical": "How does this project align with your organization's mission and the funder's focus areas?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "How does this project align with your organization's overall mission and goals?",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "Please explain the project you are applying for and how it aligns with the grant program's focus areas.",
+          "source": "FFTC"
+        }
+      ]
+    },
+    {
+      "id": "program.goals_activities_timeline",
+      "category": "program",
+      "canonical": "What are the goals, objectives, and activities/strategies for this request, with a timeline?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "What are the goals, objectives and activities/strategies involved in this request? Describe your specific activities/strategies using a timeline.",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "program.target_population",
+      "category": "program",
+      "canonical": "Who is the target population and how many individuals will you serve?",
+      "answer_type": "demographic",
+      "kb_ref": "kb.target_population",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "How many individuals do you plan to impact or engage with the project/program?",
+          "source": "FFTC"
+        },
+        {
+          "text": "Target population (race/ethnicity, gender, age group, additional populations).",
+          "source": "FFTC"
+        },
+        {
+          "text": "Target age group(s)",
+          "source": "GSK-STEM-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.population_impact",
+      "category": "program",
+      "canonical": "Who does the program serve, and how does it change their lives?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.target_population",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "Truist"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Who does your solution serve, and in what ways will the solution impact their lives?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Early-Career Impact: Who are the early-career workers your idea seeks to benefit? How does your proposed work aim to improve access, job quality, skill development, or career mobility in an AI-transformed economy?",
+          "source": "JFF-AI-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.geographic_area",
+      "category": "program",
+      "canonical": "What is the geographic service area for this project?",
+      "answer_type": "field",
+      "kb_ref": "kb.target_population",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "What is the geographic service area being served, such as neighborhood, county-wide, etc.?",
+          "source": "FFTC"
+        },
+        {
+          "text": "Where does your work take place?",
+          "source": "GSK-STEM-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.partnerships",
+      "category": "program",
+      "canonical": "Are you partnering with other organizations? List each partner and their role.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.partnerships",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "FFTC"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Please list any organization(s)/community partner(s) you have chosen to partner with and why. Describe their role in the project. (200 word max.)",
+          "source": "FFTC"
+        },
+        {
+          "text": "Applicants must demonstrate that partners are not simply endorsing or advising the project but are committed, active contributors aligned around a common agenda. Detail community engagement and the roles of cross-sector partners in design and implementation.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "Describe your partnerships and partnership engagement strategies.",
+          "source": "YouthBuild"
+        },
+        {
+          "text": "Letters of Agreement from any collaborating agencies, if applicable.",
+          "source": "CGA"
+        },
+        {
+          "text": "Is this a joint funding proposal?",
+          "source": "GSK-STEM-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.team_qualifications",
+      "category": "program",
+      "canonical": "Who will carry out the project, and what are their qualifications?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.staff_bios",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Who will be involved in carrying out the plans in this request? Summarize qualifications of key individuals.",
+          "source": "NNG"
+        },
+        {
+          "text": "How does your team's experience and expertise support the project's goals?",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "How are you and your team well-positioned to deliver this solution?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "How many people work on your solution team (full-time, part-time, contractors)?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Please briefly describe your team's relevant experience and knowledge in AI and/or early career development. What perspectives or skills does your team bring to this work? If applicable, include the names and responsibilities of your partner organizations.",
+          "source": "JFF-AI-2026"
+        },
+        {
+          "text": "Team Bios: Please include brief bios for key project staff and partners, highlighting relevant experience.",
+          "source": "JFF-AI-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.recruit_retain",
+      "category": "program",
+      "canonical": "How do you recruit and retain participants, and incorporate their feedback?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "What methods do you use to recruit and retain participants? How is participant feedback incorporated?",
+          "source": "Instrumentl"
+        }
+      ]
+    },
+    {
+      "id": "outcomes.results_committed",
+      "category": "outcomes",
+      "canonical": "What results are you committed to achieving during the grant period, and how will you know if you succeed?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.outcomes",
+      "frequency": "very_high",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 300,
+          "source": "FFTC"
+        }
+      ],
+      "variants": [
+        {
+          "text": "What results are you committed to achieving during the grant period? How will you know if you are successful? (300 words max.)",
+          "source": "FFTC"
+        },
+        {
+          "text": "State clearly what you will accomplish with awarded funds and how your target population/community will benefit. Be specific.",
+          "source": "NewAlliance"
+        }
+      ]
+    },
+    {
+      "id": "outcomes.success_measures",
+      "category": "outcomes",
+      "canonical": "How does your program measure and define success?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.outcomes",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "How does your program measure/define success?",
+          "source": "Instrumentl"
+        }
+      ]
+    },
+    {
+      "id": "outcomes.evaluation_methods",
+      "category": "outcomes",
+      "canonical": "What methods and tools will you use to evaluate success and collect data?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.evaluation",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Briefly describe your plan for evaluating the success of the project... What questions will be addressed? Who will be involved? How will results be used?",
+          "source": "NNG"
+        },
+        {
+          "text": "Describe how you will confirm you have achieved your stated intention. What methods and tools will you use to capture this data to evaluate your success?",
+          "source": "NewAlliance"
+        },
+        {
+          "text": "What measurement and evaluation practices do you have in place?",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "Describe how your organization assesses/evaluates its programs and cite examples of how you have applied the learnings from your evaluation.",
+          "source": "CGA"
+        },
+        {
+          "text": "A clear and concise evaluation plan.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "The quality of the project evaluation, including whether the methods are thorough, feasible, and produce measurable performance objectives.",
+          "source": "ED-75.210"
+        },
+        {
+          "text": "Timeframe of Evaluation Results",
+          "source": "Hamilton-2025"
+        },
+        {
+          "text": "How will you measure the impact of this project?",
+          "source": "AllenHiles-2024"
+        }
+      ]
+    },
+    {
+      "id": "outcomes.past_achievements",
+      "category": "outcomes",
+      "canonical": "What have you achieved in the past three years that shows this project will produce results?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.outcomes",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "FFTC"
+        }
+      ],
+      "variants": [
+        {
+          "text": "What have you achieved in the past three years that contributes to your success, and why will a grant produce results? (200 words max.)",
+          "source": "FFTC"
+        }
+      ]
+    },
+    {
+      "id": "outcomes.learnings",
+      "category": "outcomes",
+      "canonical": "How will evaluation results and key learnings be retained and shared with your organization and others?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.evaluation",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "FFTC"
+        }
+      ],
+      "variants": [
+        {
+          "text": "How will evaluation of project results be used for your org and others doing similar work? How will key learnings be retained/communicated? (200 words max.)",
+          "source": "FFTC"
+        },
+        {
+          "text": "What processes do you have in place for adapting programs based on evaluation findings?",
+          "source": "Instrumentl"
+        }
+      ]
+    },
+    {
+      "id": "sustainability.long_term_funding",
+      "category": "sustainability",
+      "canonical": "What are your long-term strategies for funding this project beyond the grant period?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.sustainability",
+      "frequency": "high",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 200,
+          "source": "FFTC"
+        },
+        {
+          "unit": "characters",
+          "max": 1000,
+          "source": "Barra"
+        }
+      ],
+      "variants": [
+        {
+          "text": "What are the long-term strategies for funding this project beyond the grant period? Is there an opportunity to leverage this grant for additional funding? (200 words max.)",
+          "source": "FFTC"
+        },
+        {
+          "text": "What does sustainability mean to your organization, and how do you plan to maintain financial sustainability?",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "How will you sustain this work? What financial and non-financial resources will you need? (1,000 characters)",
+          "source": "Barra"
+        },
+        {
+          "text": "Details on maintaining sustainable programming after the life of the grant.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "Describe your sustainability plan: will the project be self-supporting or otherwise supported after the grant?",
+          "source": "Lindback"
+        },
+        {
+          "text": "What is your business model?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "What is your plan for becoming financially sustainable, and what evidence supports it?",
+          "source": "Truist-Inspire-2026"
+        }
+      ]
+    },
+    {
+      "id": "sustainability.future_fundraising",
+      "category": "sustainability",
+      "canonical": "Describe your plans for future fundraising.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.sustainability",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Describe your plans for future fund raising.",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "sustainability.other_sources",
+      "category": "sustainability",
+      "canonical": "List other funding sources for this request (amount and status: received, committed, or pending).",
+      "answer_type": "narrative",
+      "kb_ref": "kb.budget_narrative",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "List individually other funding sources for this request. Include amounts and whether received, committed or projected/pending.",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "financials.operating_budget",
+      "category": "financials",
+      "canonical": "Provide your annual operating budget (current and prior year).",
+      "answer_type": "number",
+      "kb_ref": "kb.financials",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Organization's current annual operating budget. / Projected operating budget for upcoming year.",
+          "source": "NNG"
+        },
+        {
+          "text": "Annual operating budget; attach current-year and previous-year budgets.",
+          "source": "FFTC"
+        },
+        {
+          "text": "Total Organizational Budget for 1 year / Fiscal Year End.",
+          "source": "CGA"
+        },
+        {
+          "text": "Annual operating budget for your current fiscal year.",
+          "source": "Seybert"
+        },
+        {
+          "text": "What was your organizational budget for fiscal year 2025 and 2026?",
+          "source": "Truist-Inspire-2026"
+        }
+      ]
+    },
+    {
+      "id": "financials.budget_allocation",
+      "category": "financials",
+      "canonical": "How is your operating budget allocated across program, personnel, and administration?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.budget_narrative",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 150,
+          "source": "Truist"
+        }
+      ],
+      "variants": [
+        {
+          "text": "How is your current budget allocated?",
+          "source": "Truist-Inspire-2026"
+        }
+      ]
+    },
+    {
+      "id": "financials.project_budget",
+      "category": "financials",
+      "canonical": "Provide a project budget detailing income and expenses for this request.",
+      "answer_type": "attachment",
+      "kb_ref": "kb.budget_narrative",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Current project budget, other than general support (see attached format).",
+          "source": "NNG"
+        },
+        {
+          "text": "Upload complete project budget; total project budget.",
+          "source": "FFTC"
+        },
+        {
+          "text": "Budget Summary: Please submit a budget and brief narrative describing how funds will be used.",
+          "source": "JFF-AI-2026"
+        }
+      ]
+    },
+    {
+      "id": "financials.audit_netassets",
+      "category": "financials",
+      "canonical": "Does your organization conduct an audit, and what are your net assets?",
+      "answer_type": "boolean",
+      "kb_ref": "kb.financials",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Net assets of organization (as reported on 990): / Does your organization conduct an audit?",
+          "source": "FFTC"
+        },
+        {
+          "text": "Most recent completed full-year financial statement, audited if available.",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "financials.solvency",
+      "category": "financials",
+      "canonical": "How does your organization define and ensure financial solvency, and track budget line items?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.financials",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "How does your organization define and ensure financial solvency? How do you track and manage budget line items?",
+          "source": "Instrumentl"
+        }
+      ]
+    },
+    {
+      "id": "attachments.501c3",
+      "category": "attachments",
+      "canonical": "Attach a copy of your IRS 501(c)(3) determination letter.",
+      "answer_type": "attachment",
+      "kb_ref": "kb.docs",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "A copy of your IRS 501(c)(3) letter.",
+          "source": "NNG"
+        },
+        {
+          "text": "Attach a copy of your organization's official notice of tax-exempt status from the IRS.",
+          "source": "FFTC"
+        },
+        {
+          "text": "Attach IRS letter.",
+          "source": "FFTC"
+        }
+      ]
+    },
+    {
+      "id": "attachments.board_list",
+      "category": "attachments",
+      "canonical": "Attach your current board of directors list.",
+      "answer_type": "attachment",
+      "kb_ref": "kb.docs",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Provide a list of your board of directors with related demographic information.",
+          "source": "NNG"
+        },
+        {
+          "text": "Attach a copy of your organization's current Board of Directors list.",
+          "source": "FFTC"
+        }
+      ]
+    },
+    {
+      "id": "attachments.org_chart",
+      "category": "attachments",
+      "canonical": "Attach an organizational chart showing your decision-making structure.",
+      "answer_type": "attachment",
+      "kb_ref": "kb.docs",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Include an organizational chart showing decision-making structure.",
+          "source": "NNG"
+        }
+      ]
+    },
+    {
+      "id": "attachments.partner_letters",
+      "category": "attachments",
+      "canonical": "Attach letters from each partner confirming their participation.",
+      "answer_type": "attachment",
+      "kb_ref": "kb.docs",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Please attach letters from each partner confirming their participation.",
+          "source": "FFTC"
+        }
+      ]
+    },
+    {
+      "id": "attachments.certification",
+      "category": "attachments",
+      "canonical": "Certify that the executive director and board approved submittal and that all information is accurate.",
+      "answer_type": "boolean",
+      "kb_ref": null,
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Do you certify that the executive director and board of directors have approved submittal... all information provided is accurate...?",
+          "source": "FFTC"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.org_type",
+      "category": "eligibility",
+      "canonical": "Are you a 501(c)(3) public charity and an eligible organization type for this funder (e.g., not a school, government body, private foundation, or religious congregation)?",
+      "answer_type": "single_select",
+      "kb_ref": "kb.eligibility",
+      "frequency": "very_high",
+      "notes": "Hard gate. The recurring 'schools/educational institutions' exclusion is the biggest fit risk for LaunchPad — present as a Building 21-operated nonprofit workforce program, not a school.",
+      "variants": [
+        {
+          "text": "Is your organization a congregation, a government institution, or an accredited educational institution?",
+          "source": "FFTC"
+        },
+        {
+          "text": "Applicant must be a 501(c)(3) public charity; schools, government entities, and private foundations are ineligible.",
+          "source": "BofA"
+        },
+        {
+          "text": "Most pre-K–12 schools and fiscally sponsored organizations are ineligible.",
+          "source": "BofA"
+        },
+        {
+          "text": "Schools and Educational Institutions (including their affiliated foundations) are ineligible.",
+          "source": "Comcast"
+        },
+        {
+          "text": "Excludes schools (private, public, or charter), colleges/universities, and scholarships.",
+          "source": "ED-75.210"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.geography",
+      "category": "eligibility",
+      "canonical": "Is your organization located in or primarily serving the funder's required geographic area?",
+      "answer_type": "single_select",
+      "kb_ref": "kb.eligibility",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Headquarters and/or program is located in and serving one of the NBC- and Telemundo-owned station markets.",
+          "source": "Comcast"
+        },
+        {
+          "text": "Organization provides services in Philadelphia County only.",
+          "source": "PatriciaKind"
+        },
+        {
+          "text": "County/Counties Served.",
+          "source": "Barra"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.budget_size",
+      "category": "eligibility",
+      "canonical": "Does your organization's total annual budget or expenses fall within the funder's required range?",
+      "answer_type": "single_select",
+      "kb_ref": "kb.eligibility",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Total expenses between $100,000 and $1,000,000 and total revenue greater than $100,000.",
+          "source": "Comcast"
+        },
+        {
+          "text": "Annual operating budget of $1.5 million or less.",
+          "source": "Seybert"
+        },
+        {
+          "text": "Priority to organizations with budgets of $1 million or less.",
+          "source": "PatriciaKind"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.population_gate",
+      "category": "eligibility",
+      "canonical": "Does your target population meet the funder's required thresholds (age band, low-to-moderate-income %, or free/reduced-lunch %)?",
+      "answer_type": "single_select",
+      "kb_ref": "kb.eligibility",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "At least 70% of participants must be eligible for free or reduced-rate lunch.",
+          "source": "PhilaWorks"
+        },
+        {
+          "text": "More than 51% of children served are low-to-moderate income (LMI).",
+          "source": "BofA"
+        },
+        {
+          "text": "Participants no younger than 16 and no older than 24 at time of enrollment; priority to out-of-school youth.",
+          "source": "PhilaWorks"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.prior_funding",
+      "category": "eligibility",
+      "canonical": "Have you received funding from this funder within its restriction or waiting-period window?",
+      "answer_type": "single_select",
+      "kb_ref": "kb.eligibility",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Organizations may be funded no more than once per calendar year.",
+          "source": "BofA"
+        },
+        {
+          "text": "There is a three-year waiting period between awards.",
+          "source": "Truist"
+        },
+        {
+          "text": "Received less than $10,000 per year from Comcast NBCUniversal in each of the past three years.",
+          "source": "Comcast"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.support_type",
+      "category": "eligibility",
+      "canonical": "Does the funder support the type of request you are making (general operating, program/project, or capital)?",
+      "answer_type": "single_select",
+      "kb_ref": null,
+      "frequency": "medium",
+      "notes": "Per-application gate; several funders fund projects only (Lindback, Truist) or general operating only.",
+      "variants": [
+        {
+          "text": "Type of Grant Requested: Capital / General Operating Support / Program/Project / Capacity Building / Other.",
+          "source": "CGA"
+        },
+        {
+          "text": "Will not fund general operating expenses; funds discrete projects only.",
+          "source": "Lindback"
+        },
+        {
+          "text": "No general operating or recurring expenses, scholarships, or endowments.",
+          "source": "Truist"
+        }
+      ]
+    },
+    {
+      "id": "innovation.new_different",
+      "category": "innovation",
+      "canonical": "How is your approach new or different from existing solutions, and why will it be more effective?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.innovation",
+      "frequency": "high",
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 3000,
+          "source": "Barra"
+        }
+      ],
+      "variants": [
+        {
+          "text": "In what ways is your idea new and different from existing solutions, and why will it be more effective? Is anyone doing the same or similar work? (3,000 characters)",
+          "source": "Barra"
+        },
+        {
+          "text": "Tell us about your idea — give us your best elevator pitch. How is the work done now, and how does yours differ?",
+          "source": "Barra"
+        },
+        {
+          "text": "Data-driven innovation: implementation strategies are supported by data and represent an innovative approach.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "What makes your solution innovative? How is it distinct from others using a similar approach?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Project Overview and Innovation: Describe the challenge or opportunity facing early-career workers that your proposed project seeks to address. Why is this issue important in the context of an AI-driven economy? What is your proposed idea, and what makes it additive to existing approaches?",
+          "source": "JFF-AI-2026"
+        }
+      ]
+    },
+    {
+      "id": "innovation.why_now",
+      "category": "innovation",
+      "canonical": "Why is now the right time for this work?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.innovation",
+      "frequency": "low",
+      "variants": [
+        {
+          "text": "Why is now the right time to do this? (new research, technology, leadership, or partnership?)",
+          "source": "Barra"
+        }
+      ]
+    },
+    {
+      "id": "innovation.significance_scale",
+      "category": "innovation",
+      "canonical": "What is the broader significance of this work and its potential to grow, replicate, or scale?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.innovation",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 2000,
+          "source": "Barra"
+        }
+      ],
+      "variants": [
+        {
+          "text": "What is the potential to catalyze change, and what result would you expect in 3, 5, and 10 years? (2,000 characters)",
+          "source": "Barra"
+        },
+        {
+          "text": "Significance: the national significance of the project and its potential contribution to the field, including the strategy to scale to other populations or settings.",
+          "source": "ED-75.210"
+        },
+        {
+          "text": "Learning and Scaling Potential: What are the key questions you hope to explore or learn through this project? Please describe how you plan to capture and share measures of impact and/or learnings during or after the grant period. If your pilot is successful, how might you envision scaling it? What key resources or support would help make that possible?",
+          "source": "JFF-AI-2026"
+        }
+      ]
+    },
+    {
+      "id": "risk.challenges",
+      "category": "risk",
+      "canonical": "What risks or challenges do you anticipate, and how will you manage them?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.risk",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 2000,
+          "source": "Barra"
+        }
+      ],
+      "variants": [
+        {
+          "text": "What are the risks and limitations of the project, and what is your plan to manage them? (2,000 characters)",
+          "source": "Barra"
+        },
+        {
+          "text": "What are the challenges you anticipate during this program/project?",
+          "source": "CGA"
+        }
+      ]
+    },
+    {
+      "id": "outcomes.theory_of_change",
+      "category": "outcomes",
+      "canonical": "Describe your theory of change, and give an example that illustrates your impact.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.theory_of_change",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 300,
+          "source": "Seybert"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Please share an example that illustrates the impact of your organization's activities or execution of the organization's theory of change. (up to 300 words)",
+          "source": "Seybert"
+        },
+        {
+          "text": "Services are driven by a clear theory of change.",
+          "source": "Instrumentl"
+        },
+        {
+          "text": "Describe in simple terms how and why you expect your solution to have an impact on the problem (your theory of change).",
+          "source": "Truist-Inspire-2026"
+        }
+      ]
+    },
+    {
+      "id": "outcomes.measurable_outcomes",
+      "category": "outcomes",
+      "canonical": "What measurable outcomes will demonstrate progress, and what are your measurable program goals?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.outcomes",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Identification of measurable program goals and measurable outcomes that demonstrate progress as a result of the program.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "Expected outcomes must be measurable, obtainable, clear, and valid (e.g., jobs created/retained, people trained).",
+          "source": "DCED"
+        },
+        {
+          "text": "Establish clear, specified, and measurable goals, objectives, and outcomes.",
+          "source": "ED-75.210"
+        },
+        {
+          "text": "How will you assess whether your project is making a difference for the early-career workers you aim to serve? What outcomes or indicators would show progress toward your goals?",
+          "source": "JFF-AI-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.contingency_funding",
+      "category": "program",
+      "canonical": "What will you do if you receive more or less funding than requested, and how would that change the project?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.budget_narrative",
+      "frequency": "low",
+      "variants": [
+        {
+          "text": "What will you do if you receive less or more funding than the desired amount? How will that change the project?",
+          "source": "CGA"
+        }
+      ]
+    },
+    {
+      "id": "program.management_plan",
+      "category": "program",
+      "canonical": "Describe your management plan: milestones, timeline, responsibilities, and how you will use data to stay on track.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.management_plan",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "The adequacy of the management plan to achieve the objectives of the project on time and within budget, including clearly defined responsibilities, timelines, and milestones.",
+          "source": "ED-75.210"
+        },
+        {
+          "text": "Program planning: staffing strategy and program implementation.",
+          "source": "YouthBuild"
+        },
+        {
+          "text": "Project Schedule, Key Milestones and Dates.",
+          "source": "DCED"
+        },
+        {
+          "text": "Operational Readiness: Outline your high-level milestones for the grant period. What do you expect to design, test, or learn by the end of the grant period? (Please note: a detailed implementation plan is not required.)",
+          "source": "JFF-AI-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.logic_model",
+      "category": "program",
+      "canonical": "Provide a logic model linking your activities to intended outcomes.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.management_plan",
+      "frequency": "low",
+      "variants": [
+        {
+          "text": "The extent to which the design of the proposed project reflects up-to-date knowledge and includes a logic model.",
+          "source": "ED-75.210"
+        }
+      ]
+    },
+    {
+      "id": "program.equitable_access",
+      "category": "program",
+      "canonical": "What steps will you take to ensure equitable access to, and participation in, the project for people who may face barriers?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.dei",
+      "frequency": "medium",
+      "notes": "The federal GEPA Section 427 statement; required but not scored.",
+      "variants": [
+        {
+          "text": "Describe the steps the applicant proposes to take to ensure equitable access to, and participation in, its Federally-assisted program for students, teachers, and other beneficiaries with special needs (barriers based on gender, race, national origin, color, disability, or age).",
+          "source": "GEPA-427"
+        },
+        {
+          "text": "Strategies increase access for historically underserved populations and remove barriers at the program, system, or policy level.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "How will you ensure that this program drives economic mobility? What barriers to access does this program aim to remove, and how? What steps have you taken to make your services more accessible? Are there groups you find it difficult to connect with, and how will you address this?",
+          "source": "GSK-STEM-2026"
+        }
+      ]
+    },
+    {
+      "id": "program.employer_engagement",
+      "category": "program",
+      "canonical": "Describe your employer-engagement strategy and connections to jobs, apprenticeship, or career pathways.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.partnerships",
+      "frequency": "medium",
+      "notes": "Workforce-specific; weighted heavily in DOL/PA workforce competitions.",
+      "variants": [
+        {
+          "text": "Employer engagement strategies and apprenticeship connections, including how participants transition into Registered Apprenticeship, employment with high growth potential, and/or career pathways.",
+          "source": "YouthBuild"
+        },
+        {
+          "text": "Details on how the program will increase the talent for high-priority occupations and in-demand careers across the priority career cluster(s).",
+          "source": "PAsmart"
+        }
+      ]
+    },
+    {
+      "id": "program.jobs_and_participants",
+      "category": "program",
+      "canonical": "How many people will you serve or train, and how many jobs will be created or retained?",
+      "answer_type": "number",
+      "kb_ref": "kb.metrics",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Number of Full-Time Jobs to be Created at this Site.",
+          "source": "DCED"
+        },
+        {
+          "text": "Expected number of participants per year, justified against the funding requested.",
+          "source": "PhilaWorks"
+        },
+        {
+          "text": "How many individuals do you plan to impact or engage with the project/program?",
+          "source": "FFTC"
+        },
+        {
+          "text": "Proposed Number of Slots.",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "need.inclusion_barriers",
+      "category": "need",
+      "canonical": "Which underrepresented population do you target, what specific barriers do they face, and how does your work remove them?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.target_population",
+      "frequency": "high",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 300,
+          "source": "Seybert"
+        }
+      ],
+      "variants": [
+        {
+          "text": "How does your organization ensure your programs serve youth who have been disadvantaged, systemically under-resourced, and marginalized, and what information and/or statistics does your organization capture? (up to 300 words)",
+          "source": "Seybert"
+        },
+        {
+          "text": "Identify a specific target population and explain why, citing specific barriers to access or opportunity they face.",
+          "source": "PAsmart"
+        },
+        {
+          "text": "Details on the inclusion of underrepresented populations.",
+          "source": "PAsmart"
+        }
+      ]
+    },
+    {
+      "id": "organization.greatest_successes",
+      "category": "organization",
+      "canonical": "What are your organization's greatest successes and greatest challenges?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.history",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Identify three of your organization's greatest successes; what are your greatest challenges?",
+          "source": "CGA"
+        }
+      ]
+    },
+    {
+      "id": "organization.capacity",
+      "category": "organization",
+      "canonical": "Describe your organization's capacity and past performance in managing programs and grants of this type.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.capacity",
+      "frequency": "high",
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 2000,
+          "source": "Barra"
+        },
+        {
+          "unit": "words",
+          "max": 250,
+          "source": "JEVS-C2L"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Why is yours the right organization to do this? What are its strengths and capacity? (2,000 characters)",
+          "source": "Barra"
+        },
+        {
+          "text": "Past performance: performance outcomes, size and scope of prior grants, and spending rate analysis.",
+          "source": "YouthBuild"
+        },
+        {
+          "text": "The adequacy of support, including the relevant experience and qualifications of the organization and key personnel.",
+          "source": "ED-75.210"
+        },
+        {
+          "text": "What have you built and tested so far? Please share why you selected your stage of development.",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Provide a general organizational description, including but not limited to year established, legal status, governance structure, mission, annual budget, and number of full-time staff.",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "organization.leadership_lived_experience",
+      "category": "organization",
+      "canonical": "How do your leadership, staff, and board reflect the lived experience of the people you serve?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.dei",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 250,
+          "source": "Seybert"
+        }
+      ],
+      "variants": [
+        {
+          "text": "In what ways does your organization's leadership structure reflect or strive to reflect your mission and the lived experiences of program participants? (up to 250 words)",
+          "source": "Seybert"
+        },
+        {
+          "text": "Does your staff and board include current or former program participants or individuals from the community served? (up to 250 words)",
+          "source": "Seybert"
+        },
+        {
+          "text": "How does your organization's leadership reflect its constituency?",
+          "source": "AllenHiles-2024"
+        }
+      ]
+    },
+    {
+      "id": "organization.leaders_qualifications",
+      "category": "organization",
+      "canonical": "Tell us about your primary leaders and the qualities and qualifications that make them effective.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.staff_bios",
+      "frequency": "medium",
+      "limits": [
+        {
+          "unit": "words",
+          "max": 600,
+          "source": "Seybert"
+        }
+      ],
+      "variants": [
+        {
+          "text": "Tell us about your primary leaders and what qualities and/or qualifications make them effective in leading your organization's work with children and youth. (500–600 words)",
+          "source": "Seybert"
+        },
+        {
+          "text": "One-paragraph descriptions of key staff and their relevant qualifications.",
+          "source": "CGA"
+        }
+      ]
+    },
+    {
+      "id": "cover.uei_sam",
+      "category": "cover",
+      "canonical": "What is your Unique Entity Identifier (UEI) and SAM.gov registration status?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.federal",
+      "frequency": "medium",
+      "notes": "Federal applications only; must be current in SAM.gov before applying.",
+      "variants": [
+        {
+          "text": "Unique Entity Identifier (UEI).",
+          "source": "SF-424"
+        },
+        {
+          "text": "Employer/Taxpayer Identification Number (EIN/TIN).",
+          "source": "SF-424"
+        }
+      ]
+    },
+    {
+      "id": "cover.congressional_district",
+      "category": "cover",
+      "canonical": "What are the congressional and/or state legislative districts of the applicant and the project?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.federal",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Congressional Districts of Applicant / of Program or Project.",
+          "source": "SF-424"
+        },
+        {
+          "text": "PA House #, PA Senate #, US Congressional #.",
+          "source": "DCED"
+        }
+      ]
+    },
+    {
+      "id": "cover.naics_vendor",
+      "category": "cover",
+      "canonical": "What is your NAICS code and state vendor/SAP number?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.state_pa",
+      "frequency": "low",
+      "notes": "PA state applications (DCED Single App); requires a PA Vendor/SAP number.",
+      "variants": [
+        {
+          "text": "NAICS Code.",
+          "source": "DCED"
+        },
+        {
+          "text": "PA Vendor/SAP number and PA Revenue Tax Box #.",
+          "source": "DCED"
+        }
+      ]
+    },
+    {
+      "id": "cover.assistance_listing",
+      "category": "cover",
+      "canonical": "What is the Assistance Listing (CFDA) number for the program you are applying to?",
+      "answer_type": "field",
+      "kb_ref": null,
+      "frequency": "low",
+      "notes": "Per-application value tied to the specific federal opportunity.",
+      "variants": [
+        {
+          "text": "Assistance Listing Number (formerly CFDA) and title.",
+          "source": "SF-424"
+        }
+      ]
+    },
+    {
+      "id": "cover.authorized_rep",
+      "category": "cover",
+      "canonical": "Who is the Authorized Organizational Representative for this application?",
+      "answer_type": "field",
+      "kb_ref": "kb.profile.contacts",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Authorized Representative (name, title, signature) who legally binds the applicant.",
+          "source": "SF-424"
+        },
+        {
+          "text": "Signature of Executive Director and date.",
+          "source": "CGA"
+        }
+      ]
+    },
+    {
+      "id": "financials.budget_object_class",
+      "category": "financials",
+      "canonical": "Provide a budget by object-class category (personnel, fringe, travel, equipment, supplies, contractual, other, indirect).",
+      "answer_type": "attachment",
+      "kb_ref": "kb.budget_narrative",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "SF-424A Section B budget categories: Personnel, Fringe Benefits, Travel, Equipment, Supplies, Contractual, Construction, Other, Total Direct, Indirect Charges.",
+          "source": "SF-424"
+        },
+        {
+          "text": "Detailed budget with itemized per-unit cost and total expenditure, summarized into three categories: Contracted Services, Supplies, and Other.",
+          "source": "PAsmart"
+        }
+      ]
+    },
+    {
+      "id": "financials.indirect_rate",
+      "category": "financials",
+      "canonical": "What is your indirect cost rate, and do you have a federally negotiated rate (NICRA)? Note any admin/indirect caps.",
+      "answer_type": "field",
+      "kb_ref": "kb.financials",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Administrative expenses may not exceed 10% of total program costs; indirect rate up to 15% (a NICRA letter may justify higher).",
+          "source": "PhilaWorks"
+        },
+        {
+          "text": "Indirect costs are not allowable and administrative costs may not exceed 5% of the award.",
+          "source": "PAsmart"
+        }
+      ]
+    },
+    {
+      "id": "financials.match_costshare",
+      "category": "financials",
+      "canonical": "What matching funds or cost-share will you provide?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.budget_narrative",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Estimated Funding: Applicant, State, Local, Other, Program Income (cost-share / match).",
+          "source": "SF-424"
+        },
+        {
+          "text": "Budget, Budget Narrative, and Match Narrative.",
+          "source": "YouthBuild"
+        }
+      ]
+    },
+    {
+      "id": "attachments.audit_990",
+      "category": "attachments",
+      "canonical": "Attach your most recent audited financial statements and/or IRS Form 990.",
+      "answer_type": "attachment",
+      "kb_ref": "kb.docs",
+      "frequency": "very_high",
+      "variants": [
+        {
+          "text": "Organization's most recent AUDITED statement if budget over $100,000 (Form 990 if budget $25K–$100K).",
+          "source": "CGA"
+        },
+        {
+          "text": "Most recent Audited Financials or Form 990.",
+          "source": "Seybert"
+        }
+      ]
+    },
+    {
+      "id": "attachments.operating_budget_doc",
+      "category": "attachments",
+      "canonical": "Attach your current-year (and prior-year) organizational operating budget.",
+      "answer_type": "attachment",
+      "kb_ref": "kb.docs",
+      "frequency": "high",
+      "variants": [
+        {
+          "text": "Organizational Budget for the most recently completed fiscal year and a current Profit & Loss statement.",
+          "source": "CGA"
+        },
+        {
+          "text": "Operating Budget Current FY and Operating Budget Previous FY.",
+          "source": "BofA"
+        }
+      ]
+    },
+    {
+      "id": "organization.why_this_funder",
+      "category": "organization",
+      "canonical": "Why are you applying to this funder, and how would working with them add value to your organization?",
+      "answer_type": "narrative",
+      "kb_ref": null,
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Why are you applying to the Truist Foundation Inspire Awards?",
+          "source": "Truist-Inspire-2026"
+        },
+        {
+          "text": "Investment Area Alignment: Please share how this request clearly connects to the primary investment area selected for the Trust (academic learning, social-emotional learning, career learning, or educational support). You may include additional areas in your response if appropriate.",
+          "source": "Hamilton-2025"
+        }
+      ],
+      "limits": [
+        {
+          "unit": "characters",
+          "max": 3000,
+          "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "cover.fiscal_sponsor",
+      "category": "cover",
+      "canonical": "Will a fiscal sponsor be used for this grant, or is the applicant itself a 501(c)(3)?",
+      "answer_type": "boolean",
+      "kb_ref": "kb.eligibility",
+      "frequency": "high",
+      "notes": "Launchpad applies under Building 21 as fiscal sponsor; answer depends on framing chosen for this funder (PLAYBOOK Step 3).",
+      "variants": [
+        {
+          "text": "Will a Fiscal Sponsor be used for this grant?",
+          "source": "WPF-2026"
+        }
+      ]
+    },
+    {
+      "id": "cover.grant_period",
+      "category": "cover",
+      "canonical": "What are the anticipated start and end dates and duration of the requested grant period?",
+      "answer_type": "field",
+      "kb_ref": null,
+      "frequency": "high",
+      "notes": "Application-specific dates and months; not a KB answer.",
+      "variants": [
+        {
+          "text": "Anticipated Start Date for Project Funded by WPF",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Duration of Funding (months)",
+          "source": "WPF-2026"
+        },
+        {
+          "text": "Anticipated Project/ Program/ Campaign Start Date",
+          "source": "Hamilton-2025"
+        },
+        {
+          "text": "Anticipated Project/ Program/ Campaign End Date",
+          "source": "Hamilton-2025"
+        },
+        {
+          "text": "Applying For (Select One): Year-round (school-year 2024-2025 and summer 2025) or Summer 2025 only.",
+          "source": "JEVS-C2L"
+        },
+        {
+          "text": "Term (12 months minimum)",
+          "source": "DolfMcM-2023"
+        }
+      ]
+    },
+    {
+      "id": "cover.multi_year",
+      "category": "cover",
+      "canonical": "Is this a multi-year funding request?",
+      "answer_type": "boolean",
+      "kb_ref": null,
+      "frequency": "medium",
+      "notes": "Often gated by a prior-relationship rule (e.g. Hamilton requires 3+ years funded before multi-year is allowed).",
+      "variants": [
+        {
+          "text": "Is this a multi-year funding request?",
+          "source": "Hamilton-2025"
+        }
+      ]
+    },
+    {
+      "id": "cover.funder_connection",
+      "category": "cover",
+      "canonical": "Does your organization have any connection to the funder, including its board members or staff?",
+      "answer_type": "boolean",
+      "kb_ref": null,
+      "frequency": "low",
+      "notes": "Application specific: whether a connection exists depends on which funder is being applied to, so no stored answer can hold it. Added 2026-08-04 under board B6. Before this entry existed the JEVS wording matched attachments.board_list at 0.459 and CONFIDENTLY - a conflict-of-interest disclosure routed to kb.docs, so a draft offered an attachment checklist as the answer to a yes/no question. A confident wrong match is worse than a miss: a miss routes to staff review.",
+      "variants": [
+        {
+          "text": "Does the organization have any connection with JEVS (including its Board of Directors)?",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.minority_owned",
+      "category": "eligibility",
+      "canonical": "Is the organization minority-owned and/or operated?",
+      "answer_type": "single_select",
+      "kb_ref": "kb.eligibility",
+      "frequency": "medium",
+      "notes": "Common in government/city RFPs as an MBE/WBE certification gate. Not a fit-scoring decision — the answer is a fact about the org.",
+      "variants": [
+        {
+          "text": "Is the organization minority-owned and/or operated?",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "eligibility.debarment",
+      "category": "eligibility",
+      "canonical": "Has the applicant organization or its staff/directors ever been barred, suspended, or debarred from contracting with any government agency?",
+      "answer_type": "boolean",
+      "kb_ref": "kb.eligibility",
+      "frequency": "medium",
+      "notes": "Standard good-standing gate in government RFPs. Answer is a compliance fact.",
+      "variants": [
+        {
+          "text": "Has the applicant agency and its staff or director ever been barred from entering contracts with City, Federal, or State government agencies?",
+          "source": "JEVS-C2L"
+        }
+      ]
+    },
+    {
+      "id": "organization.community_voice",
+      "category": "organization",
+      "canonical": "How does your organization include the people it serves in its decision-making and governance?",
+      "answer_type": "narrative",
+      "kb_ref": "kb.dei",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "How does your organization include the people it serves in its decision-making process?",
+          "source": "AllenHiles-2024"
+        }
+      ]
+    },
+    {
+      "id": "program.operations",
+      "category": "program",
+      "canonical": "Describe how the project will operate, including hours of operation, staffing, and how volunteers are recruited and trained.",
+      "answer_type": "narrative",
+      "kb_ref": "kb.program_desc",
+      "frequency": "medium",
+      "variants": [
+        {
+          "text": "Describe how the project will operate. Include hours, days and months of operation, full- and part-time staff and their qualifications. If volunteers are used, describe how they are recruited and trained.",
+          "source": "AllenHiles-2024"
+        }
+      ]
+    }
+  ]
+}

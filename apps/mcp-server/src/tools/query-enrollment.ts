@@ -3,12 +3,18 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseStr, parseNum, filterStr } from '../tool-helpers.js';
+import { unmatchableFilterError, type FilterDomainCheck } from '../filter-domain.js';
+import {
+  studentCurrentPhaseDomain,
+  studentEnrollmentStatusDomain,
+  studentCohortDomain,
+} from '../filter-domain-loaders.js';
 
 const NAME = 'query_enrollment';
 
 const DESCRIPTION =
-  'Aggregate student enrollment data. Supports total headcount, phase status breakdowns, date-range active queries, cohort breakdowns, and per-student rows. Every response echoes filters_applied, and filters_ignored when a filter does not apply to the query_type, so a count is never silently unscoped.';
+  'Aggregate student enrollment data. Supports total headcount, phase status breakdowns, date-range active queries, cohort breakdowns, and per-student rows. Every response echoes filters_applied, and filters_ignored when a filter does not apply to the query_type, so a count is never silently unscoped. enrollment_status, current_phase, cohort and status are matched literally against the source values, which are short codes rather than words — enrollment_status held only E and N in production, so enrollment_status:"Active" is not a small result but a value that cannot match. A value absent from its column now returns a no_records error listing the values that column does hold, instead of an empty answer; a combination of real values that no student happens to have still returns an honest empty result.';
 
 const inputSchema = {
   query_type: z.enum([
@@ -91,25 +97,12 @@ function outcomePredicate(
 }
 
 /**
- * A string filter, with blank treated as absent.
- *
- * Every filter below is presence-tested, not truthiness-tested, so that `cohort: 0`
- * reaches the query and the echo. That makes `""` the one remaining hazard: an
- * empty `status` present in the payload would become a literal column match on
- * every branch that reads it directly, and a `{ not: null }` on the branches that
- * test truthiness — the same silent divergence between branches this fix exists to
- * remove. A blank filter means "no filter", uniformly, on every query type.
- *
- * Trimming is part of that: ` "Completed" ` is the value with the same intent, and
- * an untrimmed one matches nothing while reporting itself applied.
- *
- * Treating blank as absent still has to be *reported*, or it becomes its own silent
- * unscoping — see `blankFilters`.
+ * Why every filter below is presence-tested rather than truthiness-tested: so that
+ * `cohort: 0` reaches the query and the echo. That makes `""` the one remaining hazard,
+ * which is what `filterStr` handles — see its doc comment in `tool-helpers.ts`, where it
+ * now lives because `query_students`, `query_postsecondary` and `query_certifications`
+ * domain-check filters the same way and need the same blank semantics.
  */
-export function filterStr(raw: Record<string, unknown>, key: string): string | undefined {
-  const trimmed = parseStr(raw, key)?.trim();
-  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
-}
 
 /**
  * Names the filters present in the payload as strings but blank after trimming.
@@ -157,6 +150,105 @@ export function filterEcho(
   return { filters_applied: applied, ...(ignored.length > 0 ? { filters_ignored: ignored } : {}) };
 }
 
+/**
+ * The three `students` column domains this tool checks live in
+ * `filter-domain-loaders.ts`, shared with `query_students`, which filters the same
+ * columns with the same codes. The unscoped-read reasoning that governs all of them is
+ * documented there and in the header of `filter-domain.ts`.
+ *
+ * `phaseStatusDomain` stays here because it is this tool's own: no other tool has a
+ * `status` filter that fans out over four columns.
+ */
+
+/**
+ * The union of the four phase status columns.
+ *
+ * `status` without `phase` fans out over all four (see `outcomePredicate`), so the
+ * union is the set of values that could match *something*. With `phase` supplied it is
+ * wider than that one column — deliberately: `phase: 'LiftOff', status: 'Completed'`
+ * where `Completed` appears only in Foundations is a real value in a combination no row
+ * satisfies, so it returns an empty result rather than an error. Narrowing this domain
+ * per phase would reclassify that as a bad input, which it is not.
+ */
+async function phaseStatusDomain(): Promise<string[]> {
+  const [foundations, phase101, lightspeed, liftoff] = await Promise.all([
+    prisma.studentPhaseOutcome.groupBy({
+      by: ['foundationsStatus'],
+      where: { foundationsStatus: { not: null } },
+    }),
+    prisma.studentPhaseOutcome.groupBy({
+      by: ['phase101Status'],
+      where: { phase101Status: { not: null } },
+    }),
+    prisma.studentPhaseOutcome.groupBy({
+      by: ['lightspeedStatus'],
+      where: { lightspeedStatus: { not: null } },
+    }),
+    prisma.studentPhaseOutcome.groupBy({
+      by: ['liftoffStatus'],
+      where: { liftoffStatus: { not: null } },
+    }),
+  ]);
+  const values = new Set<string>();
+  for (const r of foundations) if (r.foundationsStatus !== null) values.add(r.foundationsStatus);
+  for (const r of phase101) if (r.phase101Status !== null) values.add(r.phase101Status);
+  for (const r of lightspeed) if (r.lightspeedStatus !== null) values.add(r.lightspeedStatus);
+  for (const r of liftoff) if (r.liftoffStatus !== null) values.add(r.liftoffStatus);
+  return [...values];
+}
+
+/**
+ * Build the domain checks for the filters a caller actually supplied, in
+ * `NON_DATE_FILTERS` order so which failure is reported first is deterministic rather
+ * than payload-order dependent. An unfiltered call loads no domains at all.
+ *
+ * `phase` is absent because it is a `z.enum` in the input schema — the four phase names
+ * are validated before the handler runs, so it has no unmatchable form to catch. The
+ * date filters are absent because a date outside the data's range is a real window
+ * returning a real zero, not a value drawn from a column's domain.
+ */
+async function buildDomainChecks(f: {
+  currentPhase: string | undefined;
+  enrollmentStatus: string | undefined;
+  cohort: number | undefined;
+  status: string | undefined;
+}): Promise<FilterDomainCheck[]> {
+  const checks: FilterDomainCheck[] = [];
+  if (f.currentPhase !== undefined) {
+    checks.push({
+      field: 'current_phase',
+      column: 'students.current_phase',
+      value: f.currentPhase,
+      domain: await studentCurrentPhaseDomain(),
+    });
+  }
+  if (f.enrollmentStatus !== undefined) {
+    checks.push({
+      field: 'enrollment_status',
+      column: 'students.enrollment_status',
+      value: f.enrollmentStatus,
+      domain: await studentEnrollmentStatusDomain(),
+    });
+  }
+  if (f.cohort !== undefined) {
+    checks.push({
+      field: 'cohort',
+      column: 'students.cohort',
+      value: f.cohort,
+      domain: await studentCohortDomain(),
+    });
+  }
+  if (f.status !== undefined) {
+    checks.push({
+      field: 'status',
+      column: 'student_phase_outcomes phase status columns',
+      value: f.status,
+      domain: await phaseStatusDomain(),
+    });
+  }
+  return checks;
+}
+
 export function registerQueryEnrollment(server: McpServer): void {
   server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
     runTool(NAME, input, async () => {
@@ -183,6 +275,22 @@ export function registerQueryEnrollment(server: McpServer): void {
         ...(endDate !== undefined ? { end_date: endDate } : {}),
       };
       const blanked = blankFilters(raw);
+
+      // Before any counting. A value its column does not contain makes every branch
+      // below return an empty answer that reads as a fact — `by_phase` with
+      // `enrollment_status: 'Active'` gave `breakdown: []` beside an echo naming the
+      // filter, and nothing said the codes are `E` and `N`. Checked here, once, so all
+      // eight query_types answer the same way; blank filters have already been dropped
+      // by `filterStr`, so "no filter" never reaches this as a value to look up.
+      const domainError = unmatchableFilterError(
+        await buildDomainChecks({
+          currentPhase,
+          enrollmentStatus,
+          cohort,
+          status: statusFilter,
+        }),
+      );
+      if (domainError) return domainError;
 
       const studentWhere: Prisma.StudentWhereInput = {
         ...(currentPhase !== undefined ? { currentPhase } : {}),

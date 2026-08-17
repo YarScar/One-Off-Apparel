@@ -130,24 +130,41 @@ jobs:
       - name: Run migrations via ECS one-off task
         id: run
         run: |
-          # Read migration SQL files that need to be applied and combine them.
-          # We use a node script that connects via pg (available in the container)
-          # and runs each pending migration's SQL.
+          # Applies pending migrations with `prisma migrate deploy`, run inside the
+          # mcp-server image because the GitHub runner cannot reach RDS (private subnet).
           #
-          # The ECS task uses the mcp-server task definition which already has
-          # DATABASE_URL injected from Secrets Manager.
+          # The image carries everything this needs: the prisma CLI (a devDependency of
+          # @lp-ai/lib-db, and the runner stage copies node_modules from the builder),
+          # packages/db/prisma/migrations, and prisma.config.ts at /workspace. The task
+          # definition already injects DATABASE_URL from Secrets Manager.
+          #
+          # prisma.config.ts resolves its `schema` and `migrations.path` relative to
+          # ITSELF, not to the process cwd, so `--config prisma.config.ts` from
+          # /workspace is correct regardless of the image's WORKDIR.
+          #
+          # HISTORY, so this is not "simplified" back: until 2026-08-17 this step ran a
+          # read-only `SELECT migration_name FROM _prisma_migrations` and exited 0. It
+          # applied nothing, while being named `migrate`, titled "Run migrations", and
+          # gated by all three deploy jobs. Work package #220.
+
+          cat > /tmp/overrides.json <<'JSON'
+          {
+            "containerOverrides": [{
+              "name": "mcp-server",
+              "command": [
+                "sh", "-c",
+                "cd /workspace && node_modules/.bin/prisma migrate deploy --config prisma.config.ts && node_modules/.bin/prisma migrate status --config prisma.config.ts"
+              ]
+            }]
+          }
+          JSON
 
           TASK_ARN=$(aws ecs run-task \
             --cluster ${{ env.ECS_CLUSTER }} \
             --task-definition lp-internal-mcp-server \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[${{ steps.network.outputs.subnet }}],securityGroups=[${{ steps.network.outputs.sg }}],assignPublicIp=ENABLED}" \
-            --overrides '{
-              "containerOverrides": [{
-                "name": "mcp-server",
-                "command": ["node", "-e", "const pg=require(\"/workspace/node_modules/.pnpm/pg@8.21.0/node_modules/pg\");const p=new pg.Pool({connectionString:process.env.DATABASE_URL});p.query(\"SELECT migration_name FROM _prisma_migrations ORDER BY finished_at\").then(r=>{console.log(\"Applied migrations:\",r.rows.length);r.rows.forEach(row=>console.log(\" \",row.migration_name));p.end();process.exit(0)}).catch(e=>{console.error(String(e));p.end();process.exit(1)})"]
-              }]
-            }' \
+            --overrides file:///tmp/overrides.json \
             --query 'tasks[0].taskArn' --output text)
 
           echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
@@ -161,14 +178,20 @@ jobs:
             --tasks "$TASK_ARN" \
             --query 'tasks[0].containers[0].exitCode' --output text)
 
+          # Unconditionally. The applied-migration list is the whole point of the job and
+          # fetching it only on failure is why nobody noticed the step applied nothing —
+          # a successful run left no record anywhere outside CloudWatch.
+          echo "--- migration task output ---"
+          aws logs get-log-events \
+            --log-group-name /ecs/lp-internal-mcp-server \
+            --log-stream-name "ecs/mcp-server/$TASK_ID" \
+            --query 'events[*].message' --output text || \
+            echo "::warning::could not fetch migration task logs"
+          echo "--- end migration task output ---"
+
           echo "Migration task exit code: $EXIT_CODE"
           if [ "$EXIT_CODE" != "0" ]; then
-            echo "::error::Migration task failed with exit code $EXIT_CODE"
-            # Fetch logs for debugging
-            aws logs get-log-events \
-              --log-group-name /ecs/lp-internal-mcp-server \
-              --log-stream-name "ecs/mcp-server/$TASK_ID" \
-              --query 'events[*].message' --output text || true
+            echo "::error::Migration task failed with exit code $EXIT_CODE — no service was deployed"
             exit 1
           fi
 

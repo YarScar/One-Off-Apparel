@@ -1,0 +1,43 @@
+{
+  "family": "lp-sync-google-drive",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "sync",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/lp-internal/sync:latest",
+      "essential": true,
+      "command": [
+        "/bin/sh", "-c",
+        "cd /workspace/connectors/google-drive && node dist/cli.js"
+      ],
+      "environment": [
+        { "name": "NODE_ENV",           "value": "production" },
+        { "name": "USE_AWS_SECRETS",    "value": "true" },
+        { "name": "AWS_REGION",         "value": "us-east-1" },
+        { "name": "AWS_SECRETS_PREFIX", "value": "lp-internal" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL",                "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/db:DATABASE_URL::" },
+        { "name": "GOOGLE_SERVICE_ACCOUNT_JSON", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SERVICE_ACCOUNT_JSON::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/lp-sync-google-drive",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

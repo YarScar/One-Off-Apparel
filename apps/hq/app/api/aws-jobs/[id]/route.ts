@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@lp-ai/lib-db';
 import { auth } from '../../../../auth';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * The request body, parsed rather than cast. It was
+ * `const body = await request.json().catch(() => ({}))` — an `any` — followed by
+ * `body as { action?: string }` and a manual `includes` check, so the cast asserted a
+ * shape nothing had verified. Same 400 and same message; the enum now does the check the
+ * `includes` was doing by hand.
+ */
+const ActionRequestSchema = z.object({ action: z.enum(['approve', 'reject']) });
 
 interface RouteParams {
   params: Promise<{
@@ -35,12 +45,12 @@ export async function POST(request: Request, { params }: RouteParams): Promise<N
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json().catch(() => ({}));
-    const { action } = body as { action?: string };
-
-    if (!action || !['approve', 'reject'].includes(action)) {
+    const raw: unknown = await request.json().catch(() => null);
+    const parsed = ActionRequestSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid action. Must be approve or reject' }, { status: 400 });
     }
+    const { action } = parsed.data;
 
     const job = await prisma.awsResourceJob.findUnique({
       where: { id },

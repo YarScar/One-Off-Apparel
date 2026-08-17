@@ -1,0 +1,354 @@
+{
+  "form": {
+    "funder": "JFF & Google",
+    "program": "Advancing AI Resilient Early Career Pathways (2026)",
+    "note": "RFP form from data/Grants/Current and Past/JFF/JFF - Advancing AI Resilient Early Career Pathways/. RFP released Feb 6, 2026; award $50k-$100k; submission via Google Form. The RFP states questions do not appear to have character or word limits; recorded as no limit.",
+    "due": "2026-02-25"
+  },
+  "summary": {
+    "total": 8,
+    "by_status": {
+      "ready": 7,
+      "needs_attachment": 1
+    },
+    "by_actor": {
+      "none": 7,
+      "llm": 0,
+      "staff": 1
+    },
+    "all_fit": true
+  },
+  "results": [
+    {
+      "incoming": "Project Overview and Innovation: Describe the challenge or opportunity facing early-career workers that your proposed project seeks to address. Why is this issue important in the context of an AI-driven economy? What is your proposed idea, and what makes it additive to existing approaches?",
+      "matched_id": "innovation.new_different",
+      "canonical": "How is your approach new or different from existing solutions, and why will it be more effective?",
+      "category": "innovation",
+      "answer_type": "narrative",
+      "kb_ref": "kb.innovation",
+      "matched_via": "JFF-AI-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "What is new/different + significance",
+      "verified": true,
+      "carries_figures": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the canonical answer, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Launchpad's innovation is a paid on-ramp that produces working professionals rather than a class that ends at a job fair. First, the AI Engineer competency framework: rather than teaching tools that are obsolete within a year, Launchpad defined the durable capabilities of an AI builder as six competencies and 24 skills, staged Associate → AI Engineer, each assessed against a shipped portfolio artifact, not a test score. The framework is versioned (now in its fifth version), reviewed by a standing curriculum committee, and openly licensed for other programs to adopt. Second, paid work from day one through Launchpad Inc., a real social enterprise: participants deploy AI systems for Philadelphia organizations that could not otherwise afford them, producing the deployed work and client references early-career tech hiring now demands while removing the financial barrier. Third, an honest redefinition of success — earning power over time toward a $50,000 living wage — which lets programs serving the hardest-to-place populations show real progress instead of failing a metric built for a labor market that no longer exists. If proven at scale, the model is transferable to other cities and employer markets."
+    },
+    {
+      "incoming": "Operational Readiness: Outline your high-level milestones for the grant period. What do you expect to design, test, or learn by the end of the grant period? (Please note: a detailed implementation plan is not required.)",
+      "matched_id": "program.management_plan",
+      "canonical": "Describe your management plan: milestones, timeline, responsibilities, and how you will use data to stay on track.",
+      "category": "program",
+      "answer_type": "narrative",
+      "kb_ref": "kb.management_plan",
+      "matched_via": "JFF-AI-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Management plan & logic model",
+      "verified": false,
+      "carries_figures": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the canonical answer, edited for this funder’s voice.  ⚠ Figures unverified — confirm with staff before submitting.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "[Supply project milestones, timeline, and staff responsibilities per ask; a logic model can be built on the framework in kb.theory_of_change.] Natural milestones for a LiftOff + Launchpad Inc. cycle: recruitment and enrollment; classroom-intensive phase (weeks 1–~12, stipend-supported); transition to paid client work through Launchpad Inc. (second half of the six months, $20/hour); graduation with a Beacon-tracked portfolio and certifications; and post-graduation placement with earnings checks at six and twelve months. The Executive Director owns strategic direction; program directors, technical instructors, and coaches run delivery; Launchpad Inc. delivery leads supervise client projects; Building 21 provides finance, compliance, and platform support."
+    },
+    {
+      "incoming": "Please briefly describe your team's relevant experience and knowledge in AI and/or early career development. What perspectives or skills does your team bring to this work? If applicable, include the names and responsibilities of your partner organizations.",
+      "matched_id": "program.team_qualifications",
+      "canonical": "Who will carry out the project, and what are their qualifications?",
+      "category": "program",
+      "answer_type": "narrative",
+      "kb_ref": "kb.staff_bios",
+      "matched_via": "JFF-AI-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Key staff qualifications",
+      "verified": true,
+      "carries_figures": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the canonical answer, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Launchpad is led by Executive Director Dannyelle Austin (Founding ED; 15+ years in education and workforce development). The team is 9 full-time and 1 part-time staff (all W-2) plus roughly 30 volunteers, and includes program directors, technical instructors, coaches, a career placement coordinator, and Launchpad Inc. software-delivery leadership. Building 21 adds shared services that do not sit in that headcount — instructional design, finance, compliance, and the Beacon platform team — and is led by Co-CEOs Chip Linehan and Laura Shubilla. Industry mentors and advisory-board members contribute regular in-kind time through portfolio reviews, mock interviews, and curriculum input; several first-cohort alumni have returned to mentor and recruit the next cohort."
+    },
+    {
+      "incoming": "Early-Career Impact: Who are the early-career workers your idea seeks to benefit? How does your proposed work aim to improve access, job quality, skill development, or career mobility in an AI-transformed economy?",
+      "matched_id": "program.population_impact",
+      "canonical": "Who does the program serve, and how does it change their lives?",
+      "category": "program",
+      "answer_type": "narrative",
+      "kb_ref": "kb.target_population",
+      "matched_via": "JFF-AI-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Target population",
+      "verified": true,
+      "carries_figures": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the canonical answer, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Launchpad serves Philadelphia young people ages 16–24: high school juniors and seniors (roughly 16–18) in Launchpad 101, and recent graduates / young adults (18–24) in LiftOff and Launchpad Inc. Participants come almost entirely from non-selective Philadelphia high schools across 30+ ZIP codes; all qualify for free or reduced-price lunch, nearly 90% are from low-income households, and about 85% are Black or Brown. No prior coding experience is required. (Funders that require an 18–24 band are served by the LiftOff/Inc profile; Launchpad 101 reaches the 16–18 group.)"
+    },
+    {
+      "incoming": "How will you assess whether your project is making a difference for the early-career workers you aim to serve? What outcomes or indicators would show progress toward your goals?",
+      "matched_id": "outcomes.measurable_outcomes",
+      "canonical": "What measurable outcomes will demonstrate progress, and what are your measurable program goals?",
+      "category": "outcomes",
+      "answer_type": "narrative",
+      "kb_ref": "kb.outcomes",
+      "matched_via": "JFF-AI-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Outcomes & results committed",
+      "verified": true,
+      "carries_figures": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the canonical answer, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Launchpad measures success as earning power over time toward a $50,000 living wage, not a job on graduation day, and tracks participants at six and twelve months. Results to date: LiftOff Cohort 1 — 12 graduates (Oct 2025); at six months 11 of 12 (92%) were in paid work or training, roughly three-quarters of it contract work through Launchpad Inc., averaging about $15,000 annualized at six months and projected toward ~$35,000 at nine months; 100% are in paid work now (most recent status); alumni have earned $229,000+ in documented wages. Notable placements: four graduates hired at Seer Interactive after out-competing 200+ applicants, plus roles at Bentley Systems, a Hack Club fellowship, and a promotion at CreateAccess. Since 2023, Launchpad has paid $350,268 directly to 45 participants across 88 jobs (most recent precise figure, William Penn Jul 2026; the GSK Aug-7 draft rounds this to '$500,000+' — align when finalizing GSK). Launchpad 101: ~72% completion in the most recent program year; 95% of graduates move directly into college, further training, or work; PCEP Python pass rates 70–100% per cohort (100% most recent). Twelve-month retention data arrives in fall 2026."
+    },
+    {
+      "incoming": "Learning and Scaling Potential: What are the key questions you hope to explore or learn through this project? Please describe how you plan to capture and share measures of impact and/or learnings during or after the grant period. If your pilot is successful, how might you envision scaling it? What key resources or support would help make that possible?",
+      "matched_id": "innovation.significance_scale",
+      "canonical": "What is the broader significance of this work and its potential to grow, replicate, or scale?",
+      "category": "innovation",
+      "answer_type": "narrative",
+      "kb_ref": "kb.innovation",
+      "matched_via": "JFF-AI-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "What is new/different + significance",
+      "verified": true,
+      "carries_figures": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the canonical answer, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Launchpad's innovation is a paid on-ramp that produces working professionals rather than a class that ends at a job fair. First, the AI Engineer competency framework: rather than teaching tools that are obsolete within a year, Launchpad defined the durable capabilities of an AI builder as six competencies and 24 skills, staged Associate → AI Engineer, each assessed against a shipped portfolio artifact, not a test score. The framework is versioned (now in its fifth version), reviewed by a standing curriculum committee, and openly licensed for other programs to adopt. Second, paid work from day one through Launchpad Inc., a real social enterprise: participants deploy AI systems for Philadelphia organizations that could not otherwise afford them, producing the deployed work and client references early-career tech hiring now demands while removing the financial barrier. Third, an honest redefinition of success — earning power over time toward a $50,000 living wage — which lets programs serving the hardest-to-place populations show real progress instead of failing a metric built for a labor market that no longer exists. If proven at scale, the model is transferable to other cities and employer markets."
+    },
+    {
+      "incoming": "Team Bios: Please include brief bios for key project staff and partners, highlighting relevant experience.",
+      "matched_id": "program.team_qualifications",
+      "canonical": "Who will carry out the project, and what are their qualifications?",
+      "category": "program",
+      "answer_type": "narrative",
+      "kb_ref": "kb.staff_bios",
+      "matched_via": "JFF-AI-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Key staff qualifications",
+      "verified": true,
+      "carries_figures": true,
+      "status": "ready",
+      "actor": "none",
+      "action": "No stated limit — use the canonical answer, edited for this funder’s voice.  ⚠ Carries figures — verify every one against live data via the figure work order before publishing. The stored figures drift.",
+      "answer": "Launchpad is led by Executive Director Dannyelle Austin (Founding ED; 15+ years in education and workforce development). The team is 9 full-time and 1 part-time staff (all W-2) plus roughly 30 volunteers, and includes program directors, technical instructors, coaches, a career placement coordinator, and Launchpad Inc. software-delivery leadership. Building 21 adds shared services that do not sit in that headcount — instructional design, finance, compliance, and the Beacon platform team — and is led by Co-CEOs Chip Linehan and Laura Shubilla. Industry mentors and advisory-board members contribute regular in-kind time through portfolio reviews, mock interviews, and curriculum input; several first-cohort alumni have returned to mentor and recruit the next cohort."
+    },
+    {
+      "incoming": "Budget Summary: Please submit a budget and brief narrative describing how funds will be used.",
+      "matched_id": "financials.project_budget",
+      "canonical": "Provide a project budget detailing income and expenses for this request.",
+      "category": "financials",
+      "answer_type": "attachment",
+      "kb_ref": "kb.budget_narrative",
+      "matched_via": "JFF-AI-2026",
+      "confidence": 1,
+      "confident": true,
+      "limit": null,
+      "kb_label": "Budget narrative",
+      "verified": true,
+      "carries_figures": true,
+      "status": "needs_attachment",
+      "actor": "staff",
+      "action": "This question wants a document upload, not text. kb.budget_narrative holds the checklist of what to attach — a person has to gather and upload the files.",
+      "answer": "A distinctive share of Launchpad's budget flows directly to participants: pay-from-day-one stipends (a guaranteed $6,000 floor per LiftOff participant over six months) plus paid client work at $20/hour through Launchpad Inc., alongside wraparound supports (transportation, food, laptops, coaching). Example line items from a recent three-year supportive-services request (William Penn Foundation, ~$568,498 over three years): Career Success Coach salary+benefits (~$122,729), participant stipends (~$385,681), food and meals (~$40,500), transportation (~$2,700), uniforms (~$11,262), and field trips (~$5,625). Participant wages for paid Launchpad Inc. client work (~$148,000/year) are covered by client revenue, not grant requests. [Supply the per-project budget for each specific ask.]"
+    }
+  ],
+  "kb_refs_used": [
+    "kb.budget_narrative",
+    "kb.innovation",
+    "kb.management_plan",
+    "kb.outcomes",
+    "kb.staff_bios",
+    "kb.target_population"
+  ],
+  "figure_work_order": {
+    "policy": "Live LP Internal AI connector figures supersede these knowledge-base figures by recency. Do not publish any figure below until the paired query_* call confirms it. On a drift conflict the connector wins. A DEFINITIONAL conflict is not auto-resolved — escalate it to staff with both numbers and their definitions. If a tool is denied by your role, write [DATA UNAVAILABLE] rather than quoting the frozen figure as if confirmed.",
+    "kb_snapshot_date": "2026-07-23",
+    "items": [
+      {
+        "key": "employment_earnings_total",
+        "claim": "$350,268 total wages paid to 45 participants across 88 jobs; $229,000+ documented alumni wages",
+        "appears_in": [
+          "kb.metrics",
+          "kb.outcomes",
+          "kb.theory_of_change",
+          "kb.capacity"
+        ],
+        "tool": "query_employment",
+        "args": {
+          "query_type": "aggregate"
+        },
+        "conflict_kind": "drift",
+        "severity": "high",
+        "note": "Confirmed drifting: the connector reported $360,487 on 2026-07-23 and $362,030.26 on 2026-07-27. Always quote the live figure."
+      },
+      {
+        "key": "cert_pass_rate",
+        "claim": "PCEP pass rates 70–100% per cohort; 100% in the most recent cohort",
+        "appears_in": [
+          "kb.metrics",
+          "kb.outcomes"
+        ],
+        "tool": "query_certifications",
+        "args": {
+          "query_type": "summary"
+        },
+        "conflict_kind": "definitional",
+        "severity": "high",
+        "note": "All-time PCEP is 32/59 = 54.2%; the applications quote per-cohort rates. Different denominators, both defensible. State which one you are quoting, in the sentence itself."
+      },
+      {
+        "key": "annual_budget",
+        "claim": "$1.34M FY2025 expenses; $1.68M FY2026 projected revenue",
+        "appears_in": [
+          "kb.financials",
+          "kb.budget_narrative",
+          "kb.eligibility"
+        ],
+        "tool": "get_finance_brief",
+        "args": {
+          "period": "ytd"
+        },
+        "conflict_kind": "drift",
+        "severity": "high",
+        "note": "Prefer get_finance_brief — query_finances may be denied by the role ACL. If it is, flag [DATA UNAVAILABLE] rather than quoting the frozen figure as if confirmed."
+      },
+      {
+        "key": "demographics_race",
+        "claim": "85% / 90% / 100% demographic shares",
+        "appears_in": [
+          "kb.dei",
+          "kb.profile.demographics",
+          "kb.need",
+          "kb.target_population",
+          "kb.metrics",
+          "kb.eligibility"
+        ],
+        "tool": "query_enrollment",
+        "args": {
+          "query_type": "by_race"
+        },
+        "conflict_kind": "drift",
+        "severity": "medium",
+        "note": "Recompute from the connector; percentages move with each cohort."
+      },
+      {
+        "key": "employment_wage_range",
+        "claim": "$15,000–$35,000 earned; ~$20/hr",
+        "appears_in": [
+          "kb.metrics",
+          "kb.program_desc",
+          "kb.uniqueness",
+          "kb.outcomes",
+          "kb.programs",
+          "kb.budget_narrative",
+          "kb.management_plan"
+        ],
+        "tool": "query_employment",
+        "args": {
+          "query_type": "aggregate"
+        },
+        "conflict_kind": "drift",
+        "severity": "medium",
+        "note": "The same aggregate call returns avg_hourly_wage and avg_weekly_hours."
+      },
+      {
+        "key": "inc_client_work_booked",
+        "claim": "$75,000 in client work booked in July 2026 alone (Barra Launchpad Inc overview, ~1/3 of the full-year target); two clients with hiring intent in writing at $50-80K",
+        "appears_in": [
+          "kb.sustainability",
+          "kb.innovation"
+        ],
+        "tool": "get_finance_brief",
+        "args": {
+          "period": "ytd"
+        },
+        "conflict_kind": "drift",
+        "severity": "medium",
+        "note": "Newest approved org overview (Barra, Jul 2026) introduces Inc. revenue and hiring-intent claims the KB and its previous checks do not carry. No query_* tool returns Inc. client bookings directly — get_finance_brief gives the closest revenue signal; if it cannot confirm, flag [DATA UNAVAILABLE] rather than quoting the overview figure as current."
+      },
+      {
+        "key": "phase_costs",
+        "claim": "$519K / $455K / $362K per phase; ~$6,000 per participant stipend floor",
+        "appears_in": [
+          "kb.budget_narrative",
+          "kb.financials",
+          "kb.programs",
+          "kb.program_desc",
+          "kb.uniqueness"
+        ],
+        "tool": "query_finances",
+        "args": {
+          "query_type": "phase_budget_dashboard"
+        },
+        "conflict_kind": "drift",
+        "severity": "medium",
+        "note": "Note the query_type is phase_budget_dashboard — phase_budget_summary is not a valid value."
+      },
+      {
+        "key": "placement_rate",
+        "claim": "11 of 12 (92%) in paid work or training at six months; 100% in paid work now; 95% of Launchpad 101 graduates to college, training or work",
+        "appears_in": [
+          "kb.metrics",
+          "kb.outcomes",
+          "kb.capacity",
+          "kb.theory_of_change"
+        ],
+        "tool": "query_employment",
+        "args": {
+          "query_type": "aggregate"
+        },
+        "conflict_kind": "unknown",
+        "severity": "high",
+        "note": "No query_* tool returns a cohort placement rate directly — query_employment aggregate gives the participant and job counts, and the denominator has to come from query_enrollment. The cohort framing (\"Cohort 1 at six months\") is also a moving window: \"100% in paid work now\" is dated by whenever \"now\" was. Confirm both the numerator and the as-of date, or write [DATA UNAVAILABLE]."
+      },
+      {
+        "key": "staff_count",
+        "claim": "15 staff / 9 staff",
+        "appears_in": [
+          "kb.staff_bios"
+        ],
+        "tool": "search_documents",
+        "args": {
+          "query": "org chart staff roster"
+        },
+        "conflict_kind": "unknown",
+        "severity": "medium",
+        "note": "No query_* tool covers headcount, and the KB states two different numbers. If the document search does not settle it, write [DATA UNAVAILABLE] rather than picking one."
+      }
+    ],
+    "definitional_conflicts": [
+      "cert_pass_rate"
+    ],
+    "blocked": [
+      {
+        "tool": "query_finances",
+        "reason": "May be denied by the role ACL (sensitive finance data). Fall back to get_finance_brief and flag [DATA UNAVAILABLE]."
+      },
+      {
+        "tool": "query_donors",
+        "reason": "May be denied by the role ACL (donor PII). Fall back to get_finance_brief and flag [DATA UNAVAILABLE]."
+      }
+    ]
+  },
+  "integrity_warnings": []
+}

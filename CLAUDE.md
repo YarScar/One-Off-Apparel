@@ -2,6 +2,35 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Work Tracking — OpenProject is mandatory
+
+**Every piece of work on this project must be associated with an OpenProject work package.** This
+covers work in progress, work planned, and work committed. If a change relates to this project
+directly, it has a work package; if it does not have one, create one before starting.
+
+| | |
+|---|---|
+| Instance | `https://projects.liftofflearning.tech` |
+| Project identifier | `internal-ai-integrations` |
+| API docs | https://www.openproject.org/docs/api/ |
+| Credential | `OPENPROJECT_API_KEY` in `.env` — HTTP Basic, username literal `apikey`, password the key |
+
+What this means in practice:
+
+- **Before starting work**, find the work package that covers it, or create one. Set it to *In
+  progress* when you begin.
+- **Commit messages reference the work package** — `refs #<id>` in the body (OpenProject parses this
+  and links the commit to the work package). Use `closes #<id>` when the commit finishes it.
+- **Discovered work gets its own work package**, related to the one you found it from, rather than
+  being folded silently into the current change.
+- **Close the work package** when the work is done and verified, with a comment saying what landed.
+- **Exception:** incidental local housekeeping that touches nothing in the repo — scratch files,
+  local tooling, environment setup on your own machine. Everything that produces a commit here is in
+  scope.
+
+Never read, print, or otherwise ingest `.env` itself. Reference `OPENPROJECT_API_KEY` through the
+environment.
+
 ## What This Is
 
 An internal AI intelligence layer for Launchpad that lets team members query Claude with live organizational data — student profiles, program outcomes, certifications, competency scores, finances, donations, and communications. Built on a fully AWS-native stack. The system ingests data through six connectors (Google Sheets, Google Drive, Aplos, Slack, Notion, plus a sync task runner), stores it in Postgres + pgvector, and exposes it to Claude through an MCP server. A Next.js HQ dashboard provides sync status and operational visibility.
@@ -32,7 +61,7 @@ An internal AI intelligence layer for Launchpad that lets team members query Cla
 | Connector | Source | Destination | Status |
 |---|---|---|---|
 | `google-sheets` | Launchpad Dashboard + Outcomes sheets (12 spreadsheets) | Postgres | ✅ Live — all 12 sheet syncs ported; 27K+ records ingested |
-| `google-drive` | Drive docs folder | Postgres + pgvector | Skeleton — creds available, implementation pending |
+| `google-drive` | Drive `Grants` tree | `grant_documents` catalog (no text, no embeddings) | ✅ Live locally — 1253 files catalogued, 1248 with a Drive ID; verified end to end against real Drive. **Production auth unverified** (the service account has no access to the tree) |
 | `aplos` | Aplos nonprofit accounting | `finance_snapshots` (accounts, funds, transactions) | ✅ Live — RSA-decryption auth; 16K+ records; synced daily in production via EventBridge |
 | `notion` | Notion meeting transcripts database | `document_chunks` (pgvector) | ✅ Live — meeting transcript sync with embeddings |
 | `slack` | Designated Slack channels | pgvector | Skeleton — awaiting `SLACK_BOT_TOKEN` |
@@ -74,7 +103,7 @@ pnpm --filter @lp-ai/mcp-server start:http # HTTP at :8080 (for ECS / local test
 pnpm sync:sheets                # google-sheets (live)
 pnpm sync:aplos                 # aplos (live)
 pnpm sync:notion                # notion meeting transcripts (live)
-pnpm sync:drive                 # google-drive (skeleton)
+pnpm sync:drive                 # google-drive (Grants catalog discovery)
 pnpm sync:slack                 # slack (skeleton — awaiting SLACK_BOT_TOKEN)
 pnpm sync:all                   # all connectors in parallel
 
@@ -104,13 +133,14 @@ pnpm db:down                    # stop the local Postgres container
 
 ```
 apps/hq              → @lp-ai/lib-db, @lp-ai/lib-config
-apps/mcp-server      → @lp-ai/lib-db, @lp-ai/lib-config, @lp-ai/lib-embedding
+apps/mcp-server      → @lp-ai/lib-db, @lp-ai/lib-config, @lp-ai/lib-embedding, @lp-ai/lib-grants
 apps/aws-mcp-server  → @lp-ai/lib-db, @lp-ai/lib-config
 apps/sync            → connectors/* (one-off Fargate task runner for scheduled syncs)
 connectors/*         → @lp-ai/lib-db, @lp-ai/lib-config
 packages/db          → Prisma client, entity resolution, sync-runs helper, seed
 packages/embedding   → OpenAI embedding batch/retry helpers
 packages/config      → Zod env schema, AWS Secrets Manager loader
+packages/grants      → zod; deterministic grant-writing logic + seed (question bank, KB, form fixtures)
 ```
 
 ### Key files
@@ -119,7 +149,7 @@ packages/config      → Zod env schema, AWS Secrets Manager loader
 - `prisma.config.ts` (repo root) — Prisma config pointing at the schema and migrations
 - `packages/db/src/entity-resolution.ts` — fuzzy name matching across all data sources; called by `get_student_info` and `search_by_person`
 - `packages/db/src/sync-runs.ts` — `runSync()` wrapper used by every connector
-- `apps/mcp-server/src/make-server.ts` — registers all tools (16 data + 4 skill); edit here to add/remove tools
+- `apps/mcp-server/src/make-server.ts` — registers all tools (25: 16 data + `find_grant_documents` + `grant_match_question` + `grant_build_draft` + `grant_resize_answer` + 5 skill); edit here to add/remove tools. Verify with `grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print s}'` rather than trusting this number
 - `apps/mcp-server/src/tool-helpers.ts` — `runTool()` wrapper (error capture + usage logging), `parseStr()`, `parseNum()`
 - `apps/mcp-server/src/errors.ts` — `toolError()` and `notImplemented()` for structured error envelopes
 - `apps/mcp-server/src/usage-log.ts` — writes every tool call to `usage_logs` table; surfaced in HQ `/tools`
@@ -218,9 +248,16 @@ Before modifying any component, read the relevant spec:
 
 - [Architecture](docs/architecture.md) — system overview and data flow
 - [Database Schema](docs/database-schema.md) — all Postgres tables
-- [MCP Server Spec](docs/mcp-server-spec.md) — all 16 tool definitions with input/output schemas
+- [MCP Server Spec](docs/mcp-server-spec.md) — tool definitions with input/output schemas
 - [Entity Resolution](docs/entity-resolution.md) — how students/staff are resolved across sources
 - Per-connector specs in `docs/data-sources/`
+
+The grant writing layer keeps its own document set, scoped to that workstream — start at
+[`packages/grants/README.md`](packages/grants/README.md). Two of its files are worth knowing about
+from outside it, because the grant work landed platform-wide changes and recorded them there:
+
+- [Changelog](packages/grants/CHANGELOG.md) — material changes that workstream landed, including schema, tool surface, and corrections to documented procedures
+- [Documentation conventions](packages/grants/CLAUDE.md) — sources of truth, current verified state, and documentation debt
 
 ## Setup
 

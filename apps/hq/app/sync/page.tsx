@@ -49,10 +49,9 @@ async function fetchConnectorStatus(): Promise<ConnectorRow[]> {
           status: r.status,
           recordsUpserted: r.recordsUpserted,
           error: r.error,
-          durationMs:
-            r.finishedAt && r.startedAt
-              ? r.finishedAt.getTime() - r.startedAt.getTime()
-              : null,
+          // `startedAt` is non-nullable in the schema (`@default(now())`), so only
+          // `finishedAt` is worth testing — the old `&& r.startedAt` was always true.
+          durationMs: r.finishedAt ? r.finishedAt.getTime() - r.startedAt.getTime() : null,
         })),
       };
     }),

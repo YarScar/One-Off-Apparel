@@ -2,7 +2,13 @@
 
 ## Tool Availability
 
-The server currently exposes **16 tools**, all active — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+The server currently exposes **25 tools** — 16 data tools, `find_grant_documents`, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 5 `skill_*` tools — backed by Google Sheets, Aplos, Notion, and Google Drive connectors. Counted 2026-08-17 on `writing/dev` after `fix/google-drive-discovery` merged in; `main` is at 21. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+
+`main`'s 21 do **not** map onto a subset of these 25 in the obvious way, and the difference matters when reasoning about what production can answer. `main` lacks the three `grant_*` tools and the fifth `skill_*` tool, and it *has* `find_grant_documents` — which was deployed to production from `fix/google-drive-discovery` on 2026-08-06, before `main` became the only deploy branch. Merging this branch is what finally makes the repository and production agree on that tool. Verify the count with:
+
+```bash
+grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print s}'
+```
 
 **Active tools (16):**
 - `get_student_info` — Sheets student roster + Drive student info doc
@@ -22,6 +28,14 @@ The server currently exposes **16 tools**, all active — backed by Google Sheet
 - `get_entity_brief` — student profile + phase progression + certifications + recent mentions; **also surfaces donor profile + giving history + pipeline + grants** when the named person matches a donor
 - `get_finance_brief` — Aplos fund balances, chart-of-accounts summary, and recent Aplos transactions
 
+**Grant writing tools (3):** deterministic, and they read seed files in `packages/grants/seed/` rather than the database. No model, no network, no database in any of them.
+- `grant_match_question` — funder question → canonical entry in the question bank
+- `grant_build_draft` — captured funder form → reviewable draft package + figure verification work order
+- `grant_resize_answer` — one stored answer + one stated limit → the measurement, the rewrite rules, and a check on the rewrite the caller sends back
+
+**Grant document discovery (1):** listed apart from the three above because it is *not* one of them — it queries the `grant_documents` Postgres catalog, not the seed files, so it is a data tool that happens to serve grant work.
+- `find_grant_documents` — funder / year / kind filters over the Drive Grants catalog → matching files and their Drive file IDs
+
 **Still pending:**
 - Slack connector for `search_conversations`
 
@@ -29,7 +43,7 @@ Composite tools (`get_entity_brief`, `get_finance_brief`) MUST gracefully omit s
 
 ## Overview
 
-The MCP server exposes 16 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
+The MCP server exposes 25 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
 
 Every tool call is logged to the `usage_logs` Postgres table (tool name, timestamp, duration, caller identity, token usage).
 
@@ -38,165 +52,6 @@ Every tool call is logged to the `usage_logs` Postgres table (tool name, timesta
 **Production URL:** `https://mcp.launchpadinc.org`
 
 ## Tool Definitions
-
----
-
-### `query_attendance`
-
-Query Launchpad student attendance from the three cohort sheets unified into the `attendance_records` table. Supports per-student rates, aggregate breakdowns by any demographic dimension, and raw event drill-downs over a date range.
-
-**Source:** Three Google Sheets (`GOOGLE_SHEETS_ATTENDANCE_COHORT_1/2/3`).
-
-**Cohort shapes:**
-- Cohort 1 — weekly aggregate rows with a `Percentage` column (0–100); no P/A/E codes.
-- Cohort 2 — daily rows with `Code` ∈ {`P`, `A`, `E`}, `Check in` / `Check out` decimal times, expected vs. actual time-spent.
-- Cohort 3 — weekly check-in / check-out logs with `Code` (`P`/`A`/`E`) and `CheckInOrOut` event type. `LearningExp` values: `F1`/`F2` = Foundations Term 1/2, `O1` = 101.
-
-Cohorts are loose Launchpad groupings; a student may move between cohorts as they accelerate. Linkage to the students table is via `student_number` (LP####).
-
-**Description shown to Claude:**
-> Query Launchpad student attendance from the three cohort sheets (Cohort 1 / 2 / 3). Use for per-student attendance rates, aggregate rates by phase / race / cohort / school / etc., or raw event drill-downs over a date range. Cohorts are loose Launchpad groupings (students may move between them as they accelerate); rates blend cohort 1 (already-aggregated weekly %), cohort 2 (daily P/A/E codes), and cohort 3 (weekly check-in/out logs with codes). Excused absences are excluded from rate calculations.
-
-**Input Schema:**
-```json
-{
-  "type": "object",
-  "properties": {
-    "query_type": { "type": "string", "enum": ["by_student", "aggregate", "events"] },
-    "student_number": { "type": "string", "description": "LP#### (joins students.student_id)" },
-    "cohort": { "type": "number", "enum": [1, 2, 3], "description": "Restrict to one cohort. Default: all three." },
-    "current_phase": { "type": "string", "description": "Foundations / 101 / Lightspeed / LiftOff. Joined via students table." },
-    "race": { "type": "string" },
-    "gender": { "type": "string" },
-    "school": { "type": "string", "description": "Partial match." },
-    "enrollment_status": { "type": "string", "description": "E / EP / EL / N." },
-    "graduation_year": { "type": "number" },
-    "start_date": { "type": "string", "format": "date" },
-    "end_date": { "type": "string", "format": "date" },
-    "group_by": {
-      "type": "string",
-      "enum": ["cohort", "current_phase", "race", "gender", "school", "enrollment_status", "graduation_year"],
-      "description": "For 'aggregate' only. Default 'cohort'."
-    },
-    "limit": { "type": "number", "description": "For 'events' only. Default 200, max 500." }
-  },
-  "required": ["query_type"]
-}
-```
-
-**Rate calculation:**
-- Cohort 1 — weighted average of the `percentage` column.
-- Cohort 2 / 3 — `present / (present + absent)`, with **excused excluded from both numerator and denominator**.
-- Mixed-cohort students contribute via both signals (cohort-1 rows weight 1 each; cohort-2/3 P/A rows weight 1 each).
-
-**Output Schema (`by_student`):**
-```json
-{
-  "query_type": "by_student",
-  "total_students": 151,
-  "students": [
-    {
-      "student_number": "LP0181",
-      "canonical_name": "Tai Pham",
-      "current_phase": "101",
-      "race": "Asian",
-      "school": "Furness High School",
-      "cohorts": [2, 3],
-      "attendance_rate_pct": 92.4,
-      "rows_counted": 187,
-      "present": 167,
-      "absent": 14,
-      "excused": 6
-    }
-  ]
-}
-```
-
-**Output Schema (`aggregate`):**
-```json
-{
-  "query_type": "aggregate",
-  "group_by": "cohort",
-  "overall": { "student_count": 151, "attendance_rate_pct": 86.1, "rows_counted": 14092 },
-  "breakdown": [
-    { "group": "cohort_3", "student_count": 85, "attendance_rate_pct": 85.1,
-      "rows_counted": 8296, "present": 6438, "absent": 1126, "excused": 112 }
-  ]
-}
-```
-
-**Output Schema (`events`):**
-```json
-{
-  "query_type": "events",
-  "total_rows_matched": 8296,
-  "records_returned": 200,
-  "truncated": true,
-  "records": [
-    { "id": "...", "cohort": 3, "studentNumber": "LP0181", "date": "2026-04-22",
-      "code": "P", "rowData": { "learning_exp": "O1", "...": "..." } }
-  ]
-}
-```
-
----
-
-### `query_employment`
-
-Query post-program employment data from the `student_employment` table. Tracks employer, job title, wages, hours, and exit codes.
-
-**Input Schema:**
-```json
-{
-  "type": "object",
-  "properties": {
-    "student_number": { "type": "string", "description": "LP#### — filter to one student." },
-    "employer": { "type": "string", "description": "Partial match on employer name." },
-    "employment_type": { "type": "string", "description": "Filter by type (e.g. Full-time, Part-time, Internship)." },
-    "exit_code": { "type": "string", "description": "Filter by exit code." }
-  },
-  "required": []
-}
-```
-
----
-
-### `query_postsecondary`
-
-Query college enrollment data from the `student_postsecondary` table (National Student Clearinghouse). Tracks institution, enrollment status, class level, majors, and graduation.
-
-**Input Schema:**
-```json
-{
-  "type": "object",
-  "properties": {
-    "student_number": { "type": "string", "description": "LP#### — filter to one student." },
-    "institution": { "type": "string", "description": "Partial match on institution name." },
-    "enrollment_status": { "type": "string", "description": "Single-letter code: F=Full-time, Q=Three-quarter, H=Half-time, etc." },
-    "graduated": { "type": "boolean", "description": "Filter to graduated or not." }
-  },
-  "required": []
-}
-```
-
----
-
-### `search_documents`
-
-Raw document chunk search with optional entity filter. Searches `document_chunks` using pgvector cosine similarity.
-
-**Input Schema:**
-```json
-{
-  "type": "object",
-  "properties": {
-    "query": { "type": "string", "description": "Natural language search query." },
-    "source": { "type": "string", "description": "Filter by source (e.g. 'notion', 'drive')." },
-    "top_k": { "type": "integer", "description": "Number of results. Default 8, max 20.", "default": 8 }
-  },
-  "required": ["query"]
-}
-```
 
 ---
 
@@ -746,7 +601,7 @@ Population-level analytics on the `students` table. Supports numeric stats (avg/
 
 > Note: as of the current implementation, only `current_phase`, `enrollment_status`, `cohort`, `neighborhood`, `zip`, `school_name`, `hs_graduation_year`, and `withdrawal_code` are wired into `BREAKDOWN_FIELDS`. `distance_to_office` and `hs_graduation_year` are wired into the `filter_field` numeric-range filter (`filter_min`/`filter_max`); only `distance_to_office` is wired into `NUMERIC_FIELDS` (the `numeric_stats` aggregate query type). The remaining fields below describe the original design intent but are not yet implemented — treat them as a backlog, not current behavior.
 
-**Filter set (all query types):** enrollment_status, current_phase, cohort, school (partial match on school_name), hs_graduation_year (exact match; range via `filter_field=hs_graduation_year`), dob_start / dob_end (ISO date bounds on date of birth), withdrawal_code (exact match), withdrawal_date_start / withdrawal_date_end (ISO date bounds), zip, plus numeric range on distance_to_office via `filter_field` + `filter_min` / `filter_max`. Everything else in this line — race, gender, graduation_year (LP program), entry_date_start/end, city, college_enroll, university (partial), major, workforce_program_referral, workforce_referral_status, internship_status, income/parental_ed ranges — is not yet implemented (see note above).
+**Filter set (all query types):** enrollment_status, current_phase, cohort, school (partial match on school_name), hs_graduation_year (exact match; range via `filter_field=hs_graduation_year`), dob_start / dob_end (ISO date bounds on date of birth), withdrawal_code (exact match), withdrawal_date_start / withdrawal_date_end (ISO date bounds), zip, plus numeric range on distance_to_office via `filter_field` + `filter_min` / `filter_max`. The five exact-match filters — `enrollment_status`, `current_phase`, `cohort`, `hs_graduation_year`, `withdrawal_code` — are domain-checked as of `#210`: a value absent from its column returns a `no_records` error listing the values present, instead of an empty answer. `school` is a substring match and is deliberately not checked that way. See [the silent-empty-results runbook](runbooks/mcp-silent-empty-results.md). Everything else in this line — race, gender, graduation_year (LP program), entry_date_start/end, city, college_enroll, university (partial), major, workforce_program_referral, workforce_referral_status, internship_status, income/parental_ed ranges — is not yet implemented (see note above).
 
 `withdrawal_code`/`withdrawal_date` are designed as join keys for cross-tool analysis: pull a `student_number` list filtered by withdrawal reason or date here, then feed those numbers into `query_certifications`, `query_attendance`, etc. to correlate withdrawal with outcomes in other data sources.
 
@@ -760,6 +615,12 @@ Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdo
 
 **Filters:** `type`, `phase`, `result` (Pass / Fail), `start_date`, `end_date` — all apply to `by_zip` too.
 
+As of `#210`, `phase` is matched against the distinct values that column holds; an absent
+value returns a `no_records` error listing the phases present, rather than
+`{ total: 0, passed: 0, pass_rate_pct: null }`, which reads as "nobody in that phase has
+certified". `type` is a substring match and is not checked that way; `result` is an enum
+and is rejected before the handler runs.
+
 `by_zip` joins to `students.zip` (zip isn't a column on `student_certifications`) and returns `{ zip, count, avg_score }` per zip, e.g. `query_type=by_zip, type=PCEP` for average PCEP score by zip code. Rows with a null zip are excluded.
 
 ---
@@ -771,6 +632,112 @@ Per-student competency data (scores) or the rubric structure (skills + opportuni
 **Query types:** `scores`, `rubric`.
 
 **Filters:** `student_number`, `competency` (partial match).
+
+---
+
+### `grant_match_question`
+
+Match a funder application question to a canonical entry in the LaunchPad grant question bank (88 questions, 11 categories, 248 recorded funder wordings). Deterministic — no model, no database, no network; it reads seed files in `packages/grants/seed/`.
+
+**Inputs:** `question` (one string) or `questions` (array, max 200); optional `threshold` (defaults to 0.42, the value used for LaunchPad's filed applications).
+
+**Returns:** per-question `matched_id`, `kb_ref`, `answer_type`, `confidence`, `matched_via`, and `is_confident`, plus `integrity_warnings`.
+
+**`is_confident: false` means the question has no reliable stored answer.** Do not route it to the returned `kb_ref`.
+
+---
+
+### `grant_build_draft`
+
+Resolve a captured funder form into a reviewable draft package: match each question, retrieve the mapped knowledge-base answer, measure it against the funder's stated limit, and flag what a person must do. Deterministic, and it reads seed files only.
+
+**Inputs:** either `funder` + `questions[]` (each `{ text, limit?: { unit, max } }`, max 200) or `form_id` for a stored fixture; optional `program`, `due`, `framing`, `threshold`, `include_markdown`.
+
+**Returns:** `results[]` (one answer plan per question), `summary` (including `by_actor`), `your_tasks`, `staff_actions`, `kb_refs_used`, `figure_work_order`, `integrity_warnings`, and the rendered `markdown` draft.
+
+**Every result names an actor — who does the next step:**
+
+| Actor | Statuses | Meaning |
+|---|---|---|
+| `none` | `fits`, `ready` | Text is ready for staff review. |
+| `llm` | `needs_resize`, `needs_expand`, `compression_infeasible`, `derive_from_reference`, `fetch_figure` | **Yours to finish.** See the payload rule below. |
+| `staff` | `needs_attachment`, `per_application`, `needs_review`, `kb_gap`, `kb_placeholder`, `figure_definitional` | Needs a fact or a decision this layer does not hold. |
+
+**Every `llm` result carries exactly one of two payloads**, and a caller that reads only the first
+will silently skip work:
+
+- **`handback`** — the shaping tasks (`needs_resize`, `needs_expand`, `compression_infeasible`,
+  `derive_from_reference`). Carries the source text, the limit, the measurement, and the rules. On a
+  `needs_expand` task it also carries **`anchor_value`**: a confirmed short value that must appear in
+  your answer unchanged, with `source_text` as material to build around it. That task's limit is a
+  **ceiling, not a target** — writing less than the limit is correct when the source supports no more.
+- **`figure_call`** — `fetch_figure` only. The work is running the named `query_*` call under your own
+  identity and writing the live number, not reshaping text, so there is nothing to hand back.
+
+**Three contracts worth knowing before you call it:**
+
+- **The knowledge base is an assist, not a gate.** It exists so you do not rewrite answers LaunchPad has already written and approved. Where a stored answer does not drop straight into a field, you shape it from the `handback` — the tool never calls a model to do that for you, and there is no Anthropic client anywhere in this repository.
+- **It makes no connector call.** `figure_work_order` names the `query_*` calls *you* must run to verify every figure. This is a security boundary, not an oversight — `runTool`'s permission check keys on the inbound tool name, so a grant tool reading the database internally would bypass the ACL on `query_finances` and `query_donors`. See `packages/grants/src/figures.ts`.
+- **Nothing it returns is submittable.** A person always reviews and always submits.
+
+---
+
+### `find_grant_documents`
+
+Find grant documents in the Google Drive "Grants" tree by funder, year, and document kind. Returns a **catalog listing — no document text**. Reads the `grant_documents` table; touches neither Drive nor pgvector.
+
+**Why it exists.** Drive discovery does not work for this tree. Listing a subfolder's children returns an empty set and `title`/`fullText` search never matches inside it, while fetching a *known* file ID returns full content. Only the discovery half is broken, so this tool replaces it: filter here to get Drive file IDs, then fetch those IDs with a Google Drive read tool. That keeps 3.5+ GiB of grant material reachable with nothing embedded.
+
+**Inputs:** all optional — `funder` (case-insensitive substring, so `truist` matches `Truist Foundation`), `year`, `year_min`, `year_max`, `doc_kind`, `collection`, `title_contains`, `include_archive`, `include_external`, `only_fetchable`, `limit` (default 25, max 100).
+
+**Returns:** `total_matching`, `returned`, `facets` (counts by funder and by kind, for narrowing a broad hit list without a second call), `results[]`, and `usage_note`. Each result carries `drive_file_id`, `drive_url`, `fetchable`, `path`, `filename`, `funder`, `year`, `doc_kind`, `collection`, `mime_type`, `archive_only`, `external_reference`, `needs_review`, `size_bytes`, `modified_at`.
+
+| `doc_kind` | Meaning |
+|---|---|
+| `application_response` | Narrative answers submitted to a funder |
+| `budget` | Budgets, financials, invoices, 990s |
+| `report` | Grant reports and performance measures |
+| `letter_of_support` | Letters of support |
+| `loi` | Letters of inquiry / intent |
+| `agreement` | Executed grant agreements |
+| `program_description` | Launchpad describing its own programs — prime drafting context |
+| `template` | Blank templates |
+| `attachment` | Consent forms, signature requests, supporting paperwork |
+| `transcript` | Interview and meeting transcripts |
+| `meeting_notes` | Meeting notes |
+| `external_reference` | **Not written by Launchpad** — funder rules, other grantees' applications |
+| `other` | Not confidently classified; see `needs_review` |
+
+**Three contracts worth knowing before you call it:**
+
+- **Two exclusions are on by default, and they are not the same risk.** `archive_only` hides applications predating the current program (`ARCHIVE_BEFORE_YEAR = 2025`), which describe a program Launchpad no longer runs — the failure is a confidently outdated draft. `external_reference` hides documents Launchpad did not author — the failure there is **plagiarism**, putting another organization's narrative in a Launchpad submission. Pass `include_archive` / `include_external` for research, never for drafting.
+- **`excluded` rows are never returned, on any flag combination.** Those files sit under `Project Management (do not ingest)` or `Ignore` and were marked by an explicit human instruction rather than by inference, so no argument overrides them.
+- **`funder`, `year`, and `doc_kind` are inferred from folder and file names only** — nothing is read from file contents. `needs_review` marks rows where inference was not decisive (no year, or `doc_kind = other`). Treat a filter built on them as a good shortlist, not a guarantee of completeness.
+
+**`fetchable=false` means the row has no Drive file ID recorded yet**, so it can be seen but not read. IDs come from the `google-drive` connector (`pnpm sync:drive`, or `packages/grants/scripts/drive-walk-grants.ts --dry-run` to look first), which needs an identity with shared-drive membership — see [docs/data-sources/google-drive-connector.md](data-sources/google-drive-connector.md).
+
+### `grant_resize_answer`
+
+Fit one stored answer to one funder's stated limit. Deterministic, and it reads seed files only. **You do the rewriting — this tool measures.** There is no model client anywhere in this repository, and an MCP tool is invoked *by* Claude, so the loop is: call it, rewrite, call it again.
+
+**Inputs:** `text` (the SOURCE answer, and on the second call still the source, not your rewrite), `limit` (`{ unit, max }`); optional `rewrite`, `attempt`, `funder`, `framing`, `kb_ref`, `answers`.
+
+**Returns:** `notes` (the verdict), `accepted`, `text` (the accepted rewrite, or `null`), `handback`, `measurement`, `source_measurement`, `figure_check`, `units_before` / `units_after`, `fits_after_resize`, `answer_full`, `answer_truncated_preview`, `trace`, `action`, plus `kb_ref`, `verified`, and `carries_figures`.
+
+| `notes` | Meaning |
+|---|---|
+| `fits` | Nothing owed. Either the source already fits, or your rewrite fits and altered no figure. |
+| `rewrite_owed` | Over the limit. `handback` carries the source, the limit, the measurement, and the rules. |
+| `compression_infeasible` | Over by more than 4x. Still handed back, but facts will have to be dropped and the rewrite must say which. |
+| `still_over_limit` | Your rewrite is still over. `handback` carries the overflow feedback. |
+| `figures_altered` | **Rejected.** Your rewrite states a figure the source does not. |
+
+**Two contracts worth knowing before you call it:**
+
+- **Branch on `accepted`, not on `fits_after_resize`.** They differ in exactly the dangerous case: a rewrite that fits the limit but moved a figure. `fits_after_resize` is length only. A rewrite stating a figure the source does not is rejected however well it fits, because the first guardrail rule calls that output unusable — dropping a figure is allowed, inventing or changing one is not. See `figure_check.invented`.
+- **Passing `kb_ref` makes the answer more honest, not just more convenient.** With it, the tool reads that slot's own grounding flag rather than taking your word for it, so it can carry the "not grounded in a filed application" warning through the resize. Without it, `verified` is `null` — which is not a clean bill of health.
+
+An accepted rewrite is still a draft. The stored figures are a frozen snapshot, so verify each one against live data via `grant_build_draft`'s figure work order before publishing, and a person reviews and submits.
 
 ---
 

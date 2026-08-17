@@ -2,12 +2,14 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma, Prisma } from '@lp-ai/lib-db';
 
-import { runTool, parseStr } from '../tool-helpers.js';
+import { runTool, filterStr } from '../tool-helpers.js';
+import { unmatchableFilterError, type FilterDomainCheck } from '../filter-domain.js';
+import { certificationPhaseDomain } from '../filter-domain-loaders.js';
 
 const NAME = 'query_certifications';
 
 const DESCRIPTION =
-  'Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdowns by cert type, LP phase, date range, or student zip code.';
+  'Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdowns by cert type, LP phase, date range, or student zip code. phase is matched literally against the values that column holds; a value absent from it returns a no_records error listing the phases present, rather than a pass rate of zero out of zero. type is a substring match and is not checked that way.';
 
 const inputSchema = {
   query_type: z.enum(['summary', 'by_type', 'by_phase', 'by_result', 'by_zip', 'scores']),
@@ -22,12 +24,35 @@ export function registerQueryCertifications(server: McpServer): void {
   server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
-      const queryType = parseStr(raw, 'query_type') ?? '';
-      const typeFilter = parseStr(raw, 'type');
-      const phaseFilter = parseStr(raw, 'phase');
-      const resultFilter = parseStr(raw, 'result');
-      const startDate = parseStr(raw, 'start_date');
-      const endDate = parseStr(raw, 'end_date');
+      const queryType = filterStr(raw, 'query_type') ?? '';
+      const typeFilter = filterStr(raw, 'type');
+      const phaseFilter = filterStr(raw, 'phase');
+      const resultFilter = filterStr(raw, 'result');
+      const startDate = filterStr(raw, 'start_date');
+      const endDate = filterStr(raw, 'end_date');
+
+      /**
+       * `phase` is this tool's only exact-match free-text filter, and its silent zero is
+       * the worst-reading of the family: `summary` answers
+       * `{ total: 0, passed: 0, pass_rate_pct: null }`, which is not "you asked for a
+       * phase that does not exist" but "nobody in that phase has certified".
+       *
+       * `type` is listed alongside `phase` in #210's table but is a `contains` match
+       * (`where.type = { contains: ..., mode: 'insensitive' }` below), so it falls under
+       * that same ticket's deliberately-out-of-scope substring class, not here.
+       * `result` is a `z.enum`, rejected before the handler runs; the dates are windows.
+       */
+      const checks: FilterDomainCheck[] = [];
+      if (phaseFilter !== undefined) {
+        checks.push({
+          field: 'phase',
+          column: 'student_certifications.phase',
+          value: phaseFilter,
+          domain: await certificationPhaseDomain(),
+        });
+      }
+      const domainError = unmatchableFilterError(checks);
+      if (domainError) return domainError;
 
       const where: Prisma.StudentCertificationWhereInput = {};
       if (typeFilter) where.type = { contains: typeFilter, mode: 'insensitive' };

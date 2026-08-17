@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { prisma } from '@lp-ai/lib-db';
 import { toggleToolRole } from './actions';
 import { ROLES } from './roles';
@@ -7,11 +8,22 @@ const CATEGORY_LABELS: Record<string, string> = {
   donor_finance: 'Donors & Finance',
   search: 'Cross-cutting search',
   skills: 'Skills',
+  grants: 'Grant writing',
   future: 'Future / not yet implemented',
   other: 'Other',
 };
 
-const CATEGORY_ORDER = ['students', 'donor_finance', 'search', 'skills', 'future', 'other'];
+// A category missing from this array is silently dropped from the matrix below, so any new
+// tool_permissions category must be added here as well as to CATEGORY_LABELS.
+const CATEGORY_ORDER = [
+  'students',
+  'donor_finance',
+  'search',
+  'skills',
+  'grants',
+  'future',
+  'other',
+];
 
 interface ToolRow {
   toolName: string;
@@ -36,9 +48,17 @@ export async function PermissionsMatrix() {
   const tools = await fetchToolPermissions();
   const byCategory = new Map<string, ToolRow[]>();
   for (const t of tools) {
-    if (!byCategory.has(t.category)) byCategory.set(t.category, []);
-    byCategory.get(t.category)!.push(t);
+    const existing = byCategory.get(t.category);
+    if (existing) existing.push(t);
+    else byCategory.set(t.category, [t]);
   }
+
+  // Resolved once, here, rather than with `has(cat)` then `get(cat)!` at the render site.
+  // Same output — a category with no tools is still omitted — but the rows are carried
+  // rather than looked up a second time behind an assertion.
+  const sections = CATEGORY_ORDER.map((cat) => ({ cat, rows: byCategory.get(cat) })).filter(
+    (s): s is { cat: string; rows: ToolRow[] } => s.rows !== undefined,
+  );
 
   return (
     <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
@@ -60,9 +80,12 @@ export async function PermissionsMatrix() {
           </tr>
         </thead>
         <tbody>
-          {CATEGORY_ORDER.filter((c) => byCategory.has(c)).map((cat) => (
-            <>
-              <tr key={`hdr-${cat}`} className="bg-slate-100">
+          {/* `Fragment`, not `<>`: the shorthand takes no key, so React warned on every
+              render that "each child in a list should have a unique key" — the key on the
+              header <tr> below cannot serve, because the fragment is the mapped child. */}
+          {sections.map(({ cat, rows }) => (
+            <Fragment key={cat}>
+              <tr className="bg-slate-100">
                 <td
                   colSpan={ROLES.length + 1}
                   className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600"
@@ -70,7 +93,7 @@ export async function PermissionsMatrix() {
                   {CATEGORY_LABELS[cat] ?? cat}
                 </td>
               </tr>
-              {byCategory.get(cat)!.map((t) => (
+              {rows.map((t) => (
                 <tr key={t.toolName} className="border-t hover:bg-slate-50">
                   <td className="sticky left-0 bg-white px-3 py-2 align-top">
                     <div className="font-mono font-medium">{t.toolName}</div>
@@ -127,7 +150,7 @@ export async function PermissionsMatrix() {
                   })}
                 </tr>
               ))}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>
