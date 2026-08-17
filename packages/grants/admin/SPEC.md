@@ -326,7 +326,7 @@ Three traps surfaced during the port. All three are live on the real bank, and a
 2. **The function is asymmetric.** Autojunk is computed over the second argument alone, so argument order changes the score on those three rows. The incoming question is `a`; the candidate is `b`.
 3. **A popular character is dropped from the index but is not junk.** CPython keeps `bpopular` and `bjunk` as separate sets, and only `bjunk` blocks the match-extension loops. An autojunked character cannot start a match but can still be absorbed into one. Treating popular characters as junk is the obvious simplification and it is wrong.
 
-A fourth divergence sits outside `difflib`: `matcher.py` reports `round(best_score, 3)`, and Python rounds half-to-even while `Math.round` rounds half-up to an integer. `pyRound` in `src/py.ts` is the fifth primitive in that file, and its comment records why `toFixed` is provably equivalent at three digits.
+A fourth divergence sits outside `difflib`: `matcher.py` reports `round(best_score, 3)`, and Python rounds half-to-even while `Math.round` rounds half-up to an integer. `pyRound` in `src/py.ts` is the fifth primitive in that file. **Corrected 2026-08-17 (work package `#258`):** it used to be `toFixed`, and its comment claimed that was provably equivalent at three digits. It is not — the eight odd multiples of 1/16 are exact ties there, and CPython disagrees with `toFixed` on four of them. `pyRound` now breaks ties to the even quotient exactly, via `BigInt` over the double's own mantissa and exponent. See `CHANGELOG.md` under 2026-08-17.
 
 ### 5.3 G2 outcomes
 

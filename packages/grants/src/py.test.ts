@@ -94,7 +94,32 @@ describe('pyRound', () => {
     expect(pyRound(0.4236, 3)).toBe(0.424);
   });
 
-  it('guards the ndigits range its half-even argument holds for', () => {
+  /**
+   * The eight exact ties in [0, 1] at 3 decimals — `n / 2⁴` for odd `n`. Expectations are CPython
+   * 3.14.6's `round(v, 3)`. Four of them (0.0625, 0.3125, 0.5625, 0.8125) are where the old
+   * `toFixed` implementation rounded to the larger magnitude instead of the even digit; the other
+   * four agree by coincidence and are kept so a regression cannot pass by only fixing half the set.
+   */
+  it.each([
+    [0.0625, 0.062],
+    [0.1875, 0.188],
+    [0.3125, 0.312],
+    [0.4375, 0.438],
+    [0.5625, 0.562],
+    [0.6875, 0.688],
+    [0.8125, 0.812],
+    [0.9375, 0.938],
+  ])('breaks the exact tie at %f to the even digit, as Python does', (value, expected) => {
+    expect(pyRound(value, 3)).toBe(expected);
+  });
+
+  it('carries the sign and the zero through unchanged', () => {
+    expect(pyRound(-0.0625, 3)).toBe(-0.062);
+    expect(pyRound(0, 3)).toBe(0);
+    expect(pyRound(1, 3)).toBe(1);
+  });
+
+  it('guards the ndigits range its assembly holds for', () => {
     expect(() => pyRound(1.5, 0)).toThrow(/ndigits/);
     expect(() => pyRound(1.5, 16)).toThrow(/ndigits/);
     expect(() => pyRound(1.5, 1.5)).toThrow(/ndigits/);
