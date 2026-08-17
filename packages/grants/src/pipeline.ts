@@ -713,11 +713,18 @@ export function renderMarkdown(pkg: DraftPackage): string {
     // routed to a 199-word program description — and rendering that at full width reads as the
     // answer to anyone skimming.
     if (r.handback !== undefined) {
-      const label =
-        r.handback.task === 'resize'
-          ? `Source text to shorten — ${String(r.measurement?.count)} ${String(r.measurement?.unit)}, NOT submittable at this length`
-          : `Source material to derive the value from — NOT the answer to this field`;
-      L.push(`<details><summary>${label}</summary>\n\n${r.handback.source_text}\n\n</details>`);
+      // The confirmed value first, and outside the collapsed block. On a `needs_expand` result the
+      // value is deliberately withheld from `answer` — see the branch above — so if it is not rendered
+      // here it appears nowhere at all, and the reviewer reads "keep this verbatim" about a value the
+      // document does not contain. Work package #253.
+      if (r.handback.anchor_value !== undefined) {
+        L.push(
+          `**Confirmed value — must survive verbatim:** ${r.handback.anchor_value}  \n` +
+            `The answer is written *around* this, from the source material below.`,
+        );
+        L.push('');
+      }
+      L.push(`<details><summary>${handbackLabel(r)}</summary>\n\n${r.handback.source_text}\n\n</details>`);
       L.push('');
     }
 
@@ -752,6 +759,32 @@ export function renderMarkdown(pkg: DraftPackage): string {
   });
 
   return L.join('\n');
+}
+
+/**
+ * The collapsed-block heading for an owed rewrite, per handback task.
+ *
+ * One arm per `HandbackTask`, because a `switch` on the union is what makes the compiler catch
+ * the next task added. This was a two-arm ternary keyed on `'resize'`, which rendered an `expand`
+ * handback under the `derive_short_value` wording — "Source material to derive the value from" told a
+ * reviewer to extract a short value from a field that wanted the opposite. Work package #253.
+ */
+function handbackLabel(r: AnswerPlan): string {
+  switch (r.handback?.task) {
+    case 'resize':
+      return (
+        `Source text to shorten — ${String(r.measurement?.count)} ` +
+        `${String(r.measurement?.unit)}, NOT submittable at this length`
+      );
+    case 'expand':
+      return (
+        `Source material to write the fuller answer from — ${String(r.measurement?.count)} of ` +
+        `${String(r.measurement?.max)} ${String(r.measurement?.unit)} used, NOT the finished answer`
+      );
+    case 'derive_short_value':
+    case undefined:
+      return 'Source material to derive the value from — NOT the answer to this field';
+  }
 }
 
 /** The provenance and measurement footline for one answer: where it came from and how it measures. */

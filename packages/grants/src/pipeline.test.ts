@@ -7,6 +7,7 @@ import {
   EXPAND_RULES_NO_ANCHOR,
   RESIZE_RULES,
 } from './handback.js';
+import { buildFigureWorkOrder } from './figures.js';
 import {
   STATUS_ACTOR,
   STATUS_NOTE,
@@ -15,6 +16,7 @@ import {
   runPipeline,
   type AnswerPlan,
   type AnswerStatus,
+  type DraftPackage,
 } from './pipeline.js';
 import type { AnswerType, FormLimit, KnowledgeBase } from './schemas.js';
 import type { MatchResult } from './matcher.js';
@@ -776,5 +778,104 @@ describe('needs_expand — a narrative slot that fits a field but barely fills i
       expect(r.handback?.task).toBe('expand');
       expect(r.measurement?.fits).toBe(true);
     }
+  });
+});
+
+// --------------------------------------------------------------- renderMarkdown on an expand handback
+
+/**
+ * `renderMarkdown` keyed its collapsed-block heading on `task === 'resize'` and let everything else
+ * fall through to the `derive_short_value` wording, so an `expand` handback rendered as "Source material
+ * to derive the value from — NOT the answer to this field": the opposite instruction.
+ *
+ * And `anchor_value` was emitted nowhere. Since a `needs_expand` result deliberately withholds the value
+ * from `answer`, the rendered artifact told the reviewer to keep a value verbatim while that value
+ * appeared nowhere in the document. Work package #253.
+ */
+describe('renderMarkdown — an expand handback', () => {
+  const ANCHOR = 'Philadelphia young people ages 16-24';
+  const PROSE = 'Launchpad recruits from more than 30 schools.';
+
+  /**
+   * Wraps one `AnswerPlan` as a package, so the render can be driven off a single branch without
+   * hand-authoring a seed bank. The literals a synthetic bank and knowledge base need are zod-inferred
+   * and passthrough-typed, and getting them wrong compiles in vitest and fails `tsc` — which is exactly
+   * the trap `packages/grants/CLAUDE.md` §3 records. `buildAnswer` is already the unit under test
+   * everywhere else in this file, so it is the right seam here too.
+   */
+  const packageOf = (plan: AnswerPlan): DraftPackage => ({
+    form: { funder: 'ACME Fund' },
+    summary: {
+      total: 1,
+      by_status: { [plan.status]: 1 },
+      by_actor: { none: 0, llm: 0, staff: 0, [plan.actor]: 1 },
+      all_fit: plan.measurement?.fits ?? true,
+    },
+    results: [plan],
+    kb_refs_used: plan.kb_ref === null ? [] : [plan.kb_ref],
+    figure_work_order: buildFigureWorkOrder([]),
+    integrity_warnings: [],
+  });
+
+  const anchoredPlan = (): AnswerPlan => {
+    const kb: KnowledgeBase = {
+      ...kbWith('kb.target_population', PROSE, true),
+      answers: {
+        'kb.target_population': {
+          label: 'L',
+          verified: true,
+          text: PROSE,
+          structured: { 'program.target_population': { value: ANCHOR, verified: true } },
+        },
+      },
+    };
+    return buildAnswer(
+      match({
+        matched_id: 'program.target_population',
+        kb_ref: 'kb.target_population',
+        answer_type: 'demographic',
+      }),
+      WORDS(200),
+      kb,
+    );
+  };
+
+  it('renders the confirmed value, which appears nowhere else in the document', () => {
+    const plan = anchoredPlan();
+    expect(plan.status).toBe<AnswerStatus>('needs_expand');
+    expect(plan.handback?.anchor_value).toBe(ANCHOR);
+    // The precondition that makes this matter: the value is withheld from `answer`, so if the render
+    // drops it the reviewer never sees the thing they are told to preserve verbatim.
+    expect(plan.answer).toBeUndefined();
+
+    const md = renderMarkdown(packageOf(plan));
+    expect(md).toContain('Confirmed value');
+    expect(md).toContain(ANCHOR);
+    expect(md).toMatch(/must survive verbatim/);
+  });
+
+  it('labels the source block as material to write from, not to derive a value from', () => {
+    const md = renderMarkdown(packageOf(anchoredPlan()));
+    expect(md).toContain('Source material to write the fuller answer from');
+    expect(md).not.toContain('Source material to derive the value from');
+  });
+
+  it('still labels a resize handback as text to shorten', () => {
+    const long = Array.from({ length: 40 }, () => 'word').join(' ');
+    const plan = buildAnswer(match(), WORDS(20), kbWith('kb.mission', long));
+    expect(plan.status).toBe<AnswerStatus>('needs_resize');
+    expect(renderMarkdown(packageOf(plan))).toContain('Source text to shorten');
+  });
+
+  it('still labels a derive handback as material to derive a value from', () => {
+    const plan = buildAnswer(
+      match({ answer_type: 'field' }),
+      WORDS(20),
+      kbWith('kb.mission', 'Launchpad prepares Philadelphia young people for careers in technology.'),
+    );
+    expect(plan.status).toBe<AnswerStatus>('derive_from_reference');
+    const md = renderMarkdown(packageOf(plan));
+    expect(md).toContain('Source material to derive the value from');
+    expect(md).not.toContain('Confirmed value');
   });
 });
