@@ -9,6 +9,9 @@ import {
   loadKnowledgeBase,
   renderMarkdown,
   runPipeline,
+  STATUS_ACTOR,
+  type Actor,
+  type AnswerStatus,
   type DraftPackage,
 } from '@lp-ai/lib-grants';
 
@@ -32,6 +35,25 @@ const limitSchema = z.object({
   unit: z.enum(['words', 'characters', 'chars', 'sentences']),
   max: z.number().int().positive(),
 });
+
+/**
+ * The stored fixture names, for the `form_id` description — or nothing, if the seed is unreadable.
+ *
+ * The try/catch is load-bearing. `inputSchema` is evaluated when this module is imported, and
+ * `listFormIds()` does a `readdirSync` on `packages/grants/seed/forms`. An unguarded throw there
+ * happens while `make-server.ts` is still importing, which takes down all 24 tools rather than
+ * degrading one — the opposite of the lazy-load invariant `packages/grants/src/data.ts` documents.
+ * It works today only because the Dockerfile copies `packages/` wholesale, and `.dockerignore`
+ * already excludes two `packages/grants/*` paths.
+ */
+function describeFormIds(): string {
+  try {
+    const ids = listFormIds();
+    return ids.length === 0 ? '' : ` One of: ${ids.join(', ')}.`;
+  } catch {
+    return '';
+  }
+}
 
 const inputSchema = {
   funder: z
@@ -60,7 +82,7 @@ const inputSchema = {
     .string()
     .optional()
     .describe(
-      `Instead of passing questions, run a stored form fixture. One of: ${listFormIds().join(', ')}.`,
+      `Instead of passing questions, run a stored form fixture.${describeFormIds()}`,
     ),
   threshold: z
     .number()
@@ -77,22 +99,34 @@ const inputSchema = {
 };
 
 /**
- * What each unfinished status needs next, split by who does it.
+ * What each status needs next. `null` means nothing is owed — the two `actor: 'none'` statuses.
  *
- * `your_tasks` is work for the model that called this tool — it has the source text and the rules in
- * each result's `handback`, so it can do them now. `staff_actions` needs a fact or a decision this
- * layer does not hold. Keeping the two apart is the point: a model that treats a resize as a staff
- * escalation stalls a draft that was ready to finish.
+ * **Keyed on `AnswerStatus`, and that is the whole point of the type annotation.** This was two
+ * separate `Record<string, string>` maps, hand-split by actor, and `outstanding()` iterates the map's
+ * own keys — so a status missing from both maps was silently absent from both work lists while still
+ * counting toward `by_actor`. Three were: `fetch_figure` and `needs_expand` (`llm`) and
+ * `figure_definitional` (`staff`). `grant_build_draft {form_id:'hamilton_loi_2025'}` reported
+ * `by_actor.llm = 1` with `your_tasks: []`, and `jevs_c2l_2024` hid a definitional figure conflict
+ * from the people meant to resolve it. Work package #250.
+ *
+ * One exhaustive map rather than two, split by {@link STATUS_ACTOR} at read time rather than by hand,
+ * so the compiler catches a new status with no next step and the split cannot disagree with the
+ * pipeline's own routing.
  */
-const LLM_STEPS: Readonly<Record<string, string>> = {
+const NEXT_STEP: Readonly<Record<AnswerStatus, string | null>> = {
+  fits: null,
+  ready: null,
   needs_resize: 'Shorten the handback source text to the limit, then re-measure.',
+  needs_expand:
+    'Write the full answer around the handback’s `anchor_value`, which must survive verbatim, drawing only on the source material — up to the limit and no further than that material supports.',
   compression_infeasible:
     'Shorten from the handback and state which facts you dropped — or check whether the field wants a short structured value instead of a narrative.',
   derive_from_reference:
     'Derive the short value from the handback source material. If it is not in there, flag it for staff rather than inventing it.',
-};
-
-const STAFF_STEPS: Readonly<Record<string, string>> = {
+  fetch_figure:
+    'Run the `query_*` call named in `figure_call` and write the number it returns. A frozen knowledge-base figure is not an acceptable answer.',
+  figure_definitional:
+    'Run the `query_*` call named in `figure_call`, then have staff confirm which population the funder means before the number is written.',
   needs_attachment: 'Gather and upload the documents in the checklist.',
   per_application: 'Supply the application-specific value.',
   needs_review: 'Confirm the question mapping, or add the wording to the bank as a variant.',
@@ -101,25 +135,30 @@ const STAFF_STEPS: Readonly<Record<string, string>> = {
 };
 
 interface OutstandingItem {
-  readonly status: string;
+  readonly status: AnswerStatus;
   readonly count: number;
   /** Positions in `results`, 1-based, so a caller can jump straight to the work. */
   readonly questions: number[];
   readonly next_step: string;
 }
 
-function outstanding(
-  pkg: DraftPackage,
-  steps: Readonly<Record<string, string>>,
-): OutstandingItem[] {
-  return Object.entries(steps)
-    .map(([status, next_step]) => ({
+/**
+ * The outstanding work for one actor.
+ *
+ * `your_tasks` is work for the model that called this tool — it has the source text and the rules in
+ * each result's `handback`, or the call to run in `figure_call`, so it can do them now.
+ * `staff_actions` needs a fact or a decision this layer does not hold. Keeping the two apart is the
+ * point: a model that treats a resize as a staff escalation stalls a draft that was ready to finish.
+ */
+function outstanding(pkg: DraftPackage, actor: Actor): OutstandingItem[] {
+  const statuses = Object.keys(NEXT_STEP) as AnswerStatus[];
+  return statuses
+    .filter((status) => STATUS_ACTOR[status] === actor)
+    .map((status) => ({
       status,
       count: pkg.summary.by_status[status] ?? 0,
-      questions: pkg.results
-        .map((r, i) => (r.status === status ? i + 1 : 0))
-        .filter((n) => n > 0),
-      next_step,
+      questions: pkg.results.map((r, i) => (r.status === status ? i + 1 : 0)).filter((n) => n > 0),
+      next_step: NEXT_STEP[status] ?? '',
     }))
     .filter((item) => item.count > 0)
     .sort((a, b) => b.count - a.count);
@@ -191,8 +230,8 @@ export function registerGrantBuildDraft(server: McpServer): void {
         ...pkg,
         threshold,
         // Split by who acts. `your_tasks` is yours to finish now, from each result's `handback`.
-        your_tasks: outstanding(pkg, LLM_STEPS),
-        staff_actions: outstanding(pkg, STAFF_STEPS),
+        your_tasks: outstanding(pkg, 'llm'),
+        staff_actions: outstanding(pkg, 'staff'),
         ...(includeMarkdown ? { markdown: renderMarkdown(pkg) } : {}),
         note:
           'DRAFT FOR STAFF REVIEW — not submittable. The stored answers exist so you do not rewrite ' +

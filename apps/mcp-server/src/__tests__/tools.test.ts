@@ -414,6 +414,79 @@ describeLocal('MCP tool handlers (integration)', () => {
     expect(result.error?.message).toContain('Whitespace is not an answer');
   });
 
+  // The defect this pins: `your_tasks` and `staff_actions` were built from two hand-written maps keyed
+  // on `string`, and the builder iterated the MAP's keys — so a status absent from both maps counted
+  // toward `by_actor` and appeared in neither list. Three were missing (`fetch_figure`, `needs_expand`,
+  // `figure_definitional`), and `hamilton_loi_2025` reported `by_actor.llm = 1` with `your_tasks: []`.
+  //
+  // Asserted as a conservation law over every stored fixture rather than as "these three statuses are
+  // present", because the failure is structural: any future status that names no next step vanishes the
+  // same way, and only the sum catches that. Work package #250.
+  it('grant_build_draft accounts for every outstanding result in your_tasks or staff_actions', async () => {
+    const forms = [
+      'allen_hiles_2024',
+      'aug7_gsk',
+      'aug7_truist',
+      'dolfinger_mcmahon_2023',
+      'hamilton_loi_2025',
+      'jevs_c2l_2024',
+      'jff_ai_pathways_2026',
+      'sample_incoming',
+      'sample_philly_innovation',
+      'wpf_workforce_2026',
+    ];
+
+    for (const form_id of forms) {
+      const result = (await client.callTool('grant_build_draft', {
+        form_id,
+        include_markdown: false,
+      })) as {
+        summary: { by_actor: { none: number; llm: number; staff: number } };
+        results: Array<{ status: string; actor: string }>;
+        your_tasks: Array<{ status: string; count: number; next_step: string }>;
+        staff_actions: Array<{ status: string; count: number; next_step: string }>;
+      };
+
+      const sum = (items: Array<{ count: number }>): number =>
+        items.reduce((n, i) => n + i.count, 0);
+
+      expect(sum(result.your_tasks), `${form_id}: your_tasks vs by_actor.llm`).toBe(
+        result.summary.by_actor.llm,
+      );
+      expect(sum(result.staff_actions), `${form_id}: staff_actions vs by_actor.staff`).toBe(
+        result.summary.by_actor.staff,
+      );
+
+      // Every listed item must actually tell the caller what to do — an entry with an empty
+      // `next_step` is the same dead end as a missing entry, just harder to notice.
+      for (const item of [...result.your_tasks, ...result.staff_actions]) {
+        expect(item.next_step.length, `${form_id}: ${item.status} next_step`).toBeGreaterThan(0);
+      }
+
+      // And the split must agree with each result's own `actor`, not with a second hand-kept mapping.
+      const llmStatuses = new Set(result.your_tasks.map((t) => t.status));
+      const staffStatuses = new Set(result.staff_actions.map((t) => t.status));
+      for (const r of result.results) {
+        if (r.actor === 'llm') expect(llmStatuses).toContain(r.status);
+        if (r.actor === 'staff') expect(staffStatuses).toContain(r.status);
+      }
+    }
+  });
+
+  // The sibling of the `text` case above, on the other input. `min(1)` accepts a single space, and a
+  // blank rewrite measures 0 units — so it fits every limit — and states no figure, so nothing is
+  // invented. Both guards passed it: a 95-word answer plus `rewrite: '   '` came back
+  // `accepted: true`, `text: '   '`. Work package #251.
+  it('grant_resize_answer refuses whitespace as a rewrite', async () => {
+    const result = (await client.callTool('grant_resize_answer', {
+      text: 'We served 145 young people and placed 88 of them into jobs.',
+      limit: { unit: 'words', max: 5 },
+      rewrite: '   ',
+    })) as { error?: { code: string; message: string } };
+    expect(result.error?.code).toBe('no_records');
+    expect(result.error?.message).toContain('Whitespace is not a rewrite');
+  });
+
   it('grant_build_draft rejects an unknown form fixture', async () => {
     const result = (await client.callTool('grant_build_draft', {
       form_id: 'no_such_form',
