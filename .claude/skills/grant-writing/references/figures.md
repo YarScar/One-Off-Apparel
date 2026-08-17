@@ -6,6 +6,24 @@ Every number in a draft is a claim to a funder. This is how each one gets confir
 retype them from here — `prep.mjs` prints the ones your draft actually needs, scoped to the KB slots
 it uses. This file explains how to act on them.
 
+## Read `figure-cuts.md` first
+
+This file covers **stored claims that have drifted**. It fires off the knowledge base: a check exists
+because a KB slot carries a number that has moved.
+
+That is the wrong trigger for participant and program figures. A funder asking "how many participants
+did you serve last year" needs a live call whether or not the KB happens to mention a number, and the
+answer depends on a cut nothing in the KB specifies.
+
+So participant and program figures are **always fetched live, with no snapshot comparison**, and the
+only work is choosing the cut that matches the question.
+[`figure-cuts.md`](./figure-cuts.md) is that mapping: question shape to tool, `query_type`, and
+filters, for enrollment, employment, certifications, postsecondary, finance, and competency. Go there
+whenever a question asks for a count, a rate, a wage, or a dollar figure. Come back here to act on
+what `prep.mjs` reports about stored text.
+
+Neither file is a source of figures. Both name calls. You run them.
+
 ## The claims in the checks are snapshots, not facts
 
 Each check's `claim` string quotes what the **KB snapshot** held on its `kb_snapshot_date`. It is the
@@ -43,10 +61,31 @@ working as intended; quote the live figure instead.
 
 These three are the ones that will bite. All are `high` severity.
 
-**`students_served_total` / `program_size_reach`.** The connector holds 301 enrollment records; the
-applications say ~145 served; an approved Jul 2026 Barra overview claims 200+. These are "every
-record" vs "meaningfully participated" vs a third framing. All defensible, none interchangeable. Ask
-which the funder is asking about, and pair with `query_students` broken down by `enrollment_status`.
+**`students_served_total` / `program_size_reach` — reclassified 2026-08-17. This is a scoping
+question, not a definitional conflict, and it should not be escalated as one.** The three numbers
+answer three different questions:
+
+| Number | Counts | Source |
+|---|---|---|
+| 301 | Every enrollment record, all phases, all statuses, all time | `query_enrollment {query_type:"total"}`, live |
+| ~145 | Unduplicated participants across all programs in **calendar 2025** | KB claim string; restated by staff in the 8/13 Upwork correspondence |
+| 200+ | "Came through programming to date" | Barra Jul 2026 approved org overview |
+
+The 200+ is most likely not a third population. The 8/13 Upwork correspondence gives the 2025 phase
+breakdown as Foundations 91, 101 68, Lightspeed 8, LiftOff 40, and states that participants are
+counted in every level they touched. Those sum to **207**. So 200+ reads as the duplicated phase-level
+sum of the same population the 145 describes unduplicated. Confirm with whoever wrote the overview.
+
+What to do: identify the scope the question asked for and run that cut, per
+[`figure-cuts.md`](./figure-cuts.md). Do not send a scoping question to staff as though they have a
+definition to choose; they have already told us the definition by asking for a year or a program.
+
+**The blocker, and it is real.** A date-scoped served count cannot currently be produced.
+`query_enrollment active_during` matches only records with a non-null `end_date`, so it drops every
+In Progress record: LiftOff returns 22 for calendar 2025 and still 22 for a window through 2026,
+against 40 records of which 18 are In Progress. OpenProject **#278**. Until that lands, write
+`[DATA UNAVAILABLE]` for a served-in-period question, say the tool undercounts and by roughly how
+much, and never substitute the all-time count.
 
 **`cert_pass_rate`.** All-time PCEP is 32/59 = 54.2%. The applications quote per-cohort rates — 92%,
 and 100% in the most recent cohort. Different denominators, both true. **State which one you are
@@ -65,14 +104,31 @@ query them; there is nothing stored to fall back on.
 ## ACL denial
 
 `query_finances` (sensitive finance data) and `query_donors` (donor PII) may be refused by your role.
-`get_finance_brief` is the fallback and is preferred for `annual_budget` regardless.
 
-**A denial is not permission to quote the frozen KB figure as if confirmed.** Write
-`[DATA UNAVAILABLE]` and flag it for staff.
+**Corrected 2026-08-17: `get_finance_brief` is not a fallback for budget questions.** It returns fund
+and account metadata, an account count summary, a recent-transaction sample, and sheet fund balances.
+It carries **no income or expense totals**. This file previously said it was preferred for
+`annual_budget`, which was wrong, and three checks in `figures.ts` still name it for `annual_budget`,
+`revenue_mix` and `inc_client_work_booked`. It cannot answer any of the three. That correction is
+being made in `src/figures.ts` under OpenProject #275.
+
+For income, expense, or any budget line by fiscal year, use
+`query_finances {query_type:"annual", contains:"<line>"}`. See
+[`figure-cuts.md`](./figure-cuts.md#finance).
+
+**A denial is not permission to quote the frozen KB figure as if confirmed**, and neither is a tool
+that returns something other than what you asked for. Write `[DATA UNAVAILABLE]` and flag it for
+staff.
 
 Note `query_finances({query_type: "phase_budget_dashboard"})` — `phase_budget_dashboard` is the real
-enum value. Three shipped prompt files still say `phase_budget_summary`, which is not in the enum and
-silently returns zero rows.
+enum value.
+
+**Updated 2026-08-17.** `phase_budget_summary` was still present in three shipped MCP prompt files
+(`grant-writing.ts`, `board-reporting.ts`, `finance-audit.ts`, five occurrences). All five are now
+`phase_budget_dashboard`. The previously documented failure mode was also wrong: the call does not
+silently return zero rows, it fails validation with `invalid_enum_value` and lists the 29 valid
+options. Loud rather than silent, which is better, but it meant a board report or finance audit
+following those prompts hit an error at the phase-cost step.
 
 ## Presenting a verified figure
 
