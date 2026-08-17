@@ -18,10 +18,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Every figures.ts and matcher.ts symbol below is read inside computeIntegrityReport() only — never
-// at module evaluation — so both import cycles (data -> figures -> data, data -> matcher -> data) are
-// safe in either load order. That is the invariant to preserve when adding a check: keep the reads
-// function-scoped.
+// Every figures.ts, slots.ts and matcher.ts symbol below is read inside computeIntegrityReport() only
+// — never at module evaluation — so all three import cycles (data -> figures -> data,
+// data -> slots -> figures -> data, data -> matcher -> data) are safe in either load order. That is the
+// invariant to preserve when adding a check: keep the reads function-scoped. `slots.ts` holds to the
+// same rule internally: its only read of FIGURE_CHECKS is inside `checkFor()`.
 import { normalize } from './matcher.js';
 import {
   extractCurrencyClaims,
@@ -29,6 +30,13 @@ import {
   FIGURE_CHECKS,
   QUESTION_FIGURE_CHECKS,
 } from './figures.js';
+import {
+  literalFigures,
+  malformedSlotTokens,
+  unknownSlots,
+  unsourcedFigures,
+  FIGURE_SLOTS,
+} from './slots.js';
 import {
   incomingFormSchema,
   knowledgeBaseSchema,
@@ -427,6 +435,120 @@ export function computeIntegrityReport(
         `KB slot(s) state a figure whose FIGURE_CHECK does not list them in appears_in: ` +
         `${claimGaps.join('; ')}. A draft built from those slots alone gets no verification item ` +
         `for the figure and publishes it frozen. Add the slot to appears_in in figures.ts.`,
+    });
+  }
+
+  // -- the language-only rule: no stored figure without a slot or a recorded exemption -------
+  // The check that makes `slots.ts` a rule rather than a convention. A figure left literal in stored
+  // prose is a number that publishes without verification — the sentence reads as an answer, so a
+  // draft that skips the work ships it looking finished. That is the failure the whole slot mechanism
+  // exists to make impossible, and without this check the mechanism only covers the sentences someone
+  // remembered to convert.
+  //
+  // Structured values are scanned alongside `text` for the same reason `figure_claim_uncovered` scans
+  // them: they are answers in their own right, and a figure restated only there ships with no prose
+  // around it to make its staleness visible.
+  //
+  // `IMMUTABLE_FIGURES` is what keeps this from firing on the organisation's own name — `Building 21`
+  // is in 15 of 29 slots — and every exemption there carries its reason. A new hit is fixed by
+  // slotting the figure, not by widening the allowlist.
+  const literalHits: string[] = [];
+  for (const [slot, answer] of Object.entries(kb.answers)) {
+    const texts: [string, string][] = [
+      ['text', answer.text],
+      ...Object.entries(answer.structured ?? {}).map(
+        ([qid, s]): [string, string] => [`structured.${qid}`, s.value],
+      ),
+    ];
+    for (const [where, value] of texts) {
+      const found = literalFigures(value);
+      if (found.length > 0) literalHits.push(`${slot}.${where}: ${found.join(', ')}`);
+    }
+  }
+  if (literalHits.length > 0) {
+    out.push({
+      severity: 'high',
+      code: 'stored_literal_figure',
+      message:
+        `Stored answers hold literal figure(s) with no slot and no recorded exemption: ` +
+        `${literalHits.join('; ')}. Committed artifacts store language — replace each with a ` +
+        `{{slot}} from FIGURE_SLOTS in slots.ts so it is filled live, or, only if the figure has no ` +
+        `live source and does not drift, add the phrase to IMMUTABLE_FIGURES with the reason.`,
+    });
+  }
+
+  // -- figures that drift with nothing to fill them from ------------------------------------
+  // Separate from the `high` violation above, and separately severe, because it is a different problem
+  // with a different owner. A `stored_literal_figure` hit is fixed by whoever is editing the corpus:
+  // slot it. A hit here cannot be fixed in the corpus at all — the number moves and the platform holds
+  // nothing to move it from — so it is raised at `medium` and carries what would settle it, which is
+  // usually a connector or a staff decision rather than an edit.
+  //
+  // Reported every load rather than recorded once in a document, because this is the register most
+  // likely to be quietly outgrown: the day a connector starts holding outreach contacts, the entry
+  // should become a slot, and nothing else in the system will notice.
+  const unsourcedHits: string[] = [];
+  for (const [slot, answer] of Object.entries(kb.answers)) {
+    const texts = [answer.text, ...Object.values(answer.structured ?? {}).map((s) => s.value)];
+    const found = [...new Set(texts.flatMap((t) => unsourcedFigures(t)))];
+    for (const d of found) {
+      unsourcedHits.push(`${slot}: ${d.why_not_a_slot} Would settle it: ${d.would_settle_it}`);
+    }
+  }
+  if (unsourcedHits.length > 0) {
+    out.push({
+      severity: 'medium',
+      code: 'stored_figure_unsourced',
+      message:
+        `${String(unsourcedHits.length)} stored figure(s) drift with no live source to fill them from, ` +
+        `so they stay literal and are recorded in FIGURE_DEBT rather than slotted: ` +
+        `${unsourcedHits.join(' | ')}. Verify each by hand before publishing, and do not read the ` +
+        `absence of a {{slot}} as confirmation that the figure is current.`,
+    });
+  }
+
+  // -- every slot token must name a real slot -----------------------------------------------
+  // A misspelled slot id is the worst failure available to this mechanism, because it fails in the
+  // permissive direction twice over: `resolveSlots()` drops the unknown id, so the gate does not fire,
+  // so the text is returned as a finished answer — with `{{wages_totl}}` still in it. Neither a
+  // reviewer nor the calling model is told anything. Caught here, at load, where the corpus is fixable.
+  const slotHits: string[] = [];
+  for (const [slot, answer] of Object.entries(kb.answers)) {
+    const texts = [answer.text, ...Object.values(answer.structured ?? {}).map((s) => s.value)];
+    for (const value of texts) {
+      const bad = [...unknownSlots(value), ...malformedSlotTokens(value)];
+      if (bad.length > 0) slotHits.push(`${slot}: ${bad.join(', ')}`);
+    }
+  }
+  if (slotHits.length > 0) {
+    out.push({
+      severity: 'high',
+      code: 'figure_slot_unknown',
+      message:
+        `Stored answers reference slot token(s) that FIGURE_SLOTS does not define: ` +
+        `${slotHits.join('; ')}. An unknown token does not block the draft — it is dropped, the ` +
+        `answer is returned as finished, and the raw token goes out in the text. Fix the id or add ` +
+        `the slot to slots.ts.`,
+    });
+  }
+
+  // -- every live slot must name a check that resolves ---------------------------------------
+  // The registry checking itself. A `live` slot whose `check` names nothing produces a requirement
+  // with no `tool`, which blocks the draft while telling the caller nothing about how to unblock it —
+  // strictly worse than having left the figure literal.
+  const checkKeys = new Set(FIGURE_CHECKS.map((c) => c.key));
+  const unresolvedSlots = Object.entries(FIGURE_SLOTS)
+    .filter(([, s]) => s.kind === 'live' && (s.check === undefined || !checkKeys.has(s.check)))
+    .map(([id, s]) => `${id} -> ${s.check ?? '(none)'}`)
+    .sort();
+  if (unresolvedSlots.length > 0) {
+    out.push({
+      severity: 'high',
+      code: 'figure_slot_unresolved',
+      message:
+        `FIGURE_SLOTS declares live slot(s) whose FIGURE_CHECKS key does not resolve: ` +
+        `${unresolvedSlots.join('; ')}. Those slots block every draft that uses them and name no call ` +
+        `to unblock them. Point each at a real check key in figures.ts.`,
     });
   }
 

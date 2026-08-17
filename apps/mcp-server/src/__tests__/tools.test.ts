@@ -322,7 +322,14 @@ describeLocal('MCP tool handlers (integration)', () => {
         continue;
       }
       expect(r.handback?.source_text.length).toBeGreaterThan(0);
-      expect(r.handback?.rules.join(' ')).toMatch(/NEVER invent|ONLY from the source material/);
+      // Every handback carries a no-invention guardrail, whatever its task. The third alternative is
+      // `fill_figures` (work package #275), which states the rule about the thing it can invent — a
+      // figure — rather than about facts in general: "Do NOT invent a figure and do NOT delete the
+      // sentence to make the gap disappear". Matching on wording is fragile, and it is deliberate: the
+      // property under test is that the rule is *stated to the model*, which only its text can show.
+      expect(r.handback?.rules.join(' ')).toMatch(
+        /NEVER invent|ONLY from the source material|Do NOT invent a figure/,
+      );
       // The re-measure step must name a REGISTERED tool. G4 registered grant_resize_answer, so this
       // asserts against tools/list rather than against a hard-coded name — the property that matters
       // is reachability, and it is the one that broke when the name was chosen by hand.

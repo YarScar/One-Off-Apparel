@@ -61,16 +61,24 @@
  * 5. **`compression_infeasible`** — over the limit by more than {@link MAX_COMPRESSION_RATIO}. Still
  *    handed back for shaping, but carrying the warning that facts will have to be dropped and that
  *    the reply must say which. The prototype reports a 46x overrun identically to a 1.2x one.
- * 6. **`carries_figures`** — set from {@link containsNumericClaim}, independently of the KB's own
- *    `verified` flag. `figures.ts` shows `verified` is the wrong axis for staleness: it fires on
- *    `kb.docs`, which contains no figures at all, and stays silent on `kb.metrics`, which contains
- *    five, and whose wage figure drifts by ~$1,500 every four days.
+ * 6. **`carries_figures`** — set independently of the KB's own `verified` flag. `figures.ts` shows
+ *    `verified` is the wrong axis for staleness: it fires on `kb.docs`, which contains no figures at
+ *    all, and stays silent on `kb.metrics`, which contains five, and whose wage figure drifts by
+ *    ~$1,500 every four days. Its trigger is now `slots.ts::needsManualFigureCheck` rather than
+ *    `containsNumericClaim` — the latter matches any two-digit run, which after the language-only
+ *    scrub means it fires on `Building 21`, the fiscal sponsor's name. Work package #275.
+ * 7. **`needs_live_figures` / `needs_application_figures`** — the language-only gate, and the branch
+ *    that reorders the rest. Stored answers hold `{{slot}}` tokens where a figure belongs, and this
+ *    module will not return slotted text as an `answer`: the failure mode moves from a confidently
+ *    wrong number to an obviously incomplete one. **The gate runs before every length branch**, because
+ *    filling a slot changes the length and resizing first measures the wrong text — so a slotted,
+ *    over-limit answer reports `needs_live_figures` and carries its measurement so the coming resize is
+ *    visible. `slots.ts` holds the rule and the two registers that make it liveable. Work package #275.
  */
 
 import { loadBank, loadKnowledgeBase, loadIntegrityReport, type IntegrityWarning } from './data.js';
 import {
   buildFigureWorkOrder,
-  containsNumericClaim,
   figureCheckForQuestion,
   type FigureWorkOrder,
 } from './figures.js';
@@ -85,6 +93,12 @@ import {
   type KnowledgeBase,
   type QuestionBank,
 } from './schemas.js';
+import {
+  figureCallsFor,
+  needsManualFigureCheck,
+  resolveSlots,
+  type SlotRequirement,
+} from './slots.js';
 import { addWarnings } from './warnings.js';
 
 /**
@@ -118,7 +132,9 @@ export type AnswerStatus =
   | 'kb_gap'
   | 'kb_placeholder'
   | 'fetch_figure'
-  | 'figure_definitional';
+  | 'figure_definitional'
+  | 'needs_live_figures'
+  | 'needs_application_figures';
 
 /** Which actor each status routes to. Exported so a caller can group without restating the mapping. */
 export const STATUS_ACTOR: Readonly<Record<AnswerStatus, Actor>> = {
@@ -130,6 +146,8 @@ export const STATUS_ACTOR: Readonly<Record<AnswerStatus, Actor>> = {
   derive_from_reference: 'llm',
   fetch_figure: 'llm',
   figure_definitional: 'staff',
+  needs_live_figures: 'llm',
+  needs_application_figures: 'staff',
   needs_attachment: 'staff',
   needs_review: 'staff',
   per_application: 'staff',
@@ -181,6 +199,118 @@ export interface AnswerPlan {
   readonly figure_call?: { readonly tool: string; readonly args: Readonly<Record<string, string>> };
   /** Present when the answer came from a per-question structured value, not the slot's narrative. */
   readonly from_structured?: boolean;
+  /**
+   * Present on a `needs_live_figures` or `needs_application_figures` result: every unfilled slot in
+   * the stored text, with the call or the decision that fills it.
+   */
+  readonly figure_slots?: readonly SlotRequirement[];
+  /**
+   * The stored text with its slots still visible, on a result that withheld `answer` because of them.
+   *
+   * Named `figure_template` rather than `answer` deliberately. It is not an answer and must not render
+   * as one: a caller that treated it as an answer would paste `{{wages_total}}` into a funder's portal.
+   * The name is the warning.
+   */
+  readonly figure_template?: string;
+}
+
+/**
+ * The language-only gate: refuse to surface stored text that still has figure-shaped holes in it.
+ *
+ * Returns a plan when `surfaced` carries unfilled slots, and `null` when it does not — so a caller
+ * reads as `const gated = figureGate(...); if (gated !== null) return gated;` at each point where text
+ * would otherwise become an answer.
+ *
+ * **Two statuses, not one, and the split is by who fills the hole.** A `live` slot is a `query_*` call,
+ * which the calling model runs — the same division of labour `fetch_figure` already uses. A
+ * `per_application` slot is an amount or a period belonging to *this* submission, which no connector
+ * holds; a model handed an empty ask-amount slot and told to fill it will fill it, so those route to
+ * staff. When a text carries both kinds, staff wins: the model cannot finish the answer regardless, and
+ * reporting it as model work would move it off the staff list it needs to be on.
+ *
+ * `answer` is never set on either path. This is the same discipline the `needs_expand` branches use and
+ * for a sharper reason: text containing `{{wages_total}}` rendered as an answer is text a caller can
+ * paste into a funder's portal. It travels as {@link AnswerPlan.figure_template} instead.
+ */
+function figureGate(
+  surfaced: string,
+  withEntry: Record<string, unknown>,
+  limit: FormLimit | null,
+  context: HandbackContext,
+  kbRef: string,
+): AnswerPlan | null {
+  const requirements = resolveSlots(surfaced);
+  if (requirements.length === 0) return null;
+
+  const perApplication = requirements.filter((r) => r.kind === 'per_application');
+  const live = requirements.filter((r) => r.kind === 'live');
+
+  // The template is still measured against the limit even though the gate preempts the resize branches.
+  // Sequencing is why the gate goes first — filling changes the length, so resizing before filling
+  // measures the wrong text — but the caller still needs to know a shortening is coming, and dropping
+  // the measurement here would report an over-limit answer as though length were not an issue. It also
+  // keeps `summary.all_fit` honest: without it, a 3x-over template reads as fitting.
+  const measurement = limit === null ? null : measureAgainst(surfaced, limit, kbRef);
+  const shared = {
+    ...withEntry,
+    figure_slots: requirements,
+    figure_template: surfaced,
+    limit,
+    ...(measurement === null ? {} : { measurement }),
+  } as unknown as AnswerPlan;
+  const overLimit = measurement !== null && !measurement.fits;
+
+  if (perApplication.length > 0) {
+    return {
+      ...shared,
+      status: 'needs_application_figures',
+      actor: STATUS_ACTOR.needs_application_figures,
+      action:
+        `${kbRef} needs ${String(perApplication.length)} value(s) that belong to this application ` +
+        `rather than to Launchpad: ${perApplication.map((r) => r.slot).join(', ')}. No connector holds ` +
+        `them — a person supplies them for this submission. ` +
+        (live.length > 0
+          ? `The remaining ${String(live.length)} slot(s) are live figures; run their calls at the ` +
+            `same time.`
+          : ''),
+    };
+  }
+
+  return {
+    ...shared,
+    status: 'needs_live_figures',
+    actor: STATUS_ACTOR.needs_live_figures,
+    action:
+      `${kbRef} is stored as language with its figures removed. Fill ${String(live.length)} slot(s) ` +
+      `from ${String(figureCallsFor(surfaced).length)} live call(s), then use the result. A frozen ` +
+      `figure is not an acceptable substitute, and neither is deleting the sentence.` +
+      (overLimit
+        ? ` It will also need shortening afterwards — the template is ${String(measurement.count)}/` +
+          `${String(measurement.max)} ${measurement.unit} before any figure is written. Fill ` +
+          `first, then resize: shortening before the figures are in measures the wrong text.`
+        : ''),
+    handback: buildHandback({
+      task: 'fill_figures',
+      sourceText: surfaced,
+      limit,
+      measurement,
+      context,
+      figureSlots: requirements,
+      ...(overLimit
+        ? {
+            extraRules: [
+              // `measurement`, not `limit`, for the numbers: they are the same values, and reading them
+              // off the measurement is what lets `overLimit` narrow the type. Only `measurement` is
+              // aliased by that guard.
+              `This template is already over the ${String(measurement.max)} ${measurement.unit} limit ` +
+                `before any figure is written. Fill the slots anyway and do NOT shorten as you go — ` +
+                `then pass the filled text to grant_resize_answer. Trimming while filling is how an ` +
+                `approved sentence loses a clause nobody decided to drop.`,
+            ],
+          }
+        : {}),
+    }),
+  };
 }
 
 /**
@@ -244,7 +374,11 @@ export function buildAnswer(
 
   const text = entry.text;
   const verified = entry.verified;
-  const carriesFigures = containsNumericClaim(text);
+  // `needsManualFigureCheck`, not `containsNumericClaim`: the latter matches any two-digit run, which
+  // after the scrub means it fires on "Building 21" and flags the fiscal sponsor's name for live
+  // verification. See `slots.ts` for the reasoning; the short version is that a warning firing on
+  // everything is a warning nobody reads.
+  const carriesFigures = needsManualFigureCheck(text);
   const withEntry = { ...base, kb_label: entry.label, verified, carries_figures: carriesFigures };
   const context: HandbackContext = { ...formContext, answers: entry.label };
 
@@ -305,13 +439,19 @@ export function buildAnswer(
   const structured = match.matched_id === null ? undefined : entry.structured?.[match.matched_id];
   if (structured !== undefined) {
     const structuredVerified = structured.verified ?? entry.verified;
-    const structuredFigures = containsNumericClaim(structured.value);
+    const structuredFigures = needsManualFigureCheck(structured.value);
     const withStructured = {
       ...withEntry,
       verified: structuredVerified,
       carries_figures: structuredFigures,
       from_structured: true,
     };
+    // The gate runs on the structured VALUE, not on the slot's narrative: this branch surfaces the
+    // value, so that is the text whose holes matter. `eligibility.budget_size` is the case — it hands a
+    // funder the fiscal-year expense figure with no prose around it, so a slot there is the whole answer
+    // rather than a detail inside one.
+    const gatedStructured = figureGate(structured.value, withStructured, limit, context, match.kb_ref);
+    if (gatedStructured !== null) return gatedStructured;
     if (limit === null) {
       return {
         ...withStructured,
@@ -397,6 +537,13 @@ export function buildAnswer(
       measurement,
     };
   }
+
+  // Every remaining branch surfaces the slot's narrative — as an answer, or as source material for a
+  // rewrite. So the gate goes here, ahead of all of them: text with figure-shaped holes is not an
+  // answer, and it is not usable source material for deriving a value or writing a fuller one either.
+  // Placed after the `number`/`fetch_figure` branch above, which never touches the text at all.
+  const gated = figureGate(text, withEntry, limit, context, match.kb_ref);
+  if (gated !== null) return gated;
 
   // A field wanting a short structured value cannot take narrative prose, however well it fits. Hand
   // the prose back as source material so the model can derive the value from it.
@@ -607,10 +754,18 @@ export function runPipeline(
 
   // Only slots that produced text a reviewer or the model will actually read. A kb_gap names a slot
   // that does not exist, and scoping figure checks by it would be meaningless.
+  //
+  // `figure_template` is in the list because a `needs_application_figures` result carries neither an
+  // `answer` nor a `handback` — it is the one gated path with no handback — and omitting it would drop
+  // that slot's checks from the scoped work order, which is the same silent-omission failure
+  // `data.ts::figure_check_ref_dangling` exists to catch.
   const kbRefsUsed = [
     ...new Set(
       results
-        .filter((r) => r.answer !== undefined || r.handback !== undefined)
+        .filter(
+          (r) =>
+            r.answer !== undefined || r.handback !== undefined || r.figure_template !== undefined,
+        )
         .map((r) => r.kb_ref)
         .filter((ref): ref is string => ref !== null),
     ),
@@ -647,6 +802,10 @@ export const STATUS_NOTE: Readonly<Record<AnswerStatus, string>> = {
     'OVER LIMIT by more than compression can cover — shortening this means dropping facts, and the rewrite must say which.',
   derive_from_reference:
     'NEEDS A SHORT VALUE — the stored answer is narrative; derive the value from it rather than pasting it.',
+  needs_live_figures:
+    'FIGURES NOT FILLED — the stored answer is language with its figures removed. Run the named calls and fill each {{slot}}. The text below is a template, not an answer.',
+  needs_application_figures:
+    'STAFF — the stored answer needs a value belonging to THIS application (an amount, a period). No connector holds it. The text below is a template, not an answer.',
   fetch_figure:
     'NEEDS A LIVE FIGURE — run the named query_* call and write its result; a frozen KB number is not an acceptable answer.',
   figure_definitional:
@@ -660,9 +819,11 @@ export const STATUS_NOTE: Readonly<Record<AnswerStatus, string>> = {
 
 const BANNER =
   '> **Draft for staff review — not submittable as-is.** Answers come from LaunchPad’s knowledge ' +
-  'base, which is a frozen snapshot. Verify every figure against live data before submitting, and ' +
-  'edit for this funder’s voice. Sections marked **OVER LIMIT**, **UNDER-ANSWERED** or **NEEDS A ' +
-  'SHORT VALUE** still owe a rewrite; sections marked **STAFF** need a person.';
+  'base, which stores **language only**: every figure with a live source is a `{{slot}}` filled from ' +
+  'the connector, never a stored number. A section still showing a `{{slot}}` is a template and is not ' +
+  'an answer — do not paste it anywhere. Sections marked **OVER LIMIT**, **UNDER-ANSWERED**, **NEEDS A ' +
+  'SHORT VALUE** or **FIGURES NOT FILLED** still owe work from the calling model; sections marked ' +
+  '**STAFF** need a person.';
 
 /**
  * Render one draft package as Markdown: question, answer, provenance footline, outstanding work.
@@ -728,6 +889,44 @@ export function renderMarkdown(pkg: DraftPackage): string {
       L.push('');
     }
 
+    // A gated result withheld `answer`, so on the staff path — which carries no handback — the template
+    // appears nowhere unless it is rendered here. Rendered as a fenced block rather than a blockquote:
+    // a blockquote is how this document renders finished answers, and a template must not look like one.
+    if (r.figure_template !== undefined && r.handback === undefined) {
+      L.push(
+        `<details><summary>Template — NOT an answer, ${String(r.figure_slots?.length ?? 0)} slot(s) ` +
+          `unfilled</summary>\n\n\`\`\`\n${r.figure_template}\n\`\`\`\n\n</details>`,
+      );
+      L.push('');
+    }
+
+    // What each unfilled slot needs, on either gated path. The call is per slot rather than
+    // deduplicated here: a reviewer reads this to check a specific number, not to plan the calls.
+    if (r.figure_slots !== undefined && r.figure_slots.length > 0) {
+      // `population` gets its own column rather than being folded into the call. A reviewer checking a
+      // figure is checking whether it answers the question, and the cut is the part that decides that —
+      // buried inside a call signature it reads as configuration.
+      L.push('| Slot | Needs | Fill from | Population that call returns |');
+      L.push('|---|---|---|---|');
+      for (const s of r.figure_slots) {
+        const from =
+          s.kind === 'per_application'
+            ? '**a person — this application’s own value**'
+            : s.tool === undefined
+              ? '**no call recorded — staff**'
+              : `\`${s.tool}\`(${Object.entries(s.args ?? {})
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(', ')})${s.needs_staff_decision ? ' **+ staff decision**' : ''}`;
+        L.push(`| \`{{${s.slot}}}\` | ${s.describes} | ${from} | ${s.population ?? '—'} |`);
+      }
+      L.push('');
+      L.push(
+        '**If a question asked about a different population than the one shown, the stored sentence ' +
+          'does not answer it.** Filling it anyway produces a false sentence containing a true number.',
+      );
+      L.push('');
+    }
+
     // A live-figure field has no stored answer to show; the work is the named call.
     if (r.figure_call !== undefined) {
       const args = Object.entries(r.figure_call.args)
@@ -781,6 +980,8 @@ function handbackLabel(r: AnswerPlan): string {
         `Source material to write the fuller answer from — ${String(r.measurement?.count)} of ` +
         `${String(r.measurement?.max)} ${String(r.measurement?.unit)} used, NOT the finished answer`
       );
+    case 'fill_figures':
+      return 'Approved language with its figures removed — a TEMPLATE, not an answer. Fill every {{slot}} below';
     case 'derive_short_value':
     case undefined:
       return 'Source material to derive the value from — NOT the answer to this field';

@@ -27,6 +27,127 @@ entry can be verified rather than trusted.
 
 ## 2026-08-17
 
+### Changed — committed artifacts store LANGUAGE ONLY; a figure is a slot filled live, or the answer is rejected
+
+Work package `#275`. The direction change: **the corpus stores prose, and every figure with a live
+source is a `{{slot}}` filled from the `query_*` call that owns it.** `pipeline.ts` will not return
+slotted text as an `answer`, so an unfilled figure is a visible hole rather than a stale number that
+reads as finished.
+
+**Why the previous state was not enough.** `figures.ts` already carried the policy — "do not publish
+any figure until the paired `query_*` call confirms it" — and it was advisory in the one way that
+mattered: the frozen figure sat inside the stored sentence. Skipping the verification step produced a
+publishable-looking answer. The cost is in `figures.ts`' own header: the wage aggregate drifted
+~$1,500 every four days, and the filed `$350,268` was `$362,030.26` live within a week.
+
+**What landed.**
+
+- **`packages/grants/src/slots.ts`** (new) — the `{{slot_id}}` syntax, `FIGURE_SLOTS` (39 slots, each
+  naming the `FIGURE_CHECKS` key that fills it), and the two registers below. Also
+  `needsManualFigureCheck`, which replaces `containsNumericClaim` as the trigger for the
+  "⚠ carries figures" warning.
+- **`kb_launchpad.json` scrubbed** — 56 replacements across 25 of the 29 slots. `high`-severity
+  literal-figure violations: 25 slots before, **zero** after.
+- **Two new statuses**, `needs_live_figures` (actor `llm`) and `needs_application_figures` (actor
+  `staff`), plus `figure_slots` and `figure_template` on `AnswerPlan`. The template is deliberately
+  not called `answer`: a caller that treated it as one would paste `{{wages_total}}` into a portal.
+- **A `fill_figures` handback task** with `FILL_FIGURE_RULES` in `handback.ts`.
+- **Three integrity checks** in `data.ts`: `stored_literal_figure` (high), `figure_slot_unknown`
+  (high), `figure_slot_unresolved` (high), plus `stored_figure_unsourced` (medium — the debt register).
+- **A resize guardrail**, `ResizeNote: 'slots_dropped'` — a rewrite that loses a slot is rejected the
+  way an invented figure is. Dropping a *figure* is allowed; dropping the *requirement to fetch one*
+  is not.
+- **`slots.test.ts`** (new, 20 cases). Two of them guard bugs this change actually hit: a regex
+  exemption that matches nothing, and `/g` regex `lastIndex` leaking across calls.
+
+**Two registers, because a two-bucket rule does not survive the real corpus.**
+
+`IMMUTABLE_FIGURES` exempts *phrases*, each with its reason. A blanket "no digits in stored prose"
+rule deletes the organisation's own name: `21` is **Building 21** in 15 of 29 slots, `101` is
+**Launchpad 101**, and `501(c)(3)`/`47-2514219`/`990`/`801 Market Street`/`19107` are legal and postal
+identifiers. Exemptions are keyed on phrases, not tokens, because `90%` means three different things
+in this corpus — the low-income share (live), the pathway-interest split (unsourced), and the
+Pennsylvania EITC credit rate (statutory).
+
+`FIGURE_DEBT` holds what neither bucket can honestly take: figures that **drift and have no live
+source**. `1,000+ reached through outreach`, `30+ ZIP codes`, `roughly 30 volunteers`. Slotting them
+would make those slots permanently unfillable, which teaches a reader to ignore unfilled slots and
+destroys the mechanism; allowlisting them would assert they are stable, which is false. They stay
+literal and stay reported at `medium`, each with what would settle it.
+
+**Corrections this turned up, all of them in `figures.ts`:**
+
+- **`annual_budget`, `revenue_mix` and `inc_client_work_booked` named a tool that cannot answer them.**
+  All three said `get_finance_brief`, reasoning that `query_finances` "may be denied by the role ACL" —
+  which traded a tool that might be refused for one that returns no income or expense total at all
+  (verified: it returns aplos fund rows, an account *count*, recent transactions, fund balances and
+  recent gifts). Retargeted to `query_finances {query_type: 'annual'}`; the ACL fallback in
+  `buildFigureWorkOrder().blocked` was also telling callers to fall back to `get_finance_brief` and now
+  says to leave the slot unfilled. `admin/DECISIONS.md` §5 stated the same wrong mapping and is fixed.
+  **This workstream had already observed it and left it in place.** Raised by a peer session on
+  2026-08-17 — but `docs/runs/2026-08-11/filled/FIGURE-LEDGER.md:16` recorded the same thing six days
+  earlier ("Not returned… the call succeeded and carries no income or expense total") and filed
+  `[DATA UNAVAILABLE]` against it, and three filled applications in that run say so too. The finding
+  was written down as an *outcome of one run* rather than as a *defect in the check*, so nothing
+  changed and the next caller was sent to the same dead tool. Worth generalising: a `[DATA UNAVAILABLE]`
+  that recurs is a bug report about the work order, not a property of the data.
+
+  **It was four checks, not one, and the ledger had already found the answers too.** `annual_budget`,
+  `inc_client_work_booked`, `staff_count` and `competency_growth` were all recorded `[DATA UNAVAILABLE]`
+  or `PARTIAL` on 2026-08-11 and all four were independently rediscovered on 2026-08-17. Worse, the
+  ledger's own **2026-08-14 re-source section** (work package `#216`) had already established what
+  answers them — `query_finances` returning Total Income/Expense actuals — three days before either
+  session "found" it. Two checks were corrected a second time from that section rather than from our own
+  calls: `inc_client_work_booked` now names
+  `query_finances {query_type: 'fund_balances', contains: 'Total Income'}`, since the ledger found the
+  `launchpad_inc` fund column carrying $305,000.00 and marked it PARTIAL because fund income is not
+  bookings; and `phase_costs`' population now states that **the tab's shape is not the KB sentence's
+  shape** — it breaks out `hs` and `liftoff` against `total_launchpad`, so `{{cost_shared_admin}}` is a
+  residual to compute rather than a column to read.
+
+  The same section also shows a gap closing on its own: `phase_costs` returned 0 records on 2026-08-11
+  and 163 rows on 2026-08-14, once the sheets sync populated the tab. A prose ledger cannot tell you
+  that a recorded gap has gone stale, which is the argument for a checked register over a document.
+- **`staff_count`'s claim said the KB states "15 staff / 9 staff"** and sent a reviewer to reconcile two
+  headcounts. There is one: 9 full-time, 1 part-time. The `15` is "**15+ years** in education and
+  workforce development" — the Executive Director's experience.
+- **`phase_costs` mislabelled overhead as a phase.** Its claim reads "$519K / $455K / $362K per phase";
+  `kb.financials` reads $519,000 for Launchpad 101, $455,000 for LiftOff, and $362,000 in *shared
+  administrative cost*. The slot is `cost_shared_admin`, not a third phase.
+- **The `phase_budget_summary` warning was wrong in both halves.** The header comment said three prompt
+  files still used the invalid value and that it "silently returns zero rows". A peer session fixed all
+  five occurrences and verified it fails loudly with `invalid_enum_value`. That inverts the risk: a
+  loud rejection is the safe failure, and what it actually broke was a board report erroring out at the
+  phase-cost step. Not re-verified here.
+- **`FigureCheck` gained a required `population` field**, and this is the one to read if you only read
+  one. `args` is fixed at authoring time; the correct cut depends on the question. `students_served_total`
+  carries `query_type: 'total'` — every enrollment record ever — and three funders in the current batch
+  asked how many were served *in the past twelve months*. Filling from the default gives a live,
+  correctly-dated, **wrong** number with nothing flagging it, which is worse than a stale one because
+  staleness has a warning attached. The population is now stated beside every call, and
+  `FILL_FIGURE_RULES` says that a mismatch means the stored sentence does not answer the question —
+  not that it should be filled with a different cut. Raised by a peer session; the
+  question-shape-to-cut catalogue is at `.claude/skills/grant-writing/references/figure-cuts.md`.
+
+**What this means for an existing clone.** No migration, no schema change; the seed JSON and the
+library changed together. Two behavioural consequences worth knowing:
+
+1. **`grant_build_draft` now reports far more outstanding model work**, because most stored answers
+   need a fill step before they are answers. On `aug7_truist`: 12 of 17 questions are
+   `needs_live_figures`. That is the intended reading of "figures are fetched live", not a regression.
+2. **The resize and expand paths are largely unreachable from `grant_build_draft`** on the current
+   fixtures, since the gate precedes every length branch. They are reached by passing *filled* text to
+   `grant_resize_answer`, which is what the fill handback's `verify_with` instructs. Two
+   `pipeline.test.ts` cases were rewritten to assert that sequencing rather than the old ordering.
+
+**Also recorded, not verified here** (reported by a peer session, both in the same family):
+`query_enrollment {query_type: 'active_during'}` appears to match only records with a non-null
+`end_date`, silently dropping every In Progress record — OpenProject `#278`, and the
+`enrollment_by_phase` note now points at it instead of recommending the call. And
+`query_competency {query_type: 'scores'}` truncates at 1000 rows against ~2346 in the table, so an
+org-wide competency figure from a single call is a partial slice; that is stated in the
+`competency_growth` population.
+
 ### Fixed — `pyRound` now rounds half-to-even, because the tie case it argued was unreachable is not
 
 Work package `#258`. `packages/grants/src/py.ts` implemented Python's `round(x, ndigits)` as

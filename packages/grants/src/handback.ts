@@ -30,6 +30,7 @@
 
 import type { Measurement } from './limits.js';
 import type { FormLimit } from './schemas.js';
+import type { SlotRequirement } from './slots.js';
 
 /**
  * The absolute rules for shortening a stored answer. Ported from the prototype's `_SYSTEM_PROMPT`,
@@ -113,7 +114,46 @@ export const EXPAND_RULES: readonly string[] = [
  */
 export const EXPAND_RULES_NO_ANCHOR: readonly string[] = EXPAND_RULES.slice(1);
 
-export type HandbackTask = 'resize' | 'derive_short_value' | 'expand';
+/**
+ * The rules for filling live figures into slotted stored prose.
+ *
+ * The task `slots.ts` exists to create: stored text carries `{{slot}}` tokens where a figure belongs,
+ * and this is the instruction set for turning that template into an answer. It is the narrowest task in
+ * the layer and the rules are correspondingly absolute — there is exactly one acceptable source for
+ * each number, and it is the call named in the requirement.
+ *
+ * The load-bearing rule is the last one. A model that cannot fill a slot has two options that both look
+ * like progress: write a plausible number, or quietly delete the clause. Both defeat the mechanism, and
+ * the second is worse because it leaves no evidence. Saying so explicitly is the only thing standing
+ * between an unfillable slot and a silently shortened answer.
+ */
+export const FILL_FIGURE_RULES: readonly string[] = [
+  'Replace each {{slot}} with the figure returned by the call named for that slot, and nothing else. ' +
+    'One slot, one figure, from that call.',
+  'Do NOT write a figure from any other source — not from memory, not from another slot, not from ' +
+    'prose elsewhere in this draft, and not from the funder’s own materials.',
+  'Do not round, reformat, or "tidy" a returned figure. If a call returns 362030.26, the sentence ' +
+    'says $362,030.26 unless the surrounding prose established a different precision.',
+  'Leave every word outside the slots exactly as written. This text is approved language; you are ' +
+    'filling holes in it, not rewriting it.',
+  'CHECK THE CUT BEFORE YOU WRITE THE NUMBER. Each slot states the `population` its call returns. If ' +
+    'the question asked about a different population — a single year where the call is all-time, one ' +
+    'phase where the call is every phase, one cohort where the call pools them — then this stored ' +
+    'sentence does not answer the question, and filling it with a differently-cut figure produces a ' +
+    'false sentence containing a true number. Say the stored answer does not cover the ask. Do not ' +
+    'substitute a different cut, and do not reword the sentence to make the cut you have fit.',
+  'State the population in the same sentence as the figure wherever the prose does not already. "301 ' +
+    'participants" is not an answer; "301 enrollment records across all phases and all time" is.',
+  'Where a slot is marked as needing a staff decision, run the call and then STOP on that slot. Report ' +
+    'both the number and the question it depends on. Do not pick a population, a denominator, or an ' +
+    'as-of date yourself.',
+  'If a call fails, is denied by your role, or returns nothing that answers the slot, leave the slot ' +
+    'token in place and say which slot could not be filled. Do NOT invent a figure and do NOT delete ' +
+    'the sentence to make the gap disappear — an unfilled slot is a visible gap a person can close, ' +
+    'and a deleted clause is not.',
+];
+
+export type HandbackTask = 'resize' | 'derive_short_value' | 'expand' | 'fill_figures';
 
 /**
  * Context that shapes the rewrite without licensing new content. Mirrors the prototype's
@@ -154,6 +194,14 @@ export interface Handback {
    * and a caller that concatenated them would lose the distinction the rules depend on.
    */
   readonly anchor_value?: string;
+  /**
+   * Present only on a `fill_figures` task: every slot in `source_text`, with the call that fills it.
+   *
+   * Structural rather than left for the caller to parse out of the text, for the same reason
+   * {@link Handback.anchor_value} is: a caller that had to re-derive the requirement from `{{tokens}}`
+   * would need its own copy of `FIGURE_SLOTS`, and the copy would drift.
+   */
+  readonly figure_slots?: readonly SlotRequirement[];
 }
 
 /**
@@ -181,16 +229,29 @@ export interface BuildHandbackInput {
   readonly extraRules?: readonly string[];
   /** Required on an `expand` task, ignored otherwise. See {@link Handback.anchor_value}. */
   readonly anchorValue?: string;
+  /** Required on a `fill_figures` task, ignored otherwise. See {@link Handback.figure_slots}. */
+  readonly figureSlots?: readonly SlotRequirement[];
 }
 
 const RULES_FOR_TASK: Readonly<Record<HandbackTask, readonly string[]>> = {
   resize: RESIZE_RULES,
   derive_short_value: DERIVE_RULES,
   expand: EXPAND_RULES,
+  fill_figures: FILL_FIGURE_RULES,
 };
 
 function instructionFor(task: HandbackTask, limit: FormLimit | null, anchor: string | undefined): string {
   switch (task) {
+    case 'fill_figures':
+      // No limit in this instruction on purpose. Filling a slot changes the length by a few
+      // characters, and pointing a model at a word count while it is substituting figures invites it
+      // to trim the approved prose to compensate — which rule 4 forbids. Length is re-measured
+      // afterwards, by `grant_resize_answer`, which is where it belongs.
+      return (
+        'The stored answer below is approved language with the figures removed. Fill every {{slot}} ' +
+        'from the call named for it in `figure_slots`, change nothing else, and report any slot you ' +
+        'could not fill.'
+      );
     case 'resize':
       return `Rewrite the source text below to fit ${describeLimit(limit)}, following every rule.`;
     case 'derive_short_value':
@@ -232,6 +293,9 @@ export function buildHandback(input: BuildHandbackInput): Handback {
     rules: [...(input.extraRules ?? []), ...rules],
     verify_with: VERIFY,
     ...(task === 'expand' && anchorValue !== undefined ? { anchor_value: anchorValue } : {}),
+    ...(task === 'fill_figures' && input.figureSlots !== undefined
+      ? { figure_slots: input.figureSlots }
+      : {}),
   };
 }
 

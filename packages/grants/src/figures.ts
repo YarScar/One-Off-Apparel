@@ -53,6 +53,30 @@ export interface FigureCheck {
   readonly tool: string;
   /** Arguments to call it with, verbatim. */
   readonly args: Readonly<Record<string, string>>;
+  /**
+   * The population {@link args} actually returns, stated so a caller can compare it against what the
+   * funder asked.
+   *
+   * Added 2026-08-17 (work package #275) after a peer session named the failure it prevents, which the
+   * slot mechanism made worse rather than better. `args` is fixed at authoring time; the correct cut
+   * depends on the question. `students_served_total` carries `query_type: 'total'`, which returns every
+   * enrollment record ever — and TDJF, Philadelphia Foundation and Upwork all asked, in this batch, how
+   * many young people were served *in the past twelve months*. A caller following the fill instruction
+   * gets a live figure, correctly dated, and wrong, with nothing anywhere flagging it. **A live wrong
+   * number is worse than a stale one**, because staleness has a warning attached and this does not.
+   *
+   * So the population is data rather than prose, and `slots.ts` puts it in front of the caller beside
+   * the call. The rule it enables is the important part: **if the question's population differs from
+   * this one, the stored sentence does not answer the question.** Not "fill it with a different cut" —
+   * the sentence asserts its own population in its own wording ("young people served to date"), so a
+   * twelve-month number dropped into it produces a sentence that is false about a true figure. The
+   * honest outcome is to say the stored answer does not cover the ask.
+   *
+   * `.claude/skills/grant-writing/references/figure-cuts.md` holds the question-shape-to-cut catalogue,
+   * including the cuts that do not exist. This field is not a substitute for it; it says what THIS call
+   * returns, so a mismatch is visible without consulting anything.
+   */
+  readonly population: string;
   readonly conflict_kind: ConflictKind;
   readonly severity: FigureSeverity;
   readonly note: string;
@@ -60,9 +84,17 @@ export interface FigureCheck {
 
 /**
  * Every `tool` and `query_type` below is checked against the live enums in
- * `apps/mcp-server/src/tools/`. `phase_budget_dashboard` in particular is the real value — three
- * shipped prompt files still say `phase_budget_summary`, which is not in the enum and silently
- * returns zero rows.
+ * `apps/mcp-server/src/tools/`. `phase_budget_dashboard` is the real value; `phase_budget_summary` is
+ * not in the enum.
+ *
+ * **Both halves of what this comment used to say were wrong, and the correction matters.** It said
+ * three shipped prompt files still said `phase_budget_summary` and that the bad value "silently returns
+ * zero rows". Reported by a peer session on 2026-08-17: all five occurrences across
+ * `apps/mcp-server/src/prompts/{grant-writing,board-reporting,finance-audit}.ts` are fixed, and the bad
+ * value fails **loudly** — `MCP error -32602 invalid_enum_value`, listing all 29 valid options. That
+ * inverts the risk. "Silently returns zero rows" describes a figure quietly reported as zero, which is
+ * the dangerous failure; a loud rejection is the safe one, and what it actually broke was a board report
+ * or finance audit erroring out at the phase-cost step. Not re-verified here — the peer ran the call.
  */
 export const FIGURE_CHECKS: readonly FigureCheck[] = [
   {
@@ -74,6 +106,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.metrics', 'kb.outcomes', 'kb.theory_of_change', 'kb.capacity'],
     tool: 'query_employment',
     args: { query_type: 'aggregate' },
+    population:
+      "Every participant employment record ever written — all phases, all statuses, all time. An all-time aggregate, NOT a period total.",
     conflict_kind: 'drift',
     severity: 'high',
     note:
@@ -88,6 +122,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.capacity', 'kb.history', 'kb.metrics'],
     tool: 'query_enrollment',
     args: { query_type: 'total' },
+    population:
+      "Every enrollment record ever — all phases, all statuses, all time. The widest possible cut, and rarely what a funder asked for.",
     conflict_kind: 'definitional',
     severity: 'high',
     note:
@@ -107,6 +143,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.metrics', 'kb.outcomes'],
     tool: 'query_certifications',
     args: { query_type: 'summary' },
+    population:
+      "All certification attempts ever recorded, every cohort pooled. An all-time rate, not a per-cohort one.",
     conflict_kind: 'definitional',
     severity: 'high',
     note:
@@ -120,13 +158,28 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     // value quote $1.34M, so an eligibility-only draft published the frozen budget figure with no
     // verification step.
     appears_in: ['kb.financials', 'kb.budget_narrative', 'kb.eligibility'],
-    tool: 'get_finance_brief',
-    args: { period: 'ytd' },
+    tool: 'query_finances',
+    args: { query_type: 'annual' },
+    population:
+      'The annual finance tab: FY2025 actual through FY2028 projected. Name the fiscal year the ' +
+      'question asked about — and **do not quote a FY2026 figure as a fiscal-year amount.** Reported ' +
+      '2026-08-17 by a peer session, from the ledger\'s own hedge: `budget_actuals` returns the YTD row ' +
+      'with `actuals` and `fy_actual_projected` BOTH equal to $1,734,075.87, and the Annual tab\'s ' +
+      'column is `fy_2026_actual_projected`. The source fuses actual-to-date with full-year projection ' +
+      'and nothing separates them, so "our FY2026 budget was X" is the wrong answer to the question ' +
+      'asked. FY2025 is a clean `fy_2025_actual`. Flag [STAFF CONFIRM] on any current-year figure. ' +
+      'Separately open (`grant-a54`): no live total matches the KB\'s former $1.34M FY2025 expenses — ' +
+      'the closest is Total *Administrative* Expenses at $1,394,055.02, a narrower measure.',
     conflict_kind: 'drift',
     severity: 'high',
     note:
-      'Prefer get_finance_brief — query_finances may be denied by the role ACL. If it is, flag ' +
-      '[DATA UNAVAILABLE] rather than quoting the frozen figure as if confirmed.',
+      'Corrected 2026-08-17 (work package #275, from a peer session\'s finding): this named ' +
+      'get_finance_brief, on the reasoning that query_finances "may be denied by the role ACL". That ' +
+      'traded a tool that might be refused for one that cannot answer at all — get_finance_brief ' +
+      'returns aplos fund rows, an account COUNT, recent transactions, fund balances and recent gifts, ' +
+      'and no income or expense total anywhere. query_finances(annual) is what holds these. If the ACL ' +
+      'refuses it, flag [DATA UNAVAILABLE]; do not fall back to get_finance_brief and read a total that ' +
+      'is not there.',
   },
   {
     key: 'enrollment_by_phase',
@@ -134,6 +187,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.programs', 'kb.program_desc'],
     tool: 'query_enrollment',
     args: { query_type: 'by_phase' },
+    population:
+      "Enrollment counts per phase by status (Completed / In Progress / Dropped Before Completion / Not Enrolled), all time. Participants appear in every phase they touched, so these do NOT sum to a participant total.",
     conflict_kind: 'content_gap',
     severity: 'high',
     note:
@@ -143,9 +198,12 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
       'and 2025-07-07 to 2025-08-27 (8), 15 of 15 completing and none dropping. 14 of the 15 sat ' +
       'PCEP and all 14 passed. Do NOT describe it as a linear stage between 101 and LiftOff: it ' +
       'runs in the summer gap between school years, no student has it as current_phase, and its ' +
-      'completers show up later under LiftOff and Alumni. Use query_enrollment active_during with ' +
-      'phase=Lightspeed and a wide date window for the roster — by_phase gives only the counts, and ' +
-      'by_student cannot filter by phase at all (see the filter caveat in CLAUDE.md §4).',
+      'completers show up later under LiftOff and Alumni. For the roster, by_phase gives only the ' +
+      'counts and by_student cannot filter by phase at all (see the filter caveat in CLAUDE.md §4). ' +
+      'This note used to send you to query_enrollment active_during for it. **Do not rely on that ' +
+      'until OpenProject #278 is settled** — a peer session reports active_during matching only ' +
+      'records with a non-null end_date, which would silently drop every In Progress record. ' +
+      'Unverified here; #278 owns it.',
   },
   {
     key: 'prior_funding_wpf',
@@ -153,6 +211,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.sustainability'],
     tool: 'query_donors',
     args: { query_type: 'profile', donor_name: 'William Penn Foundation' },
+    population:
+      "Every recorded gift and grant from one named donor, all time.",
     conflict_kind: 'drift',
     severity: 'high',
     note: 'query_donors may be ACL-denied; fall back to get_finance_brief and flag if unavailable.',
@@ -172,6 +232,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     ],
     tool: 'query_enrollment',
     args: { query_type: 'by_race' },
+    population:
+      "Race and ethnicity across all enrollment records, all time. Values are free-text and multi-category — decide whether you are counting 'names this category at all' or 'this category alone', and say which.",
     conflict_kind: 'drift',
     severity: 'medium',
     note: 'Recompute from the connector; percentages move with each cohort.',
@@ -193,6 +255,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     ],
     tool: 'query_employment',
     args: { query_type: 'aggregate' },
+    population:
+      "Every participant employment record ever written — all phases, all statuses, all time.",
     conflict_kind: 'drift',
     severity: 'medium',
     note: 'The same aggregate call returns avg_hourly_wage and avg_weekly_hours.',
@@ -206,6 +270,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.partnerships', 'kb.theory_of_change', 'kb.risk'],
     tool: 'query_employment',
     args: { query_type: 'by_employer' },
+    population:
+      "Every employer with at least one recorded placement, all time.",
     conflict_kind: 'drift',
     severity: 'medium',
     note: 'Two different counts appear in the KB; the connector settles it.',
@@ -218,15 +284,25 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
       // `$50` — two orders of magnitude off, and generic enough to match unrelated prose.
       'two clients with hiring intent in writing at $50K-$80K',
     appears_in: ['kb.sustainability', 'kb.innovation'],
-    tool: 'get_finance_brief',
-    args: { period: 'ytd' },
+    tool: 'query_finances',
+    args: { query_type: 'fund_balances', contains: 'Total Income' },
+    population:
+      'Income by fund, including the `launchpad_inc` fund column. FUND INCOME IS NOT BOOKINGS — it is ' +
+      'money recognised against that fund, not client work contracted. The two answer different ' +
+      'questions and the prose usually asks the second.',
     conflict_kind: 'drift',
     severity: 'medium',
     note:
       'Newest approved org overview (Barra, Jul 2026) introduces Inc. revenue and hiring-intent claims ' +
-      'the KB and its previous checks do not carry. No query_* tool returns Inc. client bookings directly — ' +
-      'get_finance_brief gives the closest revenue signal; if it cannot confirm, flag [DATA UNAVAILABLE] rather ' +
-      'than quoting the overview figure as current.',
+      'the KB and its previous checks do not carry. **No query_* tool returns Inc. client bookings ' +
+      'directly** — still true. Retargeted twice on 2026-08-17 (work package #275): first from ' +
+      'get_finance_brief, which returns no revenue figure at all despite being described here as "the ' +
+      'closest revenue signal", then to this call rather than query_finances(annual). The second move ' +
+      'came from reading our own record: `docs/runs/2026-08-11/filled/FIGURE-LEDGER.md` line 32 had ' +
+      'already found the closest live figure on 2026-08-14 — the `launchpad_inc` fund column carries ' +
+      'Total Income $305,000.00 — and marked it PARTIAL for exactly the reason above. Treat it as a ' +
+      'floor and a different measure, not as the booked figure. If the prose asks for bookings, flag ' +
+      '[DATA UNAVAILABLE].',
   },
   {
     key: 'program_size_reach',
@@ -234,6 +310,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.capacity', 'kb.history', 'kb.metrics'],
     tool: 'query_enrollment',
     args: { query_type: 'total' },
+    population:
+      "Every enrollment record ever — all phases, all statuses, all time.",
     conflict_kind: 'definitional',
     severity: 'high',
     note:
@@ -255,19 +333,34 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     ],
     tool: 'query_finances',
     args: { query_type: 'phase_budget_dashboard' },
+    population:
+      'The phase budget dashboard tab as the connector last synced it (163 rows on 2026-08-14). ' +
+      '**Its shape is not the KB sentence\'s shape.** The tab breaks out `hs` and `liftoff` against a ' +
+      '`total_launchpad`; the stored prose splits Launchpad 101 / LiftOff / shared administrative cost. ' +
+      'So `{{cost_shared_admin}}` is a RESIDUAL you compute — total_launchpad minus hs minus liftoff — ' +
+      'not a column you read, and `{{phase_cost_101}}` is the `hs` column under a different name. Say ' +
+      'which you did.',
     conflict_kind: 'drift',
     severity: 'medium',
-    note: 'Note the query_type is phase_budget_dashboard — phase_budget_summary is not a valid value.',
+    note:
+      'Note the query_type is phase_budget_dashboard. phase_budget_summary is not a valid value and is ' +
+      'rejected with invalid_enum_value rather than returning an empty result — see the header comment ' +
+      'on FIGURE_CHECKS for the correction to what this note used to claim.',
   },
   {
     key: 'revenue_mix',
     claim: '60% / 25% / 10% / 5% revenue mix',
     appears_in: ['kb.sustainability'],
-    tool: 'get_finance_brief',
-    args: { period: 'ytd' },
+    tool: 'query_finances',
+    args: { query_type: 'annual' },
+    population:
+      "The annual finance tab, FY2025 actual through FY2028 projected. Name the fiscal year.",
     conflict_kind: 'drift',
     severity: 'medium',
-    note: 'Sustainability narratives quote this mix; confirm before repeating it.',
+    note:
+      'Sustainability narratives quote this mix; confirm before repeating it. Retargeted from ' +
+      'get_finance_brief 2026-08-17 for the reason in the annual_budget note — a revenue mix needs ' +
+      'revenue totals, and that tool returns none.',
   },
   {
     key: 'postsecondary_rate',
@@ -275,6 +368,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: [],
     tool: 'query_postsecondary',
     args: { query_type: 'summary' },
+    population:
+      "Students with a National Student Clearinghouse record, all time.",
     conflict_kind: 'content_gap',
     severity: 'medium',
     note:
@@ -287,6 +382,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: [],
     tool: 'query_attendance',
     args: { query_type: 'aggregate' },
+    population:
+      "All attendance records, all phases, all time.",
     conflict_kind: 'content_gap',
     severity: 'medium',
     note: 'No KB slot covers attendance. Pull live if asked.',
@@ -297,6 +394,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.evaluation'],
     tool: 'query_competency',
     args: { query_type: 'scores' },
+    population:
+      "Competency scores. **Reported truncated at 1000 rows against roughly 2346 in the table** (peer session finding, 2026-08-17, unverified here) — so a single call is a partial slice and an org-wide figure computed from one is wrong.",
     conflict_kind: 'drift',
     severity: 'low',
     note: 'The evaluation narrative is qualitative; live scores can make it concrete.',
@@ -312,6 +411,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.metrics', 'kb.outcomes', 'kb.capacity', 'kb.theory_of_change'],
     tool: 'query_employment',
     args: { query_type: 'aggregate' },
+    population:
+      "Participant and job counts, all time. No cohort placement rate exists in any tool: the denominator comes from query_enrollment and the cohort window is yours to state.",
     conflict_kind: 'unknown',
     severity: 'high',
     note:
@@ -327,6 +428,8 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     appears_in: ['kb.staff_bios'],
     tool: 'search_documents',
     args: { query: 'org chart staff roster' },
+    population:
+      "Whatever documents match the query string. Not a roster, and not a count.",
     conflict_kind: 'unknown',
     severity: 'medium',
     note:
@@ -462,12 +565,26 @@ export interface FigureWorkOrder {
   readonly blocked: readonly { readonly tool: string; readonly reason: string }[];
 }
 
+/**
+ * Restated 2026-08-17, work package #275. The old wording — "do not publish any figure until the
+ * paired call confirms it" — was the right instruction and was unenforceable, because the figure it
+ * described was sitting inside the stored sentence. An instruction not to publish a number that is
+ * already written into the answer is a request to remember something under deadline.
+ *
+ * The corpus now stores language only: a figure with a live source is a `{{slot}}`, and `pipeline.ts`
+ * refuses to return slotted text as an answer at all. So this policy stops asking for diligence and
+ * starts describing what the mechanism does. The `claim` strings below are kept deliberately — they are
+ * the last recorded value of each figure, which is what makes a drift conflict legible ("the filed
+ * application said $350,268") without any of them being what a draft publishes.
+ */
 const POLICY =
-  'Live LP Internal AI connector figures supersede these knowledge-base figures by recency. Do not ' +
-  'publish any figure below until the paired query_* call confirms it. On a drift conflict the ' +
-  'connector wins. A DEFINITIONAL conflict is not auto-resolved — escalate it to staff with both ' +
-  'numbers and their definitions. If a tool is denied by your role, write [DATA UNAVAILABLE] rather ' +
-  'than quoting the frozen figure as if confirmed.';
+  'Committed artifacts store LANGUAGE ONLY. Every figure with a live source is a {{slot}} in the ' +
+  'stored text, filled from the call named for it; a draft with an unfilled slot is not an answer and ' +
+  'the tools will not return it as one. The `claim` values below are the last recorded figure, kept so ' +
+  'a conflict is legible — they are NOT publishable. On a drift conflict the connector wins. A ' +
+  'DEFINITIONAL conflict is not auto-resolved: run the call, then escalate to staff with both numbers ' +
+  'and their definitions. If a tool is denied by your role, leave the slot unfilled and say which one ' +
+  '— do not substitute a frozen figure, and do not delete the sentence to hide the gap.';
 
 /**
  * Build the verification work order for a set of KB slots.
@@ -497,14 +614,17 @@ export function buildFigureWorkOrder(kbRefs?: readonly string[]): FigureWorkOrde
       {
         tool: 'query_finances',
         reason:
-          'May be denied by the role ACL (sensitive finance data). Fall back to get_finance_brief ' +
-          'and flag [DATA UNAVAILABLE].',
+          'May be denied by the role ACL (sensitive finance data). There is NO fallback for a total: ' +
+          'get_finance_brief returns fund rows, an account count, transactions, balances and gifts, and ' +
+          'no income or expense total. If this is denied, leave the slot unfilled and say so. Corrected ' +
+          '2026-08-17 — this used to name get_finance_brief as the fallback.',
       },
       {
         tool: 'query_donors',
         reason:
-          'May be denied by the role ACL (donor PII). Fall back to get_finance_brief and flag ' +
-          '[DATA UNAVAILABLE].',
+          'May be denied by the role ACL (donor PII). get_finance_brief carries recent gifts and may ' +
+          'settle a specific grant; it will not settle a donor profile. Leave the slot unfilled rather ' +
+          'than approximating.',
       },
     ],
   };

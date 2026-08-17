@@ -73,7 +73,7 @@ right now, registered and unreachable.
 | | |
 |---|---|
 | PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard". **69 commits ahead, 0 behind** `origin/main` as of 2026-08-17: PR #46 merged in at `d58ecff` (work package `#260`), the lockfile auto-merged, and `pnpm install --frozen-lockfile` confirms no drift. **Not yet pushed** |
-| Suite | **480 passing across 23 files, zero skipped.** `packages/grants` alone is 299 in 10 |
+| Suite | **501 passing across 24 files, zero skipped.** `packages/grants` alone is 320 in 11 |
 | Build / typecheck / lint | `pnpm -r build` clean **including `apps/hq`**, the only package whose build lints. `pnpm -r typecheck` clean across fourteen. `pnpm lint` clean — but it covers only `apps/hq` and `packages/grants`; `pnpm exec eslint apps/mcp-server` still reports errors (`#168`/`#169`) |
 | Tool surface | **25** on this branch, 21 on `main` — and **prod is not a subset**: it lacks the three `grant_*` tools and the fifth `skill_*`, and it *has* `find_grant_documents`, deployed from `fix/google-drive-discovery` on 2026-08-06 and merged here only on 2026-08-17 |
 | Migrations | **19** applied locally, `migrate status` clean. `migrate diff --from-migrations` shows only the **`student_employment`** entries — down from three tables (`#254`) plus the Drive index rename (`#256`). **A checksum changed:** see the CHANGELOG's 2026-08-17 clone note before running `pnpm db:migrate` on an existing clone |

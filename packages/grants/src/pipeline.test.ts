@@ -446,7 +446,11 @@ describe('fetch_figure — a number question whose answer is a live figure, neve
     );
     expect(out.status).toBe<AnswerStatus>('fetch_figure');
     expect(out.actor).toBe('llm');
-    expect(out.figure_call).toEqual({ tool: 'get_finance_brief', args: { period: 'ytd' } });
+    // query_finances(annual), not get_finance_brief(ytd). Corrected 2026-08-17 under #275: the check
+    // preferred get_finance_brief because query_finances can be ACL-denied, which traded a tool that
+    // might be refused for one that cannot answer — get_finance_brief carries no income or expense
+    // total at all. See the annual_budget note in figures.ts.
+    expect(out.figure_call).toEqual({ tool: 'query_finances', args: { query_type: 'annual' } });
     expect(out.answer).toBeUndefined();
     expect(out.handback).toBeUndefined();
   });
@@ -522,11 +526,35 @@ describe('renderMarkdown', () => {
     expect(md).toContain('NOT a resize');
   });
 
-  it('labels every over-limit section OVER LIMIT in its own section', () => {
+  // Was `expect(over.length).toBeGreaterThan(0)` on this fixture. It cannot be, and the reason is the
+  // whole shape of the change: the figure gate runs BEFORE the length branches, because filling a slot
+  // changes the length and resizing first measures the wrong text. So a stored answer that is both
+  // slotted and over-limit reports `needs_live_figures`, not `needs_resize` — and after the scrub nearly
+  // every slot is slotted. The resize path is now reached by passing FILLED text to
+  // `grant_resize_answer`, which is what the fill handback's `verify_with` tells the caller to do.
+  //
+  // What is asserted instead: the over-limit fact is not lost on the way through. A gated result still
+  // carries its measurement, so `all_fit` stays honest and the caller is told a shortening is coming.
+  it('reports the over-limit measurement on a gated section rather than dropping it', () => {
+    const gated = pkg.results
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => r.status === 'needs_live_figures' && r.measurement?.fits === false);
+    expect(gated.length).toBeGreaterThan(0);
+    for (const { r, i } of gated) {
+      // Never a finished answer: it still has holes in it.
+      expect(r.answer).toBeUndefined();
+      expect(r.figure_template).toBeDefined();
+      expect(sectionFor(md, i)).toContain('FIGURES NOT FILLED');
+      // The rule that keeps a model from trimming while it fills.
+      expect(r.handback?.rules.some((x) => x.includes('do NOT shorten as you go'))).toBe(true);
+    }
+    expect(pkg.summary.all_fit).toBe(false);
+  });
+
+  it('still labels a genuinely over-limit unslotted section OVER LIMIT', () => {
     const over = pkg.results
       .map((r, i) => ({ r, i }))
       .filter(({ r }) => r.status === 'needs_resize' || r.status === 'compression_infeasible');
-    expect(over.length).toBeGreaterThan(0);
     for (const { r, i } of over) {
       expect(sectionFor(md, i)).toContain('OVER LIMIT');
       // The full text is shown for shaping, but never as a finished answer.
@@ -766,18 +794,38 @@ describe('needs_expand — a narrative slot that fits a field but barely fills i
     expect(out.handback?.task).toBe('resize');
   });
 
-  it('fires on at least one stored fixture, so the seed is covered and not only the unit cases', () => {
-    const seen = listFormIds().flatMap((id) =>
-      runPipeline(loadForm(id), loadBank(), loadKnowledgeBase()).results.filter(
-        (r) => r.status === 'needs_expand',
+  // This asserted `needs_expand` fires on a stored fixture, so the guard was covered by real seed data
+  // rather than only by constructed cases. After #275 it usually does not: the figure gate runs first,
+  // and a thin slot that underfills a roomy field is also, nearly always, a slot with figures in it. The
+  // expand path is now reached on the FILLED text.
+  //
+  // The coverage intent is kept by asserting the sequencing on real data instead — the fixture reaches
+  // the gate, and the same slot's text reaches `needs_expand` once its slots are filled. If the gate
+  // ever stopped preempting, the first assertion fails; if the expand guard rotted, the second does.
+  it('routes stored fixtures to the gate first, and to expand once the figures are filled', () => {
+    const kb = loadKnowledgeBase();
+    const gated = listFormIds().flatMap((id) =>
+      runPipeline(loadForm(id), loadBank(), kb).results.filter(
+        (r) => r.status === 'needs_live_figures' || r.status === 'needs_application_figures',
       ),
     );
-    expect(seen.length).toBeGreaterThan(0);
-    for (const r of seen) {
+    expect(gated.length).toBeGreaterThan(0);
+    for (const r of gated) {
       expect(r.answer).toBeUndefined();
-      expect(r.handback?.task).toBe('expand');
-      expect(r.measurement?.fits).toBe(true);
+      expect(r.figure_slots?.length).toBeGreaterThan(0);
     }
+
+    // Now the same material with its slots filled, to prove the expand guard still fires on real prose
+    // and not only on the constructed cases above. A filled figure is a short token, so the underfill
+    // arithmetic is essentially unchanged by the substitution.
+    const thin = kb.answers['kb.evaluation'];
+    expect(thin).toBeDefined();
+    const filled = String(thin?.text).replace(/\{\{[a-z0-9_]+\}\}/g, '42');
+    const out = run('narrative', WORDS(600), filled);
+    expect(out.status).toBe<AnswerStatus>('needs_expand');
+    expect(out.answer).toBeUndefined();
+    expect(out.handback?.task).toBe('expand');
+    expect(out.measurement?.fits).toBe(true);
   });
 });
 
