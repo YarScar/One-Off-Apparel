@@ -140,8 +140,17 @@ export function truncatePreview(text: string, unit: Unit, max: number): string {
       }
       // The first chunk is always kept, even when it alone counts as more than `max` sentences —
       // an empty preview tells a reviewer nothing. The marker still says it was cut.
+      //
+      // Marked whenever the result does not actually measure within `max`, not only when chunks were
+      // dropped. Those two conditions come apart exactly where the counting and splitting rules do:
+      // a text whose only over-limit sentence break is a decimal point is ONE chunk to the splitter
+      // and two or more sentences to the counter, so nothing is dropped and the old condition emitted
+      // the preview unmarked and byte-identical to the input. `measure` only calls this when the text
+      // is over the limit, so an unmarked identical "preview" reads as trimmed-to-fit text that a
+      // reviewer could paste. Verified on 'We spent 1.5 million dollars.' at max 1. Work package #255.
       const preview = kept.join(' ');
-      return kept.length === chunks.length ? preview : `${preview} …`;
+      const cut = kept.length !== chunks.length || pyCountSentences(preview) > max;
+      return cut ? `${preview} …` : preview;
     }
   }
 }

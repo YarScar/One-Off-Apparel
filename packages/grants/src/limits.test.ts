@@ -111,6 +111,52 @@ describe('measure', () => {
       expect(m.truncated_preview).toMatch(/…$/);
     }
   });
+
+  /**
+   * The case the test above misses, and it is the one that reaches real grant prose.
+   *
+   * `pyCountSentences` breaks on `[.!?]` alone and `pySplitSentences` breaks on `[.!?]` followed by
+   * whitespace — a documented, deliberate prototype divergence that neither rule may move. Where the
+   * ONLY over-limit break is a decimal point or an abbreviation, the splitter sees one chunk and the
+   * counter sees two or more: nothing is dropped, so the old `kept.length === chunks.length` test said
+   * "not cut" and returned the preview **byte-identical to the over-limit input, unmarked**.
+   *
+   * `measure` calls `truncatePreview` only when the text is over the limit, so an unmarked identical
+   * preview is a lie in the one direction that matters — it reads as text already trimmed to fit, on a
+   * field where overrunning the cap means rejection. `cover.project_summary` and
+   * `organization.mission` both carry 3-sentence limits. Work package #255.
+   */
+  it('marks a sentence preview the splitter could not cut, rather than echoing the input', () => {
+    const cases = [
+      'We spent 1.5 million dollars.',
+      'Our rate is 92.4 percent.',
+      'Dr. Smith leads it.',
+    ];
+    for (const text of cases) {
+      const m = measure({ text, unit: 'sentences', max: 1 });
+      expect(m.fits, text).toBe(false);
+      expect(m.truncated_preview, text).toMatch(/…$/);
+      expect(m.truncated_preview, text).not.toBe(text);
+    }
+  });
+
+  it('never returns an unmarked preview for text that is over the limit', () => {
+    // The general form of the case above: whenever a preview exists at all, the text did not fit, so
+    // the preview must say it was cut. No unit, and no splitter/counter disagreement, is exempt.
+    const inputs = [
+      { text: 'We spent 1.5 million dollars.', unit: 'sentences', max: 1 },
+      { text: 'One. Two. Three.', unit: 'sentences', max: 2 },
+      { text: 'Our FY2025 budget is $1.34M. We serve 145 young people.', unit: 'sentences', max: 2 },
+      { text: 'one two three four', unit: 'words', max: 2 },
+      { text: 'abcdefgh', unit: 'characters', max: 3 },
+    ] as const;
+    for (const input of inputs) {
+      const m = measure(input);
+      expect(m.fits, input.text).toBe(false);
+      expect(m.truncated_preview, input.text).toBeDefined();
+      expect(m.truncated_preview, input.text).toMatch(/…$/);
+    }
+  });
 });
 
 describe('truncatePreview', () => {
