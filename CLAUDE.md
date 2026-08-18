@@ -119,6 +119,13 @@ pnpm sync:all                   # all connectors in parallel
 #   - Auto-deploys on push to main (CI-gated; only changed services deploy)
 #   - Manual: gh workflow run deploy.yml -f services=hq   (or all|mcp-server|aws-mcp-server|sync)
 # Task definitions live in infra/ecs/*-taskdef.json; the workflow pins the image to the commit SHA.
+#
+# CAVEAT (#295): the `migrate` job runs its one-off task against `--task-definition
+# lp-internal-mcp-server` with no revision, and runs BEFORE the new image is built — so it
+# applies migrations from the PREVIOUS release's image. A migration added by the commit being
+# deployed is invisible to it, and the job still reports success. Run 32047334123 saw 12
+# migrations where the deployed commit had 19. Until #295 lands, apply new migrations by hand
+# (ECS one-off task or bastion) and do not read a green `migrate` job as "my migration ran".
 
 # Database tools
 pnpm db:studio                  # open Prisma Studio

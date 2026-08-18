@@ -161,8 +161,12 @@ Every registered tool has a `tool_permissions` row locally — the §6 `comm -23
 placeholders: `query_clients`, `query_github_issues`, `query_github_prs`, `query_hubspot_contacts`,
 `query_hubspot_deals`, `query_policy`. (`find_grant_documents` was on that list until the Drive merge
 gave it a real registration.) Whether the grant rows exist on RDS is still unverified — board A7
-(#163) — and the registry fails closed, so **until #220's fix is proven on a real deploy, merging still
-ships three tools that will refuse every caller**.
+(#163) — and the registry fails closed. **#220 landed and is closed, and this did not resolve.** The
+2026-08-17 deploy of the merge (run `32047334123`) applied migrations from the *previous* release's
+image — 12 migration directories against the deployed commit's 19 — so `20260729000000_add_grant_tool_permissions`
+was never considered, and the job reported "Database schema is up to date!" anyway. That is **#295**
+(Immediate). So the three `grant_*` tools are now merged and deployed, and their rows still very likely
+do not exist on RDS: they will refuse every caller until #295 lands or the migration is applied by hand.
 
 **Connectors** (root `CLAUDE.md` holds the detail): `google-sheets`, `aplos`, and `notion` are live.
 `google-drive` is **implemented and verified end to end against real Drive and the local database** on
@@ -244,7 +248,8 @@ question (what the live database differs by) and will also report whatever `db p
 
 **Production is less verified than local.** Open unknowns, needing an ECS one-off task or the bastion
 because RDS is not publicly reachable: whether the grant `tool_permissions` rows exist there, and whether
-`aws_resource_jobs` exists there. **`student_postsecondary` is settled** — production's
+`aws_resource_jobs` exists there. **The deploy pipeline cannot answer either question yet** — see #295;
+a green `migrate` job attests only to the previous release's migration set. **`student_postsecondary` is settled** — production's
 `_prisma_migrations` records `20260610200000_create_student_postsecondary`, applied by hand ahead of
 commit `129903c`, and that migration creates it. That commit's own message says so.
 

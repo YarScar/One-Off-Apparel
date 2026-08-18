@@ -49,6 +49,13 @@ right now, registered and unreachable.
   `20260812000000_add_grant_sourcing_evaluation_permission` (its INSERT is `ON CONFLICT DO NOTHING`).
   So `#220`'s owner job is now exactly "run these two migrations" (`20260729`, `20260803`), no
   exploration left.
+
+  **Correction, 2026-08-18.** `#220` closed, and those two migrations are *still* unapplied. The
+  2026-08-17 deploy (run `32047334123`) ran its migration task against the **previous** release's
+  image — 12 migration directories against the deployed commit's 19 — so `20260729` and `20260803`
+  were never in the set it considered, and it reported "Database schema is up to date!" anyway.
+  That is **`#295`** (Immediate). The line above is right about *what* to run and wrong about the
+  pipeline doing it: applying them still needs a hand-run ECS one-off task or the bastion.
 - **`skill_grant_sourcing_evaluation`'s permission row IS present in prod** (27 `tool_permissions`
   rows = main's 21 tools + the 6 phantom "future" rows; the grants tools are absent). The row was
   inserted outside the migration machinery — `20260812000000` is not in prod's `_prisma_migrations`
@@ -64,6 +71,14 @@ right now, registered and unreachable.
   doesn't register the tool, the merged connector doesn't fill the catalog). Decide before merge:
   cherry-pick that branch in, or retire the feature deliberately (and clean the row if it ever
   appears on prod).
+
+  **Resolved 2026-08-17 — the branch was folded, not retired** (work package `#256`, merge `7b31983`).
+  `origin/fix/google-drive-discovery` (`bc1de8c`) is an ancestor of `writing/dev`,
+  `registerFindGrantDocuments(server)` is wired at `apps/mcp-server/src/make-server.ts:62`, and the
+  `20260806*` migrations came with it — so the merge kept the live feature rather than removing it.
+  Its permission row is a different question: `20260806000100_add_find_grant_documents_permission`
+  was among the seven migrations the 08-17 deploy never considered (`#295`), so prod still has no row
+  for it, and the tool now fails closed there. Same hand-apply as `20260729`/`20260803`.
 - **Prod's 27-row permission set is consistent with main's 21 tools + 6 phantom rows.** The three
   `grant_*` tools will land registered-but-unreachable until `#220` is done — unchanged from the
   paragraph above.

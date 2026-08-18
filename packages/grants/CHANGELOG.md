@@ -25,6 +25,68 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-18
+
+### Changed — permission migrations now assert their own role declaration (`DO UPDATE`, not `DO NOTHING`)
+
+Work package `#294`, commit `7a46554`. Every migration writing `tool_permissions` ended in
+`ON CONFLICT ("tool_name") DO NOTHING`, which makes the insert a **silent no-op whenever a row for
+that tool already exists**: the declared roles never land, Prisma still records the migration as
+applied, and the registry fails closed (`apps/mcp-server/src/permissions.ts:87`). The symptom is
+`permission_denied` for a caller the migration says is allowed, with no signal anywhere. It is the
+shared cause behind `#204` and `#262`.
+
+The documented procedure taught the broken clause in three places, now all corrected to
+`DO UPDATE SET "allowed_roles" = EXCLUDED."allowed_roles", "category" = EXCLUDED."category",
+"description" = EXCLUDED."description", "updated_at" = NOW()`:
+
+- root `CLAUDE.md` — step 6 of "Adding a new MCP tool", plus a paragraph stating the one tradeoff.
+- `.claude/skills/add-mcp-tool/SKILL.md` — step 6, so the skill cannot teach it either.
+- `packages/grants/admin/SPEC.md` §6 — with a warning that its own "closest template",
+  `20260616000000_add_skill_tool_permissions`, still reads `DO NOTHING`: copy its shape, not that clause.
+
+**The tradeoff, recorded because it is presumably why `DO NOTHING` was chosen.** `DO UPDATE`
+overwrites a role change an admin made on HQ `/admin` in the window between a merge and the deploy
+that applies the migration. A migration applies exactly once, so an edit made after it applied is
+never touched. Accepted deliberately: a migration that cannot assert its own declaration is worse,
+because it fails closed and silently.
+
+**The six existing `DO NOTHING` migrations are NOT corrected in place.** Prisma checksums applied
+migrations; editing one breaks `migrate deploy` and `migrate status` on every environment that already
+ran it. New guard: `packages/db/src/tool-permission-migrations.test.ts` (3 tests) fails the build on
+any *new* `DO NOTHING` insert, exempts the six by name, and fails if an exemption goes stale — so the
+allowlist cannot silently start covering a new file that reuses an exempted name. Verified in both
+directions with a probe migration. Suite after: **504 passing across 25 files, 0 skipped.**
+
+### Corrected — a green `migrate` job attests only to the PREVIOUS release's migration set
+
+Work package `#295` (Immediate). `#220` is closed and its fix works, and it is **not sufficient**.
+The job launches `aws ecs run-task --task-definition lp-internal-mcp-server` with no revision, so ECS
+resolves the latest registered revision — the *previous* deploy's image — and it runs before the new
+image is built. Deploy run `32047334123` (the PR #51 merge, first run with the fix) logged
+`12 migrations found in prisma/migrations`; the deployed commit `fc2a43d` carries **19**, and 12 is the
+count at `f756a44`, the PR #46 merge of 2026-08-13. The count is a directory count, not a database
+figure — `prisma migrate status` against the 19-dir tree locally prints `19 migrations found`.
+
+So seven migrations in the release were never considered, `20260729000000_add_grant_tool_permissions`
+among them, and the job printed "Database schema is up to date!" regardless. **The grant `tool_permissions`
+rows still very likely do not exist on RDS**, which keeps board A7 (`#163`) and `#262`'s note open, and
+means the three `grant_*` tools are deployed and will refuse every caller. Documents reconciled:
+root `CLAUDE.md` deploy block, `CLAUDE.md` §3 (this package) in both the tool-reachability and
+production-verification paragraphs, and `admin/NEXT-SESSION.md`.
+
+### Corrected — `#204`'s diagnosis, twice in one session
+
+First recorded as cause 1 (row missing), inferred from run `32047334123` applying `20260812000000`.
+That inference does not hold once `#295` is known: the run attests to the stale 12-migration set only.
+And this package's own `admin/NEXT-SESSION.md`, from the 2026-08-14 prod copy-down, states the row
+**is** present in prod from a hand-insert — so the 08-17 apply hit an existing row with `DO NOTHING`
+and plausibly wrote nothing. Cause 2 is now the more likely of the two, and `#204` stands unresolved
+with the fix unchanged: set the roles on HQ `/admin`, no deploy, effective within the 60s
+`CACHE_TTL_MS`.
+
+---
+
 ## 2026-08-17
 
 ### Changed — committed artifacts store LANGUAGE ONLY; a figure is a slot filled live, or the answer is rejected
