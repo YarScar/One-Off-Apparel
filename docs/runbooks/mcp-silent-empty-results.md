@@ -290,12 +290,6 @@ notes. The aggregate path is `{query_type: "aggregate", group_by: "employer"}`.
 The `by_employer` name invites the wrong call and returns identifiable data about
 minors to a caller who wanted a summary.
 
-### `query_competency({query_type: "scores"})` is unbounded
-
-With no `student_number` it returns every score row, which measured 238 KB and
-exceeds what a client can read in one response. It should require a student or
-paginate.
-
 ### `query_postsecondary` publishes a misleading rate
 
 `graduation_rate_pct` divides graduates by every student with an NSC record, most
@@ -349,3 +343,20 @@ this repo and gained a `dist/`-staleness guard worth pulling back.
 **Severity, for prioritising:** no path here sums currency from a truncated page,
 so unlike the North10 money tools there is no wrong dollar figure. The exposure is
 headcount and completeness claims.
+
+## Fixed since: truncation now reports itself (#276, #195)
+
+`query_competency({query_type: "scores"})` was unbounded, then capped at 1000 of ~2346 rows
+with nothing in the response saying so; `query_students({query_type: "list"})` returned
+`student_count: rows.length`, a page size under the name `query_enrollment`'s `total` path
+uses for a real `prisma.count()`; and `query_enrollment`'s `active_during` and `by_student`
+paths had no `orderBy` at all, so a truncated page was an arbitrary subset that could differ
+between two identical calls.
+
+All of them now emit the one envelope `query_finances` established — `record_count`,
+`total_matching`, `truncated`, `limit` — from `apps/mcp-server/src/result-envelope.ts`, and
+each paged query ends its `orderBy` on a unique column. `query_competency` gained
+`query_type: "growth_aggregate"`, which computes org-wide growth in the database over every
+matching row; it is the only growth figure safe to quote. Covered by
+`apps/mcp-server/src/__tests__/result-envelope.test.ts`, whose live-DB fixture front-loads low
+growth values so an aggregate that silently paged returns a visibly different number.

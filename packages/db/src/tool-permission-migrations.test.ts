@@ -42,11 +42,22 @@ function migrationNames(): string[] {
     .sort();
 }
 
+/**
+ * Strip `--` line comments before matching.
+ *
+ * Without this, a migration that *explains* the `ON CONFLICT ... DO NOTHING` defect in its
+ * header — which the correcting migrations are exactly the ones that need to — is reported
+ * as committing it. The check is about executable SQL, so the prose is removed first.
+ * Block comments are not stripped because no migration here uses them; a false positive
+ * from one would still fail loudly rather than pass silently.
+ */
+const stripComments = (sql: string): string => sql.replace(/--[^\n]*/g, '');
+
 const writesToolPermissions = (sql: string): boolean =>
-  /INSERT\s+INTO\s+"?tool_permissions"?/i.test(sql);
+  /INSERT\s+INTO\s+"?tool_permissions"?/i.test(stripComments(sql));
 
 const usesDoNothing = (sql: string): boolean =>
-  /ON\s+CONFLICT[^;]*?DO\s+NOTHING/is.test(sql);
+  /ON\s+CONFLICT[^;]*?DO\s+NOTHING/is.test(stripComments(sql));
 
 describe('tool_permissions migrations', () => {
   it('finds the migrations directory and at least one permission migration', () => {
@@ -75,6 +86,22 @@ describe('tool_permissions migrations', () => {
         '"updated_at" = NOW()`. `DO NOTHING` cannot correct or widen an existing row — see root ' +
         'CLAUDE.md step 6 of "Adding a new MCP tool".',
     ).toEqual([]);
+  });
+
+  it('reads executable SQL rather than prose, and still catches a real DO NOTHING', () => {
+    // The correcting migration for #204 documents the defect it supersedes in its header,
+    // so it contains the words `ON CONFLICT ... DO NOTHING` in a comment while its statement
+    // uses `DO UPDATE`. Before comments were stripped, that alone made it an offender —
+    // which would have pushed the next author to delete the explanation rather than the bug.
+    const corrector = readMigration('20260818000000_reconcile_grant_sourcing_evaluation_permission');
+    expect(corrector).not.toBeNull();
+    expect(writesToolPermissions(corrector as string)).toBe(true);
+    expect(usesDoNothing(corrector as string)).toBe(false);
+
+    // And the stripping must not have neutered the check itself.
+    expect(
+      usesDoNothing('-- fine\nINSERT INTO "tool_permissions" VALUES (1) ON CONFLICT ("tool_name") DO NOTHING;'),
+    ).toBe(true);
   });
 
   it('every exempted migration still exists and still needs its exemption', () => {

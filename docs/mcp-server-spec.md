@@ -625,13 +625,44 @@ and is rejected before the handler runs.
 
 ---
 
+### Truncation reporting (`query_competency`, `query_students`, `query_enrollment`, `query_finances`)
+
+Every query_type that returns a capped page of rows emits the same four keys:
+
+| Key | Meaning |
+|---|---|
+| `record_count` | Rows in **this response**. Never a population figure. |
+| `total_matching` | Rows matching the filter, counted in the database independently of `limit`. |
+| `truncated` | `record_count < total_matching` — the rows are a sample. |
+| `limit` | The cap applied, so a caller knows what to raise. |
+
+**Quote `total_matching`; never quote `record_count`.** Where a tool also returns a
+domain-specific name — `query_enrollment`'s and `query_students`'s `student_count` — that name
+now carries the true total on every path, matching `query_enrollment({query_type: "total"})`.
+`query_finances` additionally reports `total_matching_is_lower_bound` when a `contains` scan
+stopped early.
+
+---
+
 ### `query_competency`
 
-Per-student competency data (scores) or the rubric structure (skills + opportunity totals by phase and term).
+Per-student competency data (scores), the rubric structure (skills + opportunity totals by
+phase and term), or an org-wide growth aggregate.
 
-**Query types:** `scores`, `rubric`.
+**Query types:** `scores`, `rubric`, `growth_aggregate`.
 
-**Filters:** `student_number`, `competency` (partial match).
+**Filters:** `student_number`, `competency` (partial match), `limit` (default 500, max 1000;
+`scores` and `rubric` only).
+
+`scores` and `rubric` return a page and report it as one: `record_count`, `total_matching`,
+`truncated` and `limit` (see "Truncation reporting" below). `growth_aggregate` reads every
+matching row and returns scalars — `avg_growth`, `min_growth`, `max_growth`, `avg_baseline`,
+`avg_performance_level`, `avg_progress`, `row_count`, `student_count`, the per-column non-null
+counts that are the real denominators, and a `by_competency` breakdown.
+
+**Quote growth from `growth_aggregate`, never from `scores` rows.** `scores` capped at 1000 of
+~2346 rows and said nothing (#276), so any figure averaged from its response described an
+arbitrary slice of the organization.
 
 ---
 

@@ -4,6 +4,7 @@ import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr, parseNum, filterStr } from '../tool-helpers.js';
+import { resultEnvelope, clampLimit } from '../result-envelope.js';
 import { unmatchableFilterError, type FilterDomainCheck } from '../filter-domain.js';
 import {
   studentCurrentPhaseDomain,
@@ -14,7 +15,7 @@ import {
 const NAME = 'query_enrollment';
 
 const DESCRIPTION =
-  'Aggregate student enrollment data. Supports total headcount, phase status breakdowns, date-range active queries, cohort breakdowns, and per-student rows. Every response echoes filters_applied, and filters_ignored when a filter does not apply to the query_type, so a count is never silently unscoped. enrollment_status, current_phase, cohort and status are matched literally against the source values, which are short codes rather than words — enrollment_status held only E and N in production, so enrollment_status:"Active" is not a small result but a value that cannot match. A value absent from its column now returns a no_records error listing the values that column does hold, instead of an empty answer; a combination of real values that no student happens to have still returns an honest empty result.';
+  'Aggregate student enrollment data. Supports total headcount, phase status breakdowns, date-range active queries, cohort breakdowns, and per-student rows. Every response echoes filters_applied, and filters_ignored when a filter does not apply to the query_type, so a count is never silently unscoped. enrollment_status, current_phase, cohort and status are matched literally against the source values, which are short codes rather than words — enrollment_status held only E and N in production, so enrollment_status:"Active" is not a small result but a value that cannot match. A value absent from its column now returns a no_records error listing the values that column does hold, instead of an empty answer; a combination of real values that no student happens to have still returns an honest empty result. Row-returning query_types are paged: every response carries record_count (rows returned), total_matching (a real count over the whole filter, independent of limit), truncated and limit. Quote total_matching, never record_count, and treat truncated:true as "these rows are a sample".';
 
 const inputSchema = {
   query_type: z.enum([
@@ -261,7 +262,7 @@ export function registerQueryEnrollment(server: McpServer): void {
       const cohort = parseNum(raw, 'cohort');
       const startDate = filterStr(raw, 'start_date');
       const endDate = filterStr(raw, 'end_date');
-      const limit = Math.min(parseNum(raw, 'limit') ?? 500, 1000);
+      const limit = clampLimit(parseNum(raw, 'limit'));
 
       // Presence, not truthiness, everywhere below — `cohort: 0` is a filter, and a
       // filter dropped for being falsy is the defect this tool is being fixed for.
@@ -364,6 +365,11 @@ export function registerQueryEnrollment(server: McpServer): void {
           const rows = await prisma.studentPhaseOutcome.findMany({
             where,
             include: { student: { select: { canonicalName: true, studentNumber: true } } },
+            // This branch had no `orderBy` at all (#195), so a truncated page was
+            // whatever Postgres happened to return and could differ between two
+            // identical calls. `id` is the `@id`; it is what makes the order total,
+            // because `canonicalName` ties on duplicate names.
+            orderBy: [{ student: { canonicalName: 'asc' } }, { id: 'asc' }],
             take: limit,
           });
           // Counted, not inferred from `rows.length`. Under `take: limit` a wide window
@@ -375,7 +381,7 @@ export function registerQueryEnrollment(server: McpServer): void {
             query_type: 'active_during',
             phase: phaseFilter,
             student_count: matched,
-            ...(rows.length < matched ? { truncated: true, returned: rows.length, limit } : {}),
+            ...resultEnvelope(rows.length, matched, limit),
             students: rows.map((r) => ({
               student_number: r.student.studentNumber,
               canonical_name: r.student.canonicalName,
@@ -450,6 +456,8 @@ export function registerQueryEnrollment(server: McpServer): void {
           const rows = await prisma.student.findMany({
             where: scopedStudentWhere,
             include: { phaseOutcomes: true },
+            // Same missing-`orderBy` defect as `active_during` above (#195).
+            orderBy: [{ canonicalName: 'asc' }, { id: 'asc' }],
             take: limit,
           });
           // Counted, for the same reason as `active_during` above: under `take: limit`
@@ -461,7 +469,7 @@ export function registerQueryEnrollment(server: McpServer): void {
           return {
             query_type: 'by_student',
             student_count: matched,
-            ...(rows.length < matched ? { truncated: true, returned: rows.length, limit } : {}),
+            ...resultEnvelope(rows.length, matched, limit),
             students: rows.map((s) => ({
               id: s.id,
               student_number: s.studentNumber,
