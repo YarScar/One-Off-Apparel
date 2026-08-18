@@ -120,18 +120,23 @@ pnpm sync:all                   # all connectors in parallel
 #   - Manual: gh workflow run deploy.yml -f services=hq   (or all|mcp-server|aws-mcp-server|sync)
 # Task definitions live in infra/ecs/*-taskdef.json; the workflow pins the image to the commit SHA.
 #
-# CAVEAT (#295): the `migrate` job runs its one-off task against `--task-definition
-# lp-internal-mcp-server` with no revision, and runs BEFORE the new image is built — so it
-# applies migrations from the PREVIOUS release's image. A migration added by the commit being
-# deployed is invisible to it, and the job still reports success. Run 32047334123 saw 12
-# migrations where the deployed commit had 19. Until #295 lands, do not read a green `migrate` job
-# as "my migration ran".
+# MIGRATIONS (#295, fixed 2026-08-18 — NOT YET PROVEN BY A DEPLOY): a `build-mcp-server` job
+# now builds the image and registers a task definition revision pinned to the commit's SHA, and
+# `migrate` runs its one-off task against THAT revision. A final step re-reads the task log and
+# fails the job unless the "N migrations found in prisma/migrations" count the image reports
+# equals `find packages/db/prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l` for the
+# deployed commit. Do not un-pin `--task-definition`, and do not move `build-mcp-server` after
+# `migrate` — that ordering is the fix.
 #
-# The consequence is that migrations lag EXACTLY ONE DEPLOY: a migration merged at deploy N is
-# applied by deploy N+1, once N's image is the one the job resolves. That is the whole history —
-# 20260812000000 merged 2026-08-12 and applied at the 2026-08-17 deploy. Note this also defeats the
-# obvious hand-fix: a manual `aws ecs run-task` uses the same latest-revision image, so it only works
-# AFTER a deploy has registered the new one.
+# The historical behaviour, for reading old runs: `migrate` used `--task-definition
+# lp-internal-mcp-server` with no revision and ran BEFORE any image was built, so it applied the
+# PREVIOUS release's migration set and still reported success. Run 32047334123 saw 12 migrations
+# where the deployed commit had 19. Migrations therefore lagged EXACTLY ONE DEPLOY —
+# 20260812000000 merged 2026-08-12 and applied at the 2026-08-17 deploy. Any green `migrate` job
+# from before 2026-08-18 does NOT mean that commit's migration ran.
+#
+# Because of that lag, RDS is behind: the seven migrations in the writing/dev tree that run
+# 32047334123 never considered are still unapplied until the first deploy carrying this fix.
 
 # Database tools
 pnpm db:studio                  # open Prisma Studio
