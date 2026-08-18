@@ -124,8 +124,14 @@ pnpm sync:all                   # all connectors in parallel
 # lp-internal-mcp-server` with no revision, and runs BEFORE the new image is built — so it
 # applies migrations from the PREVIOUS release's image. A migration added by the commit being
 # deployed is invisible to it, and the job still reports success. Run 32047334123 saw 12
-# migrations where the deployed commit had 19. Until #295 lands, apply new migrations by hand
-# (ECS one-off task or bastion) and do not read a green `migrate` job as "my migration ran".
+# migrations where the deployed commit had 19. Until #295 lands, do not read a green `migrate` job
+# as "my migration ran".
+#
+# The consequence is that migrations lag EXACTLY ONE DEPLOY: a migration merged at deploy N is
+# applied by deploy N+1, once N's image is the one the job resolves. That is the whole history —
+# 20260812000000 merged 2026-08-12 and applied at the 2026-08-17 deploy. Note this also defeats the
+# obvious hand-fix: a manual `aws ecs run-task` uses the same latest-revision image, so it only works
+# AFTER a deploy has registered the new one.
 
 # Database tools
 pnpm db:studio                  # open Prisma Studio
