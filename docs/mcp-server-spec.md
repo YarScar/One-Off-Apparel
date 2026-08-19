@@ -543,10 +543,19 @@ Return a high-level financial overview — Aplos fund balances, a chart-of-accou
 Queries Aplos (`finance_snapshots` with `aplos:*` tab names) and Google Sheets fund balances directly.
 
 **`recent_gifts` was always empty until 2026-08-19 (#306).** It read `donor_gifts`, a table no
-connector writes. It now reads `development:giving history`. Two caveats carried in
-`recent_gifts_note`: these are the **last ten rows in sheet order**, not a computed top-ten-by-date —
-the tab's `date` cell is a display string (`"Aug 2025"`) and is not sortable — and they are
-all-Building-21 scope. Use `query_donors` for a Launchpad-scoped view.
+connector writes. It now reads `development:giving history`, **ordered by fiscal year, newest first**.
+
+Read the ordering caveat before quoting anything from it. The tab's `date` cell is a display string
+(`"Aug 2025"`) and does not sort, and **sheet order is not chronological** — rows 523–526 of the
+784-row tab are FY26 while its final rows are FY20, because older gifts were appended after newer
+ones. A first cut of this change took the last ten rows in sheet order and returned gifts from
+December 2019; the ordering is now computed from `fiscal_year`. So the field gives **ten gifts from the
+most recent fiscal years, not the ten most recent gifts**, and order within a fiscal year carries no
+meaning. All-Building-21 scope — use `query_donors` for a Launchpad-scoped view.
+
+Related, and worth knowing for any code reading these tabs: ordering a `finance_snapshots` query by
+`sourceId` is a **lexical** sort, so `development:giving history:99` sorts after `…:784`. `dev-crm.ts`
+sorts numerically on the parsed row number instead.
 
 **`aplos_funds` is pinned to one snapshot date.** The Aplos connector snapshots funds daily, so an
 unbounded "newest 50" spanned two `period` values and truncated the newest one — a caller reading the

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 
 import {
   DEV_TABS,
+  byFiscalYearDesc,
   cell,
+  fiscalYearNumber,
   donorNameOf,
   isLaunchpad,
   indexByContactId,
@@ -230,11 +232,82 @@ describe('summariseGiving', () => {
     expect(withGap.by_fiscal_year['FY27']).toBeUndefined();
   });
 
+  it('reports the fiscal-year span from the year keys, not from either end of the array', () => {
+    expect(all.first_fiscal_year).toBe('FY22');
+    expect(all.latest_fiscal_year).toBe('FY26');
+    // Order-independent: the span is derived from the keys, so shuffling the input cannot change it.
+    const shuffled = summariseGiving([...WPF_GIFTS].reverse());
+    expect(shuffled.first_fiscal_year).toBe('FY22');
+    expect(shuffled.latest_fiscal_year).toBe('FY26');
+  });
+
   it('reports an empty history without throwing', () => {
     const none = summariseGiving([]);
     expect(none.total).toBe(0);
     expect(none.gift_count).toBe(0);
-    expect(none.first_gift).toBeNull();
+    expect(none.first_fiscal_year).toBeNull();
+    expect(none.latest_fiscal_year).toBeNull();
+  });
+});
+
+/**
+ * The regression production caught. `get_finance_brief.recent_gifts` took the last ten rows in
+ * "sheet order" and returned the tab's OLDEST gifts — Dec 2019 on a tab whose row 523 is FY26.
+ * Two independent causes, both covered here.
+ */
+describe('byFiscalYearDesc', () => {
+  it('orders newest fiscal year first', () => {
+    const ordered = byFiscalYearDesc(WPF_GIFTS);
+    expect(ordered.map((r) => cell(r, 'fiscal_year'))).toEqual([
+      'FY26', 'FY26', 'FY25', 'FY25', 'FY24', 'FY24', 'FY22',
+    ]);
+  });
+
+  // Cause 1: ordering by `sourceId` in SQL is a LEXICAL sort, so `…:99` lands after `…:784`
+  // because '9' > '7'. "The last ten rows" under that ordering are the low-numbered oldest ones.
+  it('is not fooled by the lexical sourceId ordering that caused the bug', () => {
+    const rows = [
+      row({ fiscal_year: 'FY20', gross_amount: '$750.00' }, 'development:giving history:99'),
+      row({ fiscal_year: 'FY26', gross_amount: '$425,000.00' }, 'development:giving history:784'),
+    ];
+    // Lexically, ':99' > ':784' — so a naive slice(-1) would pick the FY20 row as "most recent".
+    expect([...rows].sort((a, b) => a.sourceId.localeCompare(b.sourceId)).at(-1)?.data['fiscal_year']).toBe('FY20');
+    // Sorting on the fiscal year gets it right regardless.
+    expect(cell(byFiscalYearDesc(rows)[0]!, 'fiscal_year')).toBe('FY26');
+  });
+
+  // Cause 2: even in true numeric row order the tab is not chronological — older gifts were
+  // appended after newer ones, so no slice off either end can mean "recent".
+  it('is not fooled by a tab whose sheet order is not chronological', () => {
+    const rows = [
+      row({ fiscal_year: 'FY26', gross_amount: '$100.00' }, 'development:giving history:523'),
+      row({ fiscal_year: 'FY20', gross_amount: '$200.00' }, 'development:giving history:780'),
+    ];
+    expect(cell(byFiscalYearDesc(rows)[0]!, 'fiscal_year')).toBe('FY26');
+  });
+
+  it('sorts rows with no parseable fiscal year last, without dropping them', () => {
+    const rows = [
+      row({ gross_amount: '$1.00' }, 'development:giving history:5'),
+      row({ fiscal_year: 'FY24', gross_amount: '$2.00' }, 'development:giving history:6'),
+    ];
+    const ordered = byFiscalYearDesc(rows);
+    expect(ordered).toHaveLength(2);
+    expect(cell(ordered[0]!, 'fiscal_year')).toBe('FY24');
+    expect(cell(ordered[1]!, 'fiscal_year')).toBeNull();
+  });
+
+  it('reads the launchpad pipeline tab’s `fy` column as well as `fiscal_year`', () => {
+    expect(fiscalYearNumber(row({ fy: 'FY27' }))).toBe(27);
+    expect(fiscalYearNumber(row({ fiscal_year: 'FY22' }))).toBe(22);
+    expect(fiscalYearNumber(row({ fiscal_year: '' }))).toBeNull();
+    expect(fiscalYearNumber(row({ fiscal_year: 'Nov 2026' }))).toBeNull();
+  });
+
+  it('does not mutate its input', () => {
+    const input = [...WPF_GIFTS];
+    byFiscalYearDesc(input);
+    expect(input.map((r) => r.data['gift_id'])).toEqual(WPF_GIFTS.map((r) => r.data['gift_id']));
   });
 });
 

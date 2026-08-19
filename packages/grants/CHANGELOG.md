@@ -27,6 +27,42 @@ entry can be verified rather than trusted.
 
 ## 2026-08-19
 
+### Fixed — `recent_gifts` returned the OLDEST gifts, because sheet order is not chronological
+
+Work package `#306`, found by testing the repoint against production immediately after deploying it.
+The repoint made `get_finance_brief.recent_gifts` return rows instead of an empty array — and they came
+back **FY20, Dec 2019 / Jan 2020**, on a tab whose row 523 is FY26. A field named `recent_gifts`
+returning the tab's oldest gifts is a worse failure than the empty array it replaced, because it looks
+like an answer.
+
+**Two independent causes, both real:**
+
+1. **`orderBy: { sourceId: 'asc' }` is a lexical sort.** `development:giving history:99` sorts *after*
+   `…:784`, because `'9' > '7'`. So the query was never in sheet order, and "the last ten rows" under
+   that ordering were the low-numbered — oldest — ones.
+2. **Sheet order is not chronological anyway.** Rows 523–526 of the 784-row giving-history tab are FY26
+   (Jul 2025) while its final rows are FY20. Older gifts were appended after newer ones, so *no* slice
+   off either end of that tab can mean "recent". The comment shipped in the first cut said sheet order
+   was "append-chronological in the observed data" — that assumption was wrong, and only production
+   data showed it.
+
+**Fix.** New `byFiscalYearDesc()` in `dev-crm.ts` sorts on the `fiscal_year` cell (`FY26` → 26), which
+is the only ordering key on these tabs that means anything — `date` is a display string (`"Aug 2025"`)
+and does not sort. `readDevTab` now sorts numerically on the row number parsed out of `sourceId`, so
+sheet order is actually sheet order for anything that wants it. Rows with no parseable fiscal year sort
+last rather than being dropped.
+
+The response note now says what the field is: **ten gifts from the most recent fiscal years, not the
+ten most recent gifts**, with no meaningful order within a year.
+
+`summariseGiving`'s `first_gift` / `last_gift` are replaced by `first_fiscal_year` /
+`latest_fiscal_year`, derived from the fiscal-year keys. The old pair read the `date` cell off either
+end of the array and was wrong for both reasons above. Nothing consumed them, so no caller changes.
+
+Seven new tests, including both causes reproduced directly: one asserts that a lexical `sourceId` sort
+picks the FY20 row as "most recent" and that `byFiscalYearDesc` does not, and one covers a
+non-chronological tab in true numeric order. Suite **562 passing across 27 files**.
+
 ### Changed — `query_donors`, `get_entity_brief` and `get_finance_brief` repointed at the Development CRM tabs
 
 Work package `#306`, item 4, decided and implemented rather than deferred. All three tools read the

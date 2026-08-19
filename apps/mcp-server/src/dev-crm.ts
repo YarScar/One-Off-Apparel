@@ -111,18 +111,64 @@ function isBlank(row: DevRow): boolean {
   return Object.keys(row.data).every((key) => cell(row, key) === null);
 }
 
-/** Read one development tab, dropping blank rows. */
+/**
+ * The row number out of a `sourceId` like `development:giving history:523`.
+ *
+ * Needed because ordering by `sourceId` in SQL is a **lexical** sort, under which
+ * `…:99` comes after `…:784` — `'9' > '7'`. So a query ordered by `sourceId` is not in sheet order,
+ * and "the last N rows" under that ordering are the low-numbered ones. That is not hypothetical: it
+ * made `get_finance_brief.recent_gifts` return the tab's *oldest* gifts (Dec 2019) while the field
+ * name promised its newest.
+ */
+function rowNumber(sourceId: string): number {
+  const match = /:(\d+)$/.exec(sourceId);
+  return match?.[1] ? Number.parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+/** Read one development tab in true sheet order, dropping blank rows. */
 export async function readDevTab(tabName: string): Promise<DevRow[]> {
-  const rows = await prisma.financeSnapshot.findMany({
-    where: { tabName },
-    orderBy: { sourceId: 'asc' },
-  });
+  const rows = await prisma.financeSnapshot.findMany({ where: { tabName } });
   return rows
     .map((r) => ({
       sourceId: r.sourceId,
       data: (r.rowData ?? {}) as Record<string, string>,
     }))
-    .filter((r) => !isBlank(r));
+    .filter((r) => !isBlank(r))
+    .sort((a, b) => rowNumber(a.sourceId) - rowNumber(b.sourceId));
+}
+
+/** The numeric part of a `FY26`-style fiscal year cell, or null. */
+export function fiscalYearNumber(row: DevRow): number | null {
+  const raw = cell(row, 'fiscal_year') ?? cell(row, 'fy');
+  const match = raw ? /^FY(\d{2,4})$/i.exec(raw) : null;
+  if (!match?.[1]) return null;
+  const n = Number.parseInt(match[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Rows newest fiscal year first.
+ *
+ * This is the only ordering on these tabs that means anything. The `date` cell is a display string
+ * (`"Aug 2025"`) and does not sort, and **sheet order is not chronological** — rows 523-526 of the
+ * 784-row giving-history tab are FY26 while its final rows are FY20, because older gifts were
+ * appended after newer ones. Anything claiming to return "recent" rows has to sort on the fiscal
+ * year, not take a slice off either end.
+ *
+ * Rows with no parseable fiscal year sort last rather than being dropped: they are real gifts, and
+ * silently discarding them is the failure mode this whole module exists to stop. Order within a
+ * fiscal year is sheet order and carries no meaning.
+ */
+export function byFiscalYearDesc(rows: readonly DevRow[]): DevRow[] {
+  return [...rows].sort((a, b) => {
+    const fa = fiscalYearNumber(a);
+    const fb = fiscalYearNumber(b);
+    if (fa === null && fb === null) return rowNumber(a.sourceId) - rowNumber(b.sourceId);
+    if (fa === null) return 1;
+    if (fb === null) return -1;
+    if (fa !== fb) return fb - fa;
+    return rowNumber(a.sourceId) - rowNumber(b.sourceId);
+  });
 }
 
 /**
@@ -235,8 +281,8 @@ export function summariseGiving(gifts: readonly DevRow[]): {
   readonly amounts_unparseable: number;
   readonly by_fiscal_year: Record<string, number>;
   readonly by_project: Record<string, number>;
-  readonly first_gift: string | null;
-  readonly last_gift: string | null;
+  readonly first_fiscal_year: string | null;
+  readonly latest_fiscal_year: string | null;
 } {
   const { total, counted, unparseable } = sumMoney(gifts, 'gross_amount');
   const byYear: Record<string, number> = {};
@@ -249,16 +295,22 @@ export function summariseGiving(gifts: readonly DevRow[]): {
     const project = cell(gift, 'project') ?? 'unspecified';
     byProject[project] = (byProject[project] ?? 0) + amount;
   }
-  const dates = gifts.map((g) => cell(g, 'date')).filter((d): d is string => Boolean(d));
+  // Derived from the fiscal-year keys, not from the first and last rows. An earlier revision read
+  // the `date` cell off either end of the array, which was wrong twice over: `date` is a display
+  // string that does not sort, and sheet order is not chronological on these tabs.
+  const years = Object.keys(byYear)
+    .map((fy) => ({ fy, n: /^FY(\d{2,4})$/i.exec(fy) }))
+    .filter((e): e is { fy: string; n: RegExpExecArray } => e.n !== null)
+    .map((e) => ({ fy: e.fy, n: Number.parseInt(e.n[1] ?? '', 10) }))
+    .filter((e) => Number.isFinite(e.n))
+    .sort((a, b) => a.n - b.n);
   return {
     total,
     gift_count: counted,
     amounts_unparseable: unparseable,
     by_fiscal_year: byYear,
     by_project: byProject,
-    // The `date` cell is a display string ("Aug 2025"), not a sortable date, so these are the first
-    // and last rows as the sheet orders them, not a computed min and max. Named accordingly.
-    first_gift: dates[0] ?? null,
-    last_gift: dates[dates.length - 1] ?? null,
+    first_fiscal_year: years[0]?.fy ?? null,
+    latest_fiscal_year: years[years.length - 1]?.fy ?? null,
   };
 }
