@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr } from '../tool-helpers.js';
+import { DEV_TABS, cell, donorNameOf, parseMoney, readDevTab } from '../dev-crm.js';
 
 const NAME = 'get_finance_brief';
 
@@ -75,11 +76,11 @@ export function registerGetFinanceBrief(server: McpServer): void {
           orderBy: [{ tabName: 'asc' }, { sourceId: 'asc' }],
           take: 500,
         }),
-        prisma.donorGift.findMany({
-          orderBy: { giftDate: 'desc' },
-          take: 10,
-          include: { donorContact: true },
-        }),
+        // Repointed at development:giving history, #306. This read `donor_gifts`, a table no
+        // connector writes, so `recent_gifts` was always an empty array while the tool's
+        // description promised recent gifts — and figures.ts named this field as the fallback for
+        // funder history, which made the fallback as dead as the tool it backed up.
+        readDevTab(DEV_TABS.givingHistory),
       ]);
 
       const mapSnapshot = (f: typeof aplosFunds[number]): { source_id: string; period: string | null; row_data: unknown } => ({
@@ -110,18 +111,26 @@ export function registerGetFinanceBrief(server: McpServer): void {
                 `field; use query_finances(fund_balances) with a limit for the full tab.`,
             }
           : {}),
-        recent_gifts: recentGifts.map((g) => ({
-          amount: g.amount,
-          gift_date: g.giftDate,
-          campaign_name: g.campaignName,
-          fund: g.fund,
-          donor:
-            g.donorContact?.organizationName ??
-            ([g.donorContact?.firstName, g.donorContact?.lastName]
-              .filter(Boolean)
-              .join(' ') ||
-              null),
-        })),
+        // The sheet's `date` is a display string ("Aug 2025"), not a sortable date, so these are the
+        // LAST ten rows in sheet order rather than a computed top-ten-by-date. Sheet order is
+        // append-chronological in the observed data, which makes them the most recent in practice —
+        // but that is a property of how the tab is maintained, not a guarantee, so the note says so.
+        recent_gifts: recentGifts
+          .slice(-10)
+          .reverse()
+          .map((g) => ({
+            amount: parseMoney(g.data['gross_amount']),
+            gift_date: cell(g, 'date'),
+            fiscal_year: cell(g, 'fiscal_year'),
+            fund: cell(g, 'fund_name'),
+            project: cell(g, 'project'),
+            donor: donorNameOf(g),
+          })),
+        recent_gifts_note:
+          'Repointed to development:giving history (#306); previously read the unpopulated donor_gifts ' +
+          'table and was always empty. These are the last ten rows in SHEET ORDER, not a computed ' +
+          'top-ten-by-date — the tab’s date cell is a display string ("Aug 2025") and is not sortable. ' +
+          'All-Building-21 scope; use query_donors for a Launchpad-scoped view.',
         sources_active: ['aplos', 'google_sheets'],
       };
     }),

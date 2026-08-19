@@ -172,6 +172,67 @@ contains:"Total Income"}` gives the closest live figure, the `launchpad_inc` fun
 income is a different measure from bookings and substituting one for the other is the error this row
 exists to prevent. A bookings figure comes from staff and is a projection, not a measured result.
 
+## Funder history
+
+Added 2026-08-19, OpenProject #306. There was no section here before, which is why a drafting run
+reached for `query_donors`, read `no_records`, and filed prior-funder giving history as
+`[DATA UNAVAILABLE]` for four funders that have collectively given seven figures.
+
+**Use `query_donors`.** It was repointed under #306 and now reads the `development:*` CRM tabs. Until
+that landed it read `donor_contacts` / `donor_gifts` / `donor_pipeline`, which no connector has ever
+written, so it answered `no_records` for every funder — and because it is *permitted, not ACL-denied*,
+that reply looks like a fact about the funder rather than an empty table. That is the misreading that
+cost the 2026-08-19 run. `get_finance_brief.recent_gifts` and `get_entity_brief`'s donor arm were
+repointed in the same change.
+
+| The question asks for | Call | Notes |
+|---|---|---|
+| Everything about one funder | `query_donors {query_type:"profile", donor_name:"William Penn Foundation"}` | **Start here.** One call returns giving summary, itemised history, grants tracker, both pipelines and prior declines. Defaults to **Launchpad scope** — see the scope note below, it changes the number. |
+| Whether this funder has declined us before | Same `profile` call — read `prior_declines` | Carries `prior_declines_note` when non-empty. A prior decline changes the framing as much as a prior gift does; check it before writing a first-approach narrative. |
+| A list of funders by type or status | `query_donors {query_type:"list", donor_type:"Foundations"}` | Substring match on the COA and status columns. |
+| Total raised, all donors | `query_donors {query_type:"summary"}` | Donor count and lifetime giving, split by fiscal year. |
+| Raw tab rows, or a figure the profile does not expose | `query_finances {query_type:"dev_*", contains:"…"}` | Six types: `dev_grants_tracker`, `dev_giving_history`, `dev_contacts`, `dev_prospect_pipeline`, `dev_launchpad_pipeline`, `dev_denied`. Use when you need a column `query_donors` does not map. **`contains` matches the whole serialized row**, so "William Penn" also returns Project Based Learning, Inc., whose *fund* is named William Penn. `query_donors` matches name columns only. |
+
+### Scope is not a detail — it changes the figure by six figures
+
+`query_donors` defaults to `launchpad_only: true`. William Penn Foundation, worked all the way
+through, gives **three different true numbers**:
+
+| Number | What it is |
+|---|---|
+| **$1,600,000** | All-time, all Building 21 projects |
+| **$1,500,000** | The FY24–FY26 three-year grant — what the KB's stored "$1.5M" claim means |
+| **$1,375,000** | All-time, **Launchpad only** |
+
+Because each year is **two gifts**: $425,000 to Launchpad plus $75,000 to Network Unrestricted. So
+"$500,000/yr" is the Building 21 figure and **Launchpad's share is $425,000/yr**. Quoting $500,000 as
+the Launchpad grant overstates it by $75,000 a year.
+
+Read `giving_summary.by_project` and `by_fiscal_year` and **say in the sentence which scope you
+mean**. This is a definitional conflict, not drift: the stored $1.5M was never wrong, it was scoped to
+the three-year grant. Resolving it to $1.6M "because the connector wins" would be the error.
+
+### A funder with no Contacts row still resolves
+
+The Contacts tab is a stewardship roster, not the set of everyone we have asked. A funder appearing
+only on the giving-history, pipeline or denied tabs comes back with `profile: null` and a
+`profile_note` — not `no_records`. Expect no program officer or Drive link on those, but the giving
+and decline records are real. If you get `no_records`, read the message: it distinguishes out-of-scope
+(retry with `launchpad_only: false`) from absent everywhere.
+
+### `dev_contacts` giving columns are broken at source
+
+`lifetime_giving`, `fy25_giving` and `fy26_giving` disagree with the gift rows — William Penn
+Foundation reads `$0.00` lifetime against a real `$1,600,000.00`, and Philadelphia Foundation `$100.00`
+against `$112,000.00`. `cy2025_giving` on the same William Penn row carries a correct `$500,000.00`, so
+the columns are **inconsistent rather than uniformly empty**: you cannot tell a true zero from a broken
+one by looking.
+
+`query_donors` does not read them — it sums the gift rows instead, which is also what makes
+`launchpad_only` mean anything for a total. If you go to `dev_contacts` directly, take stewardship
+fields only and never a giving figure. The fix belongs in the sheet, not in the connector or this
+layer; #306 records it.
+
 ## Competency
 
 `query_competency {query_type:"scores"}` **truncates at 1000 rows** against roughly 2346 in the

@@ -25,9 +25,12 @@
  * This module returns the exact `query_*` call to run; it never runs one. `runTool`'s permission
  * check keys on the INBOUND tool name, so a grant tool that read the database internally would be
  * authorised as itself rather than as `query_finances` — laundering finance and donor data past the
- * classifier. The KB's own reconciliation note records that `query_finances` and `query_donors` are
- * blocked in some modes. Keeping the calls in the caller's hands means each one is ACL-checked and
- * usage-logged under its own name, per person.
+ * classifier. The KB's own reconciliation note records that `query_finances` is blocked in some
+ * modes. Keeping the calls in the caller's hands means each one is ACL-checked and usage-logged
+ * under its own name, per person. (That note also named `query_donors` as blocked. It is not, and
+ * never was for this role. It *was* empty until #306 repointed it from the unpopulated
+ * `donor_contacts` tables at the `development:*` CRM tabs; it works now. See its `blocked` entry for
+ * the two things that still need care: default scope, and where its totals come from.)
  *
  * ## Drift versus definitional conflict
  *
@@ -52,7 +55,13 @@ export interface FigureCheck {
   /** The MCP tool to call. */
   readonly tool: string;
   /** Arguments to call it with, verbatim. */
-  readonly args: Readonly<Record<string, string>>;
+  /**
+   * The tool call's arguments. Widened from `Record<string, string>` 2026-08-19 (#306): tool inputs
+   * are not all strings — `launchpad_only` is a boolean and `limit` a number — and a work order that
+   * printed `launchpad_only: "true"` would be telling the drafter to send the wrong type. Both
+   * consumers interpolate these into a display string, so a non-string value needs no other change.
+   */
+  readonly args: Readonly<Record<string, string | number | boolean>>;
   /**
    * The population {@link args} actually returns, stated so a caller can compare it against what the
    * funder asked.
@@ -209,13 +218,28 @@ export const FIGURE_CHECKS: readonly FigureCheck[] = [
     key: 'prior_funding_wpf',
     claim: '$1.5M three-year William Penn grant from 2023, ending 6/30/26',
     appears_in: ['kb.sustainability'],
+    // #306 repointed `query_donors` at the `development:*` CRM tabs, so this is one call again. It
+    // was briefly redirected to `query_finances {dev_grants_tracker}` while `query_donors` still
+    // read the unpopulated `donor_contacts` tables; the tool now reads the same tabs and adds the
+    // per-project split, which a raw tab row cannot give you.
     tool: 'query_donors',
-    args: { query_type: 'profile', donor_name: 'William Penn Foundation' },
+    args: { query_type: 'profile', donor_name: 'William Penn Foundation', launchpad_only: true },
     population:
-      "Every recorded gift and grant from one named donor, all time.",
-    conflict_kind: 'drift',
+      'Every recorded gift from one funder, Launchpad-scoped. `giving_summary.by_project` splits ' +
+      'Launchpad from the other Building 21 projects and `by_fiscal_year` gives the schedule; ' +
+      '`grants_tracker` carries the lifecycle and period dates.',
+    conflict_kind: 'definitional',
     severity: 'high',
-    note: 'query_donors may be ACL-denied; fall back to get_finance_brief and flag if unavailable.',
+    note:
+      'THREE different true numbers here, and the stored claim is not wrong so much as scoped. ' +
+      'All-time Building 21 lifetime is $1,600,000. The FY24-FY26 three-year grant is $1,500,000 — ' +
+      'which is what the stored $1.5M claim means, so this is NOT simple drift. Launchpad-scoped ' +
+      'all-time is $1,375,000, because each year is two gifts: $425,000 to Launchpad plus $75,000 ' +
+      'to Network Unrestricted. Quoting $500,000/yr as Launchpad\'s grant overstates it by $75,000 ' +
+      'a year. Read by_project and by_fiscal_year and say which scope the sentence means. ' +
+      'Corrected 2026-08-19 (#306) — an earlier revision of this entry called the $1.5M/$1.6M gap ' +
+      'drift and told you the connector wins, which would have silently swapped a correct ' +
+      'three-year figure for an all-time one.',
   },
   {
     key: 'demographics_race',
@@ -562,6 +586,13 @@ export interface FigureWorkOrder {
   readonly kb_snapshot_date: string;
   readonly items: readonly FigureCheck[];
   readonly definitional_conflicts: readonly string[];
+  /**
+   * Per-tool caveats: reasons a call may not return the value the work order asks it for. Widened
+   * 2026-08-19 (#306) beyond ACL denial, which is what it originally held. A permitted tool over an
+   * unpopulated table (`query_donors`) and a reachable tab with wrong columns (`dev_contacts`) fail
+   * the drafter exactly as an ACL denial does, and there was no other channel that reached them.
+   * Consumers rendering this list should not label it "ACL-denied" — read `reason` for the kind.
+   */
   readonly blocked: readonly { readonly tool: string; readonly reason: string }[];
 }
 
@@ -622,9 +653,25 @@ export function buildFigureWorkOrder(kbRefs?: readonly string[]): FigureWorkOrde
       {
         tool: 'query_donors',
         reason:
-          'May be denied by the role ACL (donor PII). get_finance_brief carries recent gifts and may ' +
-          'settle a specific grant; it will not settle a donor profile. Leave the slot unfilled rather ' +
-          'than approximating.',
+          'Works as of 2026-08-19 (#306), and NOT ACL-denied — this entry used to claim donor PII made ' +
+          'it deniable, and then that it was permanently empty. It was empty: it read `donor_contacts` ' +
+          'and friends, which no connector writes. It now reads the same `development:*` CRM tabs ' +
+          '`query_finances`\'s `dev_*` types serve. Two things to know. (1) It defaults to ' +
+          'launchpad_only=true, and the scope changes every total — `scope` and `scope_note` on the ' +
+          'response say which one you got. (2) Its giving totals are SUMMED from gift rows, not read ' +
+          'from the Contacts tab, whose lifetime and fiscal-year columns are wrong at source. Prefer ' +
+          'it over raw `dev_*` rows for a funder profile: only it gives the per-project split that ' +
+          'separates a Launchpad grant from a Building 21 one.',
+      },
+      {
+        tool: 'query_finances { query_type: "dev_contacts" }',
+        reason:
+          'Reachable, and its giving columns are wrong at source. Recorded 2026-08-19 (#306): ' +
+          '`lifetime_giving`, `fy25_giving` and `fy26_giving` read $0.00 on rows whose ' +
+          'dev_grants_tracker lifetime total is six figures (William Penn: $0.00 here against ' +
+          '$1,600,000.00 there). The calendar-year columns (`cy2025_giving`) carry real values. Use ' +
+          'this tab for program officer, relationship owner and Drive links; take every giving figure ' +
+          'from dev_grants_tracker or dev_giving_history. The fix belongs in the sheet, not here.',
       },
     ],
   };

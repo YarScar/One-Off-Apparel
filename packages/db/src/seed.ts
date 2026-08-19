@@ -110,6 +110,141 @@ const DONORS = [
   },
 ];
 
+/**
+ * Development CRM rows, in the `development:*` shape `sync-development-crm.ts` writes and
+ * `query_donors` / `get_entity_brief` / `get_finance_brief` read since #306.
+ *
+ * These mirror {@link DONORS} deliberately. `DONORS` seeds `donor_contacts` / `donor_gifts` /
+ * `donor_pipeline`, which **no connector has ever written** — the three tools that read them were
+ * dead in production, and #306 repointed them here. The typed tables are left seeded so anything
+ * still reading them keeps working, but they are no longer the donor path.
+ *
+ * The column keys are copied from live `query_finances dev_*` responses, not invented, because the
+ * connector derives them from the sheet's own header row: a key that does not match the sheet would
+ * make the seed exercise a schema that only exists in the seed.
+ *
+ * William Penn is given the real two-gifts-per-year shape ($425,000 Launchpad + $75,000 Network)
+ * rather than one round number, so the `by_project` split and `launchpad_only` scoping are actually
+ * covered locally. A single-project fixture would pass whether or not scoping worked.
+ */
+const DEV_CRM = [
+  {
+    sourceId: 'development:contacts:2',
+    tabName: 'development:contacts',
+    period: null,
+    rowData: {
+      contact_id: 'D-197',
+      donor_name: 'William Penn Foundation',
+      status: 'Active',
+      projects: 'Launchpad, Network',
+      primary_fund: 'Network Unrestricted, William Penn',
+      donor_type_coa: '4000.11 - Foundations',
+      primary_first_name: 'Stephanie',
+      primary_last_name: 'Waller',
+      primary_email: 'grants@williampennfoundation.org',
+      relationship_owner: 'Development',
+      // Left wrong on purpose: this is what the real sheet serves for this funder, and the tools
+      // must not read it. See dev-crm.ts::summariseGiving.
+      lifetime_giving: '$0.00',
+      fy25_giving: '$0.00',
+      cy2025_giving: '$500,000.00',
+    },
+  },
+  {
+    sourceId: 'development:contacts:3',
+    tabName: 'development:contacts',
+    period: null,
+    rowData: {
+      contact_id: 'D-042',
+      donor_name: 'Christian Anonymous',
+      status: 'Active',
+      projects: 'Launchpad',
+      primary_fund: 'Launchpad Unrestricted',
+      donor_type_coa: '4000.12 - Individuals',
+      primary_first_name: 'Christian',
+      primary_last_name: 'Anonymous',
+      primary_email: 'christian@example.org',
+      lifetime_giving: '$5,100.00',
+    },
+  },
+  {
+    sourceId: 'development:giving history:2',
+    tabName: 'development:giving history',
+    period: null,
+    rowData: {
+      gift_id: 'G-0431', contact_id: 'D-197', donor_name: 'William Penn Foundation',
+      date: 'Aug 2024', fiscal_year: 'FY25', gross_amount: '$425,000.00',
+      fund_name: 'William Penn', project: 'Launchpad', grant_status: 'Funded',
+    },
+  },
+  {
+    sourceId: 'development:giving history:3',
+    tabName: 'development:giving history',
+    period: null,
+    rowData: {
+      gift_id: 'G-0430', contact_id: 'D-197', donor_name: 'William Penn Foundation',
+      date: 'Aug 2024', fiscal_year: 'FY25', gross_amount: '$75,000.00',
+      fund_name: 'Network Unrestricted', project: 'Network', grant_status: 'Funded',
+    },
+  },
+  {
+    sourceId: 'development:giving history:4',
+    tabName: 'development:giving history',
+    period: null,
+    rowData: {
+      gift_id: 'G-0500', contact_id: 'D-042', donor_name: 'Christian Anonymous',
+      date: 'Mar 2026', fiscal_year: 'FY26', gross_amount: '$5,000.00',
+      fund_name: 'Launchpad Unrestricted', project: 'Launchpad', grant_status: 'Funded',
+    },
+  },
+  {
+    sourceId: 'development:giving history:5',
+    tabName: 'development:giving history',
+    period: null,
+    rowData: {
+      gift_id: 'G-0501', contact_id: 'D-042', donor_name: 'Christian Anonymous',
+      date: 'Apr 2026', fiscal_year: 'FY26', gross_amount: '$100.00',
+      fund_name: 'Launchpad Unrestricted', project: 'Launchpad', grant_status: 'Funded',
+      recurring: 'Yes',
+    },
+  },
+  {
+    sourceId: 'development:grants tracker:2',
+    tabName: 'development:grants tracker',
+    period: null,
+    rowData: {
+      contact_id: 'D-197', funder: 'William Penn Foundation', coa: '4000.11 - Foundations',
+      status: 'Funded', lifecycle: 'Active', project_s: 'Launchpad, Network',
+      fund_s: 'Network Unrestricted, William Penn',
+      lifetime_total: '$500,000.00', received_to_date: '$500,000.00',
+      outstanding_pledge: '$0.00', unfunded_pledges: '$0.00',
+      // The withholding markers the real tracker carries. `cell()` must return null for these.
+      owner: '[VP]', deadline: '[VP]', po_contact: '[VP]', gh_grant_agree: 'NOT YET MARKED',
+    },
+  },
+  {
+    sourceId: 'development:prospect pipeline:2',
+    tabName: 'development:prospect pipeline',
+    period: null,
+    rowData: {
+      contact_id: 'D-197', donor_name: 'William Penn Foundation', prospect_id: 'P-0041',
+      month: 'Nov 2026', fiscal_year: 'FY27', fund_name: 'Launchpad Unrestricted',
+      project: 'Launchpad', grant_status: 'Prospect', gross_amount: '$225,000',
+      projected_amt: '$45,000', weighted: '20%',
+    },
+  },
+  {
+    sourceId: 'development:denied:2',
+    tabName: 'development:denied',
+    period: null,
+    rowData: {
+      donor_name: 'Eagles Social Justic Fund', month: 'Nov 2022', project: 'Launchpad',
+      fund_name: 'Launchpad Unrestricted', grant_status: 'Denied', gross_amount: '$25,000',
+      committed_amt: '$0',
+    },
+  },
+] as const;
+
 const FINANCE = [
   {
     sourceId: 'seed:fund_balances:1',
@@ -139,7 +274,7 @@ const FINANCE = [
 
 export async function seed(
   opts: { force?: boolean } = {},
-): Promise<{ studentsInserted: number; donorsInserted: number }> {
+): Promise<{ studentsInserted: number; donorsInserted: number; devCrmRowsInserted: number }> {
   const force = opts.force ?? process.env['SEED_FORCE'] === 'true';
 
   if (!force) {
@@ -148,7 +283,7 @@ export async function seed(
       prisma.donorContact.count(),
     ]);
     if (studentCount > 0 || donorCount > 0) {
-      return { studentsInserted: 0, donorsInserted: 0 };
+      return { studentsInserted: 0, donorsInserted: 0, devCrmRowsInserted: 0 };
     }
   }
 
@@ -232,5 +367,13 @@ export async function seed(
     await prisma.financeSnapshot.create({ data: f });
   }
 
-  return { studentsInserted: STUDENTS.length, donorsInserted: DONORS.length };
+  for (const d of DEV_CRM) {
+    await prisma.financeSnapshot.create({ data: { ...d, rowData: { ...d.rowData } } });
+  }
+
+  return {
+    studentsInserted: STUDENTS.length,
+    donorsInserted: DONORS.length,
+    devCrmRowsInserted: DEV_CRM.length,
+  };
 }

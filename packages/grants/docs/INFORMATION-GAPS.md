@@ -56,6 +56,9 @@ failed on 2026-08-11.
 - **Result:** the call succeeded and returned a 39-fund list with **no balances**, a 234-account
   category summary, 20 recent transactions, and empty `sheet_fund_balances` and `recent_gifts`.
   This is not an ACL denial; the tool carries no income or expense total.
+  *`recent_gifts` was empty because it read `donor_gifts`, a table no connector writes; repointed at
+  `development:giving history` on 2026-08-19 under `#306`, so it now returns rows. That does not change
+  this finding — `get_finance_brief` still carries no income or expense total.*
 - **Blocked on it:** Hamilton Q3 "Total Cost" (the pipeline classified it `fetch_figure` and pointed
   at this call), WPF Q11 "Request Amount", JFF Q8 "Budget Summary". See also §5.1.
 - **Re-tested 2026-08-12 — wrong call, and the tool overclaimed.** `get_finance_brief` genuinely
@@ -176,6 +179,20 @@ legal name/EIN."
 The Black-or-Brown and PCEP conflicts are marked `[STAFF]` in every draft that uses them rather than
 resolved. `query_enrollment(by_race)` returned the 301 detail: Asian 40, White alone 10, undisclosed
 3. The PCEP denominator must be named in whatever sentence ends up filed (§8.3 sharpens why).
+
+**Correction, 2026-08-19 — the PCEP row above is not a symmetric definitional conflict.** Candidate B
+is not merely a different denominator; it is contradicted by the data the platform holds.
+`query_certifications` reports by **phase**, not by cohort, and the phase split accounts for every
+attempt on record: **Lightspeed 14 of 14 = 100%**, **Launchpad 101 18 of 45 = 40%** (14 + 45 = 59,
+14 + 18 = 32). The 40% sits **below the bottom of the "70–100%" range**, so no reading of the phase
+data supports the range as a program-wide claim. `docs/grant-data-triage/H2.4-outcome-reconciliation.md`
+reached the same conclusion from the report set independently — its only PCEP datapoint (~half of 30+
+seniors, R6) aligns with the 54.2% aggregate.
+
+**Do not quote "70–100% per cohort" until someone produces cohort-level numbers**, which no
+`query_certifications` query_type returns. Candidate A, or a named phase figure, is the only verifiable
+option. Note the phase filter values are `Lightspeed` and `_101` — with the leading underscore.
+See `drafts/runs/2026-08-19/GAPS-AND-UNCERTAINTIES.md` B2.
 
 ---
 

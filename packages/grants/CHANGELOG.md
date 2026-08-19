@@ -25,6 +25,244 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-19
+
+### Changed — `query_donors`, `get_entity_brief` and `get_finance_brief` repointed at the Development CRM tabs
+
+Work package `#306`, item 4, decided and implemented rather than deferred. All three tools read the
+typed `donor_contacts` / `donor_gifts` / `donor_pipeline` tables, which **no connector has ever
+written**. They now read the `development:*` tabs in `finance_snapshots` — the rows `query_finances`'s
+`dev_*` types serve — through a new shared reader, `apps/mcp-server/src/dev-crm.ts`.
+
+The alternative was a Givebutter connector to populate the typed tables. Rejected: its advantage was
+keeping typed relations, and once the data was already reachable that bought ergonomics for a sync that
+does not exist, while leaving two documented routes to one answer with one of them dead and returning a
+reply indistinguishable from a real negative.
+
+**Four things the repoint had to get right.** Each would otherwise have swapped a silent zero for a
+silent wrong number, which is worse:
+
+1. **`launchpad_only` was accepted and never read.** Every response was all-Building-21 scope while the
+   description promised Launchpad-only. It now defaults to `true` and is applied, and every response
+   carries `scope` and `scope_note`.
+2. **Giving is summed from gift rows, not read from `dev_contacts`.** Summing is also what makes
+   `launchpad_only` mean anything for a total — a precomputed all-scope column cannot express scope.
+3. **Totals are split by project** (`giving_summary.by_project`). See the figure correction below.
+4. **A funder with no Contacts row still resolves.** Contacts is a stewardship roster, not the set of
+   everyone we have asked. A name found only on the giving-history, pipeline or denied tabs returns a
+   profile with `profile: null` and a `profile_note` rather than `no_records`. Without it a funder that
+   had *declined* us was invisible — the single most framing-relevant record there is. This was caught
+   by its own test, not by review.
+
+Name matching is confined to the name columns. `query_finances`'s `contains` matches the serialized
+row, so "William Penn" there also returns **Project Based Learning, Inc.**, whose `primary_fund` is
+named "William Penn". Reporting one organisation's giving under another's name is worse than returning
+nothing. `no_records` now distinguishes out-of-scope, absent-from-Contacts, and absent-everywhere.
+
+`[VP]` and `NOT YET MARKED` are withholding markers in the grants tracker, not values. `cell()` maps
+them to `null` so the literal string `[VP]` cannot reach a draft as a deadline or a program officer.
+
+**`packages/db/src/seed.ts` now seeds `development:*` rows**, including William Penn's real
+two-gifts-per-year split, so local dev and CI exercise the production path. The old integration test
+asserted `total_donors === 2` against the seeded typed tables — it passed in CI while production
+returned nothing, which is why this survived as long as it did.
+
+Coverage: `apps/mcp-server/src/dev-crm.test.ts` (28 unit tests over the parsers and scope logic,
+fixtures copied from live probes rather than invented, since the connector derives column keys from the
+sheet's own header row) plus six integration tests. Suite **555 passing across 27 files**, clean
+`pnpm -r typecheck`, clean `pnpm lint`.
+
+`FigureCheck.args` widened from `Record<string, string>` to `Record<string, string | number | boolean>`
+— `launchpad_only` is a boolean, and a work order printing `launchpad_only: "true"` would tell the
+drafter to send the wrong type. `SlotRequirement.args`, `figure_call.args` and `figureCallsFor` widened
+with it.
+
+### Corrected — the William Penn figure is a scope difference, not drift, and Launchpad's share is $425,000/yr
+
+Also `#306`, found by running the repointed tool against live data. The earlier entry below called the
+$1.5M-versus-$1.6M gap drift and said the connector wins. **That would have been wrong**, and it would
+have replaced a correct figure with an incorrect one.
+
+Three numbers, all true, all different:
+
+| Figure | Population |
+|---|---|
+| **$1,600,000** | All-time, all Building 21 projects |
+| **$1,500,000** | The FY24–FY26 three-year grant — what the KB's stored "$1.5M" claim means |
+| **$1,375,000** | All-time, **Launchpad only** |
+
+Because each year is **two gifts**: `$425,000` to Launchpad plus `$75,000` to Network Unrestricted,
+in FY24, FY25 and FY26, plus a `$100,000` FY22 gift. So "$500,000/yr" is the Building 21 figure and
+**Launchpad's share is $425,000/yr**. Quoting $500,000 as the Launchpad grant overstates it by $75,000
+a year, and the `#304` run's FUNDER-HISTORY.md records $500,000/yr without the split.
+
+`prior_funding_wpf` is therefore reclassified from `drift` to **`definitional`** — which routes it to
+staff escalation instead of silent connector-wins resolution — and points back at `query_donors`
+`profile` now that one call returns the split. `figure-cuts.md` carries the worked table.
+
+### Fixed — funder history is in `query_finances dev_*`, not `query_donors`, which reads tables nothing populates
+
+Work package `#306`. The `#304` run recorded prior-funder giving history as `[DATA UNAVAILABLE]` for
+all four targets because `query_donors` returned `no_records` and the run read that as an ACL denial.
+Both halves were wrong, and the second is the more serious one.
+
+**`query_donors` is permitted, and structurally empty.** The `donor_contacts`, `donor_gifts` and
+`donor_pipeline` tables have **no connector writing them** — `packages/db/src/seed.ts` is their only
+writer in the repository, and Givebutter, the source `schema.prisma` names on
+`donor_contacts.givebutter_contact_id`, has no connector at all. So `no_records` does not mean "this
+funder has not given"; it means no donor is recorded anywhere. That failure mode is invisible: the
+reply is well-formed and per-funder, so it reads as a fact about the funder.
+
+**The documented fallbacks are dead too.** `figures.ts` told callers to fall back to
+`get_finance_brief`; that tool reads `donorGift` (`apps/mcp-server/src/tools/get-finance-brief.ts:78`),
+the same empty table. `get_entity_brief` reads all three. There was no working path.
+
+**Funder history is live in the `development:*` sheet tabs**, through `query_finances`. Six `dev_*`
+query types, not the four first identified — `dev_denied` and `dev_launchpad_pipeline` matter as much
+as the rest, since a prior decline reframes an application exactly as a prior gift does:
+
+| Query type | Tab | Holds |
+|---|---|---|
+| `dev_grants_tracker` | `development:grants tracker` | Per-funder lifetime total, received to date, outstanding pledges, lifecycle |
+| `dev_giving_history` | `development:giving history` | Every gift: donor, date, fiscal year, gross amount, fund, project, grant status |
+| `dev_contacts` | `development:contacts` | Program officer, relationship owner, notes, Drive folder link. **Giving columns broken — see below.** |
+| `dev_prospect_pipeline` | `development:prospect pipeline` | The full multi-fund ask behind one Launchpad pipeline row |
+| `dev_launchpad_pipeline` | `development:launchpad pipeline` | Launchpad-scoped open asks |
+| `dev_denied` | `development:denied` | Prior declines |
+
+Worked example, and it takes both tabs: `dev_grants_tracker` gives William Penn Foundation a lifetime
+**$1,600,000.00**, all received; `dev_giving_history` itemises **$500,000/yr in FY24, FY25 and FY26**,
+ending 6/30/26. The tracker alone gives a total with no schedule. Under the old information P-0041 is a
+cold $225,000 prospect at 20% probability; under the new it is a renewal against a grant that just
+ended.
+
+Landed:
+
+- `src/figures.ts` — `prior_funding_wpf` now calls `query_finances {query_type:"dev_grants_tracker",
+  contains:"William Penn"}`; its `note` says not to use `query_donors` and why. The `blocked` entry for
+  `query_donors` is rewritten from "may be denied (donor PII)" to permitted-and-unpopulated, with the
+  six `dev_*` types named. The module header's claim that the KB records `query_donors` as blocked is
+  corrected.
+- `FigureWorkOrder.blocked` — widened from ACL denials to per-tool caveats generally, with a doc
+  comment saying so, because a permitted-but-empty tool fails a drafter identically and there was no
+  other channel that reached them.
+- `.claude/skills/grant-writing/references/figure-cuts.md` — new **Funder history** section. There was
+  none, which is why the run reached for `query_donors` in the first place.
+- `.claude/skills/grant-writing/references/figures.md` — the ACL-denial section no longer names
+  `query_donors` as refusable.
+- `.claude/skills/grant-writing/scripts/prep.mjs` — the caveats heading is no longer
+  `TOOLS THAT MAY BE ACL-DENIED`. Calling a permitted-but-empty tool an ACL denial tells the drafter to
+  expect a permission error and treat the tool as unavailable *to them* rather than wrong *for
+  everyone* — a different and wrong next action.
+
+**Decided and done — see the repoint entry above.** This paragraph originally left open whether
+`donor_contacts` should be populated by a Givebutter connector or whether the three tools should be
+repointed at the `dev_*` tabs. Repointed. The trap this described — two documented paths to one answer,
+one of them dead — is closed.
+
+The `donor_contacts` / `donor_gifts` / `donor_pipeline` tables and their Prisma models are **left in
+place**, still seeded, and no longer on any tool's read path. Dropping them is a destructive migration
+with no caller asking for it; if nothing claims them by the time someone next touches the schema, that
+is the moment to remove them.
+
+### Fixed — `dev_contacts` fiscal-year and lifetime giving columns are wrong at source
+
+Also `#306`. `dev_contacts` reports `lifetime_giving` of **$0.00** for William Penn Foundation and
+**$100.00** for Philadelphia Foundation, against `dev_grants_tracker` totals of **$1,600,000.00** and
+**$112,000.00**. `fy25_giving` and `fy26_giving` are `$0.00` on every row inspected while
+`cy2025_giving` carries real values — the calendar-year columns work and the fiscal-year and lifetime
+columns do not.
+
+The fix belongs in the sheet, not in the connector or this layer, so nothing was changed in code beyond
+recording it: a `blocked` entry in `figures.ts` and a subsection in `figure-cuts.md`. **Any draft or
+tool reading `lifetime_giving` from that tab is reading a wrong number today.** Take giving figures
+from `dev_grants_tracker` or `dev_giving_history`; use `dev_contacts` for stewardship fields only.
+
+### Fixed — `prep.mjs` refused to run on a correct seed
+
+Work package `#307`. `prep.mjs` gated on `integrity.length > 0`, but since `#275` a correctly
+maintained seed returns **exactly one `medium`** warning (`stored_figure_unsourced`, the `FIGURE_DEBT`
+register) and the guarantee is **zero `high`** — stated in `CLAUDE.md` §4 item 17 and encoded in
+`data.test.ts::BASELINE_CODES`. So step 1 of the documented drafting workflow could not be run at all,
+and its failure message said the opposite of what was true:
+
+```
+REFUSING: seed integrity report is not empty (1 warnings).
+Fix the seed before drafting — a defect here propagates into a funder-facing draft.
+```
+
+There was nothing to fix. This is the failure mode `CLAUDE.md` §4 item 17 warned about as a hazard;
+it had already shipped. The `#304` run worked around it with a local copy gated on `high` only —
+correct, but not the shipped path, and the skill's own "do not skip the deterministic layer" section
+forbids the other way out.
+
+- Gate is now `high`-only. Non-blocking warnings are printed, one truncated line each, then a note
+  saying they are expected. The register's `message` concatenates all 11 debt entries into ~2,600
+  characters; printed in full it buried the work order beneath it.
+- The success line no longer prints `SEED integrity clean`, which was a false statement whenever the
+  register was non-empty — i.e. always. It now reads
+  `SEED integrity zero high, 1 non-blocking (stored_figure_unsourced); 12 questions`.
+- `--json` output carries a new `seed_integrity: { high, non_blocking }`, so a consumer cannot infer
+  "exit 0, therefore the report was empty".
+- `count.mjs` and `gapfill.mjs` were checked for the same pattern. Neither has the gate; `count.mjs`'s
+  `length > 0` checks are em-dash and jargon scans, where gating on presence is correct.
+
+Verified: all ten fixtures in `seed/forms/` now exit 0 through `prep.mjs`. Suite unchanged at **522
+passing across 26 files**, clean `pnpm -r typecheck`.
+
+### Added — FY27 grant run for four prospects (`drafts/runs/2026-08-19/`)
+
+Work package `#304`. Drafted four FY27 applications identified from the Prospect Pipeline spreadsheet
+(`1CoVgJDiRuXmIBekGdxFq8k8A65yh525b76Hr-S7SeCM`): P-0041 William Penn ($225,000), P-0047 Philadelphia
+Foundation DAF ($30,000), P-0033 Siegel Family Endowment ($100,000), P-0048 Comcast ($150,000). The
+run directory carries a figure ledger, a consolidated gaps report, and the four drafts.
+
+The William Penn and Philadelphia Foundation answer sets in `drafts/answers/` were **refreshed, not
+rewritten** — carried forward verbatim except for figures that drifted since 2026-08-17. Siegel and
+Comcast have no captured form and are concept notes organised against the question bank's
+high-frequency canonical questions; that is stated at the top of each file.
+
+### Changed — the "70-100% per cohort" PCEP claim is unverifiable and must not be quoted
+
+`docs/runs/2026-08-11` and the 2026-08-17 work order both list `cert_pass_rate` as a definitional
+conflict between an all-time 54.2% and "per-cohort 70-100%". The per-cohort range **cannot be produced
+by any tool**. `query_certifications` reports by *phase*, not cohort, and the phase figures are
+**14/14 = 100% (Lightspeed)** and **18/45 = 40% (Launchpad 101)** — the 40% sits below the bottom of
+the stated range. Until someone produces cohort-level numbers, quoting "70-100% per cohort" states a
+range the platform contradicts. Recorded in `drafts/runs/2026-08-19/GAPS-AND-UNCERTAINTIES.md` B2.
+
+Note the phase filter values are `Lightspeed` and `_101` — with the leading underscore, which
+`query_certifications({query_type:"by_phase"})` returns and which the `phase` filter requires
+literally.
+
+### Changed — `query_finances` was NOT ACL-denied; three grant tools were
+
+The 2026-08-17 work order warns that `query_finances` and `query_donors` "may be ACL-denied" and to
+prefer `get_finance_brief`. In this run **`query_finances` was permitted** and `get_finance_brief`
+turned out to be the weaker tool for the purpose: it returns no income/expense summary at all, only
+fund balances, a chart-of-accounts count, and recent transactions. `query_finances({query_type:
+"annual"})` with a `contains` filter is the call that actually produces the FY totals.
+
+Denied for this role instead: **`grant_build_draft`** and **`find_grant_documents`**. The second one is the one that hurts — it is the only tool that can see inside the
+Drive `Grants` tree, so this run could not check whether Siegel or Comcast material exists there.
+That is discovered work needing its own work package related to `#304`.
+
+**`query_donors` was originally listed here as denied. It is not — see the 2026-08-19 `#306` entry
+below.** It is permitted and returns `no_records` for every funder because nothing populates the
+tables behind it. This run misread that as a denial and filed prior-funder giving history as
+`[DATA UNAVAILABLE]` for all four targets.
+
+### Documented — Comcast NBCUniversal Local Impact Grants: Launchpad fails the budget-size gate
+
+The question bank holds four Comcast eligibility criteria and no Comcast narrative questions. Launchpad
+fails the **$1,000,000 total-expense ceiling** on arithmetic — FY2026 total expense is $1,732,500.06 —
+and arguably fails the **schools and educational institutions exclusion**, since Building 21 is a
+competency-based school network. Screen in `drafts/runs/2026-08-19/P-0048-comcast.md`. The $150,000
+pipeline ask is also well above typical Local Impact Grant size, so the row may target a different
+Comcast vehicle entirely.
+
+---
+
 ## 2026-08-18
 
 ### Changed — permission migrations now assert their own role declaration (`DO UPDATE`, not `DO NOTHING`)

@@ -103,7 +103,20 @@ query them; there is nothing stored to fall back on.
 
 ## ACL denial
 
-`query_finances` (sensitive finance data) and `query_donors` (donor PII) may be refused by your role.
+`query_finances` (sensitive finance data) may be refused by your role.
+
+**Corrected 2026-08-19 (#306): `query_donors` is not ACL-denied, and it works now.** This section used
+to name it as refusable for donor PII. It is permitted — and until #306 it was *empty*, returning
+`no_records` for every funder because nothing populated the tables behind it. That reply reads like
+"this funder is not a donor" when the truth was that no donor was recorded at all, which is how a
+drafting run came to file `[DATA UNAVAILABLE]` for four funders with real giving history.
+
+#306 repointed `query_donors`, `get_finance_brief.recent_gifts` and `get_entity_brief`'s donor arm at
+the `development:*` CRM tabs. Use `query_donors {query_type:"profile"}` for funder history — one call
+covers giving, grants tracker, both pipelines and prior declines. **It defaults to Launchpad scope, and
+the scope changes the figure by six figures**; see
+[`figure-cuts.md`](./figure-cuts.md#funder-history) for the worked William Penn case and the
+`dev_contacts` caveat.
 
 **Corrected 2026-08-17: `get_finance_brief` is not a fallback for budget questions.** It returns fund
 and account metadata, an account count summary, a recent-transaction sample, and sheet fund balances.

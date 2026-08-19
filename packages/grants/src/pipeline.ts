@@ -196,7 +196,7 @@ export interface AnswerPlan {
   /** The text carries a currency, percentage, or multi-digit figure that must be verified live. */
   readonly carries_figures?: boolean;
   /** Present on a `fetch_figure` result: the exact `query_*` call the caller must run. */
-  readonly figure_call?: { readonly tool: string; readonly args: Readonly<Record<string, string>> };
+  readonly figure_call?: { readonly tool: string; readonly args: Readonly<Record<string, string | number | boolean>> };
   /** Present when the answer came from a per-question structured value, not the slot's narrative. */
   readonly from_structured?: boolean;
   /**
@@ -915,7 +915,7 @@ export function renderMarkdown(pkg: DraftPackage): string {
             : s.tool === undefined
               ? '**no call recorded — staff**'
               : `\`${s.tool}\`(${Object.entries(s.args ?? {})
-                  .map(([k, v]) => `${k}: ${v}`)
+                  .map(([k, v]) => `${k}: ${String(v)}`)
                   .join(', ')})${s.needs_staff_decision ? ' **+ staff decision**' : ''}`;
         L.push(`| \`{{${s.slot}}}\` | ${s.describes} | ${from} | ${s.population ?? '—'} |`);
       }
@@ -930,7 +930,7 @@ export function renderMarkdown(pkg: DraftPackage): string {
     // A live-figure field has no stored answer to show; the work is the named call.
     if (r.figure_call !== undefined) {
       const args = Object.entries(r.figure_call.args)
-        .map(([k, v]) => `${k}: ${v}`)
+        .map(([k, v]) => `${k}: ${String(v)}`)
         .join(', ');
       L.push(
         `Run \`${r.figure_call.tool}\` with (${args}) and write the returned figure. ` +

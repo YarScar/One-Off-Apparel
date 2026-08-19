@@ -777,7 +777,7 @@ export interface SlotRequirement {
   readonly describes: string;
   /** The call to run, on a `live` slot whose check resolves. */
   readonly tool?: string;
-  readonly args?: Readonly<Record<string, string>>;
+  readonly args?: Readonly<Record<string, string | number | boolean>>;
   /**
    * What {@link SlotRequirement.args} actually returns, from the check's `population`.
    *
@@ -834,8 +834,8 @@ export function resolveSlots(text: string): SlotRequirement[] {
  * Deduplicated by tool and args, because one call fills many slots: `kb.metrics` needs eleven slots
  * from five calls, and a caller driving off the slot list rather than this would make eleven.
  */
-export function figureCallsFor(text: string): { tool: string; args: Readonly<Record<string, string>> }[] {
-  const seen = new Map<string, { tool: string; args: Readonly<Record<string, string>> }>();
+export function figureCallsFor(text: string): { tool: string; args: Readonly<Record<string, string | number | boolean>> }[] {
+  const seen = new Map<string, { tool: string; args: Readonly<Record<string, string | number | boolean>> }>();
   for (const req of resolveSlots(text)) {
     if (req.tool === undefined) continue;
     const args = req.args ?? {};
