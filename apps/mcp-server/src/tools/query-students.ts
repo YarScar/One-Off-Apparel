@@ -4,6 +4,7 @@ import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr, parseNum, filterStr } from '../tool-helpers.js';
+import { resultEnvelope, clampLimit } from '../result-envelope.js';
 import { unmatchableFilterError, type FilterDomainCheck } from '../filter-domain.js';
 import {
   studentCurrentPhaseDomain,
@@ -16,7 +17,7 @@ import {
 const NAME = 'query_students';
 
 const DESCRIPTION =
-  'Population-level analytics on the students table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table. enrollment_status, current_phase, cohort, hs_graduation_year and withdrawal_code are matched literally against the source values, which are short codes rather than words — enrollment_status held only E and N in production, so enrollment_status:"Active" is not a small result but a value that cannot match. A value absent from its column returns a no_records error listing the values that column does hold, instead of an empty answer; a combination of real values that no student happens to have still returns an honest empty result. school is a substring match and is not checked this way.';
+  'Population-level analytics on the students table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table. enrollment_status, current_phase, cohort, hs_graduation_year and withdrawal_code are matched literally against the source values, which are short codes rather than words — enrollment_status held only E and N in production, so enrollment_status:"Active" is not a small result but a value that cannot match. A value absent from its column returns a no_records error listing the values that column does hold, instead of an empty answer; a combination of real values that no student happens to have still returns an honest empty result. school is a substring match and is not checked this way. Row-returning query_types are paged: every response carries record_count (rows returned), total_matching (a real count over the whole filter, independent of limit), truncated and limit. Quote total_matching, never record_count, and treat truncated:true as "these rows are a sample".';
 
 const inputSchema = {
   query_type: z.enum(['numeric_stats', 'breakdown', 'list']),
@@ -163,7 +164,7 @@ export function registerQueryStudents(server: McpServer): void {
       const filterField = filterStr(raw, 'filter_field');
       const filterMin = parseNum(raw, 'filter_min');
       const filterMax = parseNum(raw, 'filter_max');
-      const limit = Math.min(parseNum(raw, 'limit') ?? 500, 1000);
+      const limit = clampLimit(parseNum(raw, 'limit'));
 
       // Before any counting. A value its column does not contain makes every branch below
       // return an empty answer that reads as a fact about the program.
@@ -287,14 +288,29 @@ export function registerQueryStudents(server: McpServer): void {
         };
       }
 
-      const rows = await prisma.student.findMany({
-        where,
-        orderBy: [{ canonicalName: 'asc' }],
-        take: limit,
-      });
+      // Counted over `where`, independent of `limit`. `student_count: rows.length` was a
+      // page size wearing the name that `query_enrollment`'s `total` path uses for a real
+      // `prisma.count()` (#195) — the same field name meaning a total on one tool and
+      // `min(actual, 500)` here, with nothing in the response telling them apart. The
+      // shared envelope (`record_count` / `total_matching` / `truncated` / `limit`) is now
+      // the thing to read; `student_count` is kept for existing callers and, from here on,
+      // carries the true total like everywhere else.
+      const [total, rows] = await Promise.all([
+        prisma.student.count({ where }),
+        prisma.student.findMany({
+          where,
+          // `canonicalName` alone is not unique, so duplicate names tied and reordered
+          // between identical calls, making a truncated page an irreproducible subset.
+          // `id` is the `@id`, so it is the tie-break that guarantees a total order.
+          orderBy: [{ canonicalName: 'asc' }, { id: 'asc' }],
+          take: limit,
+        }),
+      ]);
+      const envelope = resultEnvelope(rows.length, total, limit);
       return {
         query_type: 'list',
-        student_count: rows.length,
+        student_count: total,
+        ...envelope,
         students: rows.map((s) => ({
           id: s.id,
           student_number: s.studentNumber,

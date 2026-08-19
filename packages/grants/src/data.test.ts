@@ -8,6 +8,7 @@ import {
   loadIntegrityReport,
   loadKnowledgeBase,
   listFormIds,
+  type IntegrityWarning,
 } from './data.js';
 import {
   extractCurrencyClaims,
@@ -90,8 +91,13 @@ describe('integrity report', () => {
   // (meta named a `kb.serve` slot that never existed) and `attachment_questions_route_to_prose`
   // (the check flagged correct routings to the attachment checklist slots). This asserts the
   // clean state so neither can regress silently — SPEC.md gate G1 requires zero warnings.
-  it('is empty on the current seed', () => {
-    expect(loadIntegrityReport()).toEqual([]);
+  it('carries no violation on the current seed — only the known debt register', () => {
+    const report = loadIntegrityReport();
+    // No `high` at all. That is the language-only guarantee: every figure in a stored answer either has
+    // a slot that fills it live or has a recorded reason for being literal.
+    expect(report.filter((w) => w.severity === 'high')).toEqual([]);
+    // And the one thing left is the register, not a surprise.
+    expect(report.map((w) => w.code)).toEqual(['stored_figure_unsourced']);
   });
 
   it('memoises', () => {
@@ -132,8 +138,37 @@ function corpus(): { bank: QuestionBank; kb: KnowledgeBase } {
   return { bank: structuredClone(loadBank()), kb: structuredClone(loadKnowledgeBase()) };
 }
 
+/**
+ * The codes the unmodified seed reports, which every mutated corpus reports too.
+ *
+ * Exactly one entry as of 2026-08-17: `stored_figure_unsourced`, the FIGURE_DEBT register — figures
+ * that drift with no live source to fill them from, which stay literal and stay reported rather than
+ * being slotted into a hole nothing can fill or allowlisted as though they were stable. See
+ * `slots.ts::FIGURE_DEBT`.
+ */
+const BASELINE_CODES: readonly string[] = ['stored_figure_unsourced'];
+
+/**
+ * A report with {@link BASELINE_CODES} removed — the warnings a mutation INTRODUCED.
+ *
+ * Subtracting rather than listing the baseline in every expectation, because these cases are each about
+ * one check, and a baseline code repeated across 30 expectations is 30 places to edit the next time the
+ * register changes.
+ *
+ * Returns warnings rather than codes because most cases assert on `severity` and `message` too, and a
+ * codes-only helper would leave those reaching back into the unfiltered report and indexing `report[0]`
+ * at whatever the baseline happened to sort into.
+ *
+ * **The caveat, since it is a real one:** a mutation that adds a *second* instance of a baseline code is
+ * invisible here. No case targets a baseline code today; one that did would have to assert on
+ * `computeIntegrityReport` directly.
+ */
+function introduced(report: readonly IntegrityWarning[]): IntegrityWarning[] {
+  return report.filter((w) => !BASELINE_CODES.includes(w.code));
+}
+
 function codesFor(bank: QuestionBank, kb: KnowledgeBase): string[] {
-  return computeIntegrityReport(bank, kb)
+  return introduced(computeIntegrityReport(bank, kb))
     .map((w) => w.code)
     .sort();
 }
@@ -185,15 +220,17 @@ describe('statesFigure', () => {
 });
 
 describe('computeIntegrityReport', () => {
-  it('reports nothing on the unmodified seed', () => {
+  it('reports nothing on the unmodified seed beyond the known debt register', () => {
     const { bank, kb } = corpus();
-    expect(computeIntegrityReport(bank, kb)).toEqual([]);
+    expect(codesFor(bank, kb)).toEqual([]);
+    // And the baseline is what it claims to be, rather than a growing pile something got added to.
+    expect(computeIntegrityReport(bank, kb).map((w) => w.code).sort()).toEqual([...BASELINE_CODES]);
   });
 
   it('fires kb_entry_without_answer for a declared slot with no answer', () => {
     const { bank, kb } = corpus();
     bank.kb_entries.push({ id: 'kb.declared_only', label: 'declared but never written' });
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['kb_entry_without_answer']);
     expect(report[0]?.severity).toBe('high');
     expect(report[0]?.message).toContain('kb.declared_only');
@@ -202,7 +239,7 @@ describe('computeIntegrityReport', () => {
   it('fires kb_answer_without_entry for an answer no entry declares', () => {
     const { bank, kb } = corpus();
     kb.answers['kb.orphan'] = anAnswer(kb);
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['kb_answer_without_entry']);
     // Informational on purpose: an extra answer is dead weight, not a broken retrieval path.
     expect(report[0]?.severity).toBe('info');
@@ -212,7 +249,7 @@ describe('computeIntegrityReport', () => {
   it('fires question_kb_ref_dangling for a question pointing at a missing slot', () => {
     const { bank, kb } = corpus();
     firstQuestion(bank).kb_ref = 'kb.renamed_away';
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['question_kb_ref_dangling']);
     expect(report[0]?.message).toContain('kb.renamed_away');
   });
@@ -227,7 +264,7 @@ describe('computeIntegrityReport', () => {
   it('fires kb_ref_dangling_in_prose for a slot named only in meta, trailing period and all', () => {
     const { bank, kb } = corpus();
     kb.meta.connector_reconciliation += ' Cross-checked against kb.gone_slot.';
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['kb_ref_dangling_in_prose']);
     // The sentence-final period must be stripped before the lookup, or a prose reference at the end
     // of a sentence is looked up with the period attached. Unstripped, the id reported back reads
@@ -263,14 +300,15 @@ describe('computeIntegrityReport', () => {
       if (q.kb_ref === target) q.kb_ref = 'kb.figure_slot_renamed';
     }
 
-    const report = computeIntegrityReport(bank, kb);
-    // Both figure checks fire, and that is correct: the slot's text moved with it, so the claim it
-    // carries is now stated somewhere `appears_in` does not name. Renaming a slot breaks the
-    // declaration in two directions at once and the report says so in both.
-    expect(report.map((w) => w.code).sort()).toEqual([
-      'figure_check_ref_dangling',
-      'figure_claim_uncovered',
-    ]);
+    const report = introduced(computeIntegrityReport(bank, kb));
+    // One code, not two. This asserted `figure_claim_uncovered` alongside it until 2026-08-17, on the
+    // reasoning that the slot's text moves with the rename and so states a claim `appears_in` no longer
+    // names. That reasoning was right and its premise is gone: the corpus stores language now, so the
+    // moved text carries `{{slots}}` rather than currency, and there is no literal claim left to be
+    // uncovered. **`figure_claim_uncovered` is largely superseded by the slot mechanism** — it still
+    // guards against a figure creeping back in as a literal, which is a real regression to catch, but on
+    // the scrubbed corpus it has almost nothing to find. Work package #275.
+    expect(report.map((w) => w.code).sort()).toEqual(['figure_check_ref_dangling']);
     const dangling = report.find((w) => w.code === 'figure_check_ref_dangling');
     expect(dangling?.message).toContain(target);
     // The affected check keys are the actionable part — without them the warning names a slot but
@@ -289,7 +327,7 @@ describe('computeIntegrityReport', () => {
     const q = firstQuestion(bank);
     q.answer_type = 'attachment';
     q.kb_ref = String(prose);
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['attachment_questions_route_to_prose']);
     expect(report[0]?.severity).toBe('medium');
     expect(report[0]?.message).toContain(q.id);
@@ -310,7 +348,7 @@ describe('computeIntegrityReport', () => {
     const { bank, kb } = corpus();
     const a = anAnswer(kb);
     a.structured = { 'cover.question_renamed_away': { value: 'X', verified: true } };
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['structured_key_dangling']);
     expect(report[0]?.severity).toBe('high');
     expect(report[0]?.message).toContain('cover.question_renamed_away');
@@ -350,11 +388,19 @@ describe('computeIntegrityReport', () => {
     expect(answer).toBeDefined();
     if (answer !== undefined) answer.text += ' FY2025 expenses were $1.34M.';
 
-    const report = computeIntegrityReport(bank, kb);
-    expect(report.map((w) => w.code)).toEqual(['figure_claim_uncovered']);
-    expect(report[0]?.severity).toBe('high');
-    expect(report[0]?.message).toContain('annual_budget');
-    expect(report[0]?.message).toContain(String(target));
+    const report = introduced(computeIntegrityReport(bank, kb));
+    // Two codes now, and the second is the point of the language-only rule: appending a bare `$1.34M`
+    // to a stored answer is BOTH an undeclared restatement and a figure stored as text. Before #275 only
+    // the first was catchable, which is why a figure could sit in approved prose indefinitely as long as
+    // some check happened to name its slot.
+    expect(report.map((w) => w.code).sort()).toEqual([
+      'figure_claim_uncovered',
+      'stored_literal_figure',
+    ]);
+    const uncovered = report.find((w) => w.code === 'figure_claim_uncovered');
+    expect(uncovered?.severity).toBe('high');
+    expect(uncovered?.message).toContain('annual_budget');
+    expect(uncovered?.message).toContain(String(target));
   });
 
   it('does not fire figure_claim_uncovered on a longer number that merely contains the token', () => {
@@ -366,7 +412,10 @@ describe('computeIntegrityReport', () => {
     const answer = kb.answers['kb.mission'];
     expect(answer).toBeDefined();
     if (answer !== undefined) answer.text += ' Unrelated: $1.55M and $350,2680.';
-    expect(codesFor(bank, kb)).toEqual([]);
+    // `stored_literal_figure` and nothing else: the coverage check correctly declines to match, while
+    // the language-only check correctly objects to a currency figure sitting in a stored answer at all.
+    // That the two disagree about this text is the design — they answer different questions.
+    expect(codesFor(bank, kb)).toEqual(['stored_literal_figure']);
   });
 
   it('does not fire figure_claim_uncovered on a percentage — currency tokens only', () => {
@@ -377,7 +426,10 @@ describe('computeIntegrityReport', () => {
     const answer = kb.answers['kb.mission'];
     expect(answer).toBeDefined();
     if (answer !== undefined) answer.text += ' About 85% and 90% and 100% and 60%.';
-    expect(codesFor(bank, kb)).toEqual([]);
+    // The percentage scope limit still holds for the coverage check. `stored_literal_figure` does fire,
+    // and that is the gap the language-only rule closes: percentages were never coverage-checkable
+    // precisely because they are ambiguous, so they used to be unguarded entirely.
+    expect(codesFor(bank, kb)).toEqual(['stored_literal_figure']);
   });
 
   it('fires figure_claim_uncovered on a figure restated only in a structured value', () => {
@@ -394,7 +446,7 @@ describe('computeIntegrityReport', () => {
     if (answer !== undefined) {
       answer.structured = { 'q.invented': { value: 'FY2025 expenses ~$1.34M' } };
     }
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toContain('figure_claim_uncovered');
     expect(report.find((w) => w.code === 'figure_claim_uncovered')?.message).toContain(
       String(target),
@@ -411,7 +463,7 @@ describe('computeIntegrityReport', () => {
     // $1.34M is a declared annual_budget figure; stated here as `$1.34M Kresge` it must still be
     // recognised, and the undeclared slot must still be reported.
     if (answer !== undefined) answer.text += ' A $1.34M Kresge award.';
-    expect(codesFor(bank, kb)).toEqual(['figure_claim_uncovered']);
+    expect(codesFor(bank, kb)).toEqual(['figure_claim_uncovered', 'stored_literal_figure']);
   });
 
   it('does not fire figure_claim_uncovered on a decimal continuation of a declared token', () => {
@@ -421,7 +473,7 @@ describe('computeIntegrityReport', () => {
     const answer = kb.answers['kb.mission'];
     expect(answer).toBeDefined();
     if (answer !== undefined) answer.text += ' Unrelated: $20.50 per hour and $20,500 in fees.';
-    expect(codesFor(bank, kb)).toEqual([]);
+    expect(codesFor(bank, kb)).toEqual(['stored_literal_figure']);
   });
 
   // -- question_figure_check_dangling ---------------------------------------------------------
@@ -431,7 +483,7 @@ describe('computeIntegrityReport', () => {
     const mapped = Object.keys(QUESTION_FIGURE_CHECKS)[0];
     expect(mapped).toBeDefined();
     bank.questions = bank.questions.filter((q) => q.id !== mapped);
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     // Deleting the question also strands anything else keyed to it; the figure warning is the one
     // under test and must be present.
     const warning = report.find((w) => w.code === 'question_figure_check_dangling');
@@ -464,7 +516,7 @@ describe('computeIntegrityReport', () => {
       a.variants.push({ text: 'Describe your widget.', source: 'FFTC' });
       b.variants.push({ text: 'Describe your widget!', source: 'FFTC' });
     }
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['variant_shared_across_questions']);
     expect(report[0]?.severity).toBe('medium');
     // Punctuation and case are normalised away, because a tie survives both.
@@ -517,7 +569,7 @@ describe('computeIntegrityReport', () => {
   it('fires variant_source_undeclared for a wording citing an undeclared source', () => {
     const { bank, kb } = corpus();
     firstQuestion(bank).variants.push({ text: 'Some funder wording.', source: 'NotAForm-2099' });
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['variant_source_undeclared']);
     expect(report[0]?.message).toContain('NotAForm-2099');
   });
@@ -542,7 +594,7 @@ describe('computeIntegrityReport', () => {
     q.answer_type = 'single_select';
     q.kb_ref = 'kb.eligibility';
     expect(kb.answers['kb.eligibility']?.structured).toBeDefined();
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['structured_value_missing']);
     expect(report[0]?.severity).toBe('medium');
     expect(report[0]?.message).toContain(q.id);
@@ -590,7 +642,7 @@ describe('computeIntegrityReport', () => {
   it('fires unknown_question_category for a category id not in categories[]', () => {
     const { bank, kb } = corpus();
     firstQuestion(bank).category = 'not_a_category';
-    const report = computeIntegrityReport(bank, kb);
+    const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['unknown_question_category']);
     expect(report[0]?.message).toContain('not_a_category');
   });

@@ -183,7 +183,7 @@ Call these MCP tools in parallel. After each call, **write down the specific num
 - \`query_finances\` with query_type "ytd" → extract: every revenue and expense line item with its amount. Write down each line.
 - \`query_finances\` with query_type "budget_actuals" → extract: budget and actual for each line item. Calculate variances.
 - \`query_finances\` with query_type "fund_balances" → extract: each fund name and closing balance. Sum them for total cash.
-- \`query_finances\` with query_type "phase_budget_summary" → extract: budget per program phase
+- \`query_finances\` with query_type "phase_budget_dashboard" → extract: budget per program phase
 
 ### Fundraising data:
 - \`query_donors\` with query_type "summary" → extract: total donor count, lifetime giving total, contributing gift count
@@ -425,7 +425,7 @@ Required KPIs by category and the tool call that provides each:
 - Revenue & expenses → "ytd" query_type returns line items with amounts
 - Budget vs actual → "budget_actuals" query_type
 - Fund balances → "fund_balances" query_type
-- Phase costs → "phase_budget_summary" query_type
+- Phase costs → "phase_budget_dashboard" query_type
 - For derived metrics (cost per student, months of runway, program expense ratio): divide the values the tools returned. Show the division in the Notes column.
 
 **FUNDRAISING** — from \`query_donors\` and \`query_finances\`:
@@ -503,7 +503,7 @@ ${kpiTargets ? `**User-provided targets:** ${kpiTargets}\nUse these exact target
 - Revenue & expenses → "ytd"
 - Budget vs actual → "budget_actuals"
 - Fund balances → "fund_balances"
-- Phase costs → "phase_budget_summary"
+- Phase costs → "phase_budget_dashboard"
 - Derived metrics (cost per student, runway, expense ratio) → divide values from the tools above; show the division in Notes
 
 **FUNDRAISING** — from \`query_donors\` and \`query_finances\`:

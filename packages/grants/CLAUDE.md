@@ -83,11 +83,22 @@ Do not restate these; link to them. Duplication is how the set drifts.
 Re-verify before trusting this section; it is a snapshot, not a contract. Every claim here was
 checked by running something.
 
+**The corpus stores language only.** Since work package `#275` (2026-08-17), every figure in
+`kb_launchpad.json` with a live source is a `{{slot}}` filled from the `query_*` call that owns it, and
+`pipeline.ts` refuses to return slotted text as an `answer`. `packages/grants/src/slots.ts` is the whole
+rule: the registry, the phrase-keyed `IMMUTABLE_FIGURES` allowlist (which is what stops the check
+deleting **Building 21**, the fiscal sponsor, from 15 of 29 slots), and `FIGURE_DEBT` — figures that
+drift with nothing to fill them from, which stay literal and stay reported. **Read the report's shape
+before trusting it:** it is not empty and is not meant to be. Zero `high` warnings is the guarantee; one
+`medium` (`stored_figure_unsourced`) is the register. `CHANGELOG.md` under 2026-08-17 has the reasoning
+and the five `figures.ts` corrections it turned up.
+
 **Local development works, and the path is `db:migrate`.** Postgres 16.14 with `vector 0.8.6` and
-`pg_trgm 1.6` via `pnpm db:up`. **19 migrations applied.** The full suite is **480 tests across 23
+`pg_trgm 1.6` via `pnpm db:up`. **19 migrations applied.** The full suite is **501 tests across 24
 files, all passing, zero skipped**, including the integration suite that spawns the real MCP server
 over stdio. Measured 2026-08-17 after `pnpm -r build`, `pnpm -r typecheck` and `pnpm lint`, all clean
-across all fifteen packages. (470 across 23 before the same day's low-severity fold — work package
+across all fifteen packages. (481 across 23 before `#275` added `slots.test.ts` the same day.
+470 across 23 before the same day's low-severity fold — work package
 `#257`/`#258` — which added the clamped-`limit` echo case and nine `pyRound` half-even cases.
 397 across 19 and 16 migrations before `fix/google-drive-discovery` merged
 in later the same day — work package #256 — which brought `catalog.test.ts` and three
@@ -101,7 +112,8 @@ integration cases with it — §4 item 15. 294 across 14 before three sources ad
 `#207`/`#209`/`#210` filter work added `filter-domain.test.ts`, `query-attendance-filters.test.ts` and
 `sibling-filter-domains.test.ts`; PRs #49 and #50, merged from `main`, brought `finance-tab-map.test.ts`
 and `query-enrollment-filters.test.ts`.)
-`packages/grants` alone is **299 in 10 files**, with no database and no network. (290 in 10 before
+`packages/grants` alone is **320 in 11 files**, with no database and no network. (299 in 10 before
+`#275` added `slots.test.ts` and reshaped two `pipeline.test.ts` cases. 290 in 10 before
 `#258` added nine `pyRound` cases. 262 in 9 before the
 Drive merge added `catalog.test.ts`. 240 in 9
 before the 2026-08-17 pre-merge pass added 22 — the narrative `needs_expand` guard, the blank-rewrite
@@ -149,8 +161,12 @@ Every registered tool has a `tool_permissions` row locally — the §6 `comm -23
 placeholders: `query_clients`, `query_github_issues`, `query_github_prs`, `query_hubspot_contacts`,
 `query_hubspot_deals`, `query_policy`. (`find_grant_documents` was on that list until the Drive merge
 gave it a real registration.) Whether the grant rows exist on RDS is still unverified — board A7
-(#163) — and the registry fails closed, so **until #220's fix is proven on a real deploy, merging still
-ships three tools that will refuse every caller**.
+(#163) — and the registry fails closed. **#220 landed and is closed, and this did not resolve.** The
+2026-08-17 deploy of the merge (run `32047334123`) applied migrations from the *previous* release's
+image — 12 migration directories against the deployed commit's 19 — so `20260729000000_add_grant_tool_permissions`
+was never considered, and the job reported "Database schema is up to date!" anyway. That is **#295**
+(Immediate). So the three `grant_*` tools are now merged and deployed, and their rows still very likely
+do not exist on RDS: they will refuse every caller until #295 lands or the migration is applied by hand.
 
 **Connectors** (root `CLAUDE.md` holds the detail): `google-sheets`, `aplos`, and `notion` are live.
 `google-drive` is **implemented and verified end to end against real Drive and the local database** on
@@ -232,7 +248,8 @@ question (what the live database differs by) and will also report whatever `db p
 
 **Production is less verified than local.** Open unknowns, needing an ECS one-off task or the bastion
 because RDS is not publicly reachable: whether the grant `tool_permissions` rows exist there, and whether
-`aws_resource_jobs` exists there. **`student_postsecondary` is settled** — production's
+`aws_resource_jobs` exists there. **The deploy pipeline cannot answer either question yet** — see #295;
+a green `migrate` job attests only to the previous release's migration set. **`student_postsecondary` is settled** — production's
 `_prisma_migrations` records `20260610200000_create_student_postsecondary`, applied by hand ahead of
 commit `129903c`, and that migration creates it. That commit's own message says so.
 
@@ -259,6 +276,10 @@ unrecorded. Tracked build work lives in `bd` — `bd ready --json` — not here.
 | 14 | **The unmatchable-filter-value guard is written and not deployed** | `query_enrollment(by_phase, current_phase: "Zzzznotaphase")` returns an empty breakdown with no error **in production**. The guard is at `apps/mcp-server/src/tools/query-enrollment.ts:217-224` on this branch, tested by `filter-domain.test.ts` and `sibling-filter-domains.test.ts`, and sits in the 44 commits `main` does not have. This is not documentation debt — it is the cost of not merging, recorded so the empty answer is not re-diagnosed as a new defect. `docs/INFORMATION-GAPS.md` §8.4. |
 | 12 | **Rebuild workspace packages before believing a type error** | Not documentation debt so much as a trap that has now cost time twice. A stale `packages/db/dist/index.d.ts` (dated 2026-08-03, exporting `Prisma` as a type where `src/index.ts:3` exports it as a value) produced 8 × TS1362 in `query-certifications.ts` and 9 integration failures on 2026-08-12 that read exactly like a defect on `master`. It was reported as such and withdrawn after `pnpm --filter @lp-ai/lib-db build`. `master` was never broken. §3's insistence that `pnpm test` and `pnpm -r typecheck` are both needed is right but insufficient — **typecheck reported a stale artifact as a source error**. Add the workspace build to the pairing, or record why not. |
 | 8 | **Six KB slots cannot fill the longest ask routed to them** | The KB's own note says answers are "the LONGEST canonical version" and the pipeline resizes *down*. Measured 2026-08-11 against the largest word limit recorded on any question routing to each slot: `kb.staff_bios` 110 words vs 600, `kb.history` 119 vs 500, `kb.target_population` 86 vs 300, `kb.capacity` 129 vs 250, `kb.dei` 122 vs 250, `kb.evaluation` 116 vs 200. **The claim that the `needs_expand` guard made this visible was false until 2026-08-17** — the guard was wired only into the structured-value branch, so a *narrative* slot underfilling a roomy field still reported `fits` / `actor: none`, which is this exact row. Work package #252 wired it into the narrative path, so the draft now routes these to the calling model instead of reporting them done. **The content debt is untouched and is the real item here:** the slots are thin, and expansion is where invention happens. The handback carries no anchor on this path and `EXPAND_RULES_NO_ANCHOR`' ceiling-not-a-target rule is the only thing between a thin slot and a padded one. |
+| 16 | **A recurring `[DATA UNAVAILABLE]` is a bug report, not a data property** | Work package `#281`. `docs/runs/2026-08-11/filled/FIGURE-LEDGER.md` recorded four checks as unanswerable by the tool the work order named — `annual_budget`, `inc_client_work_booked`, `staff_count`, `competency_growth` — and its 2026-08-14 re-source section recorded what *answers* `annual_budget`, with figures. On 2026-08-17 two sessions rediscovered all four from scratch and re-derived the answer. **The ledger did its job; nothing reads run artifacts before the next run.** A run artifact is a good place to record what happened and a bad place to record what should change. `#281` proposes the mechanical version and states plainly why it lands weaker than it sounds — the emitter cannot be `run-drafts.mjs`, which never makes a `query_*` call by design. Until then this is prose, which is the same failure one level up. |
+| 17 | **The report is not empty and is not meant to be** | Since `#275`, `loadIntegrityReport()` returns one `medium` warning (`stored_figure_unsourced`) on a clean corpus. **Zero `high` is the guarantee.** Anyone re-deriving §3's old "expect zero warnings" claim will read the register as a defect. `data.test.ts::BASELINE_CODES` is the one place that encodes it; a second entry there needs the same reasoning written down. **This was not a hazard to watch for — it had already shipped.** `prep.mjs` gated on `integrity.length > 0`, so step 1 of the drafting workflow refused to run on a correct seed and printed `REFUSING: seed integrity report is not empty` with nothing to fix. Fixed 2026-08-19 under `#307`: the gate is `high`-only, the success line names the non-blocking count instead of claiming `integrity clean`, and `--json` carries `seed_integrity`. `count.mjs` and `gapfill.mjs` were checked and never had the gate. |
+| 18 | **`figure_claim_uncovered` is largely superseded and still costs maintenance** | The check scans for currency claims restated in a slot its `FIGURE_CHECK` does not declare. After the `#275` scrub there is almost no literal currency left in stored prose, so on the current corpus it has nearly nothing to find. It still guards a real regression — a figure creeping back in as a literal — but it is now the second line behind `stored_literal_figure`, and its `appears_in` lists are hand-maintained. Decide whether to keep both or fold it; do not quietly let it rot, because a check that has stopped firing looks exactly like a clean corpus. |
+| 19 | **The literal-figure detector cannot see single digits** | `slots.ts::literalFigures` ignores runs of one digit and spelled-out numbers, measured against a corpus where flagging them fired on most sentences and caught nothing that drifts. The cost is real and was paid once already: `kb.staff_bios`' "9 full-time and 1 part-time" had to be slotted by reading the prose, not because the checker pointed at it. **A small count that drifts escapes the rule entirely.** |
 | 9 | **`kb_launchpad.json` snapshot is older than the bank** | `kb.meta.updated` is `2026-07-23`; `questions.json` `meta.updated` is `2026-08-11`. The connector reconciliation prose is dated the same 2026-07-23 and its four staff flags — served count, PCEP denominator, Lightspeed, postsecondary — are all still open. Nothing enforces a maximum age, and a date-based check would be flaky in the suite; this is the record instead. |
 
 ---
@@ -324,7 +345,14 @@ pnpm exec prisma migrate diff \
 # Migration state — expect 19 migrations, "Database schema is up to date!"
 pnpm exec prisma migrate status --config ./prisma.config.ts
 
-# Full suite — expect 480 passed, 0 skipped, 23 files.
+# The language-only rule: expect zero `high` warnings and exactly one `medium`
+# (stored_figure_unsourced, the FIGURE_DEBT register). A `high` here means a figure is stored as text.
+node --input-type=module -e '
+import {loadBank,loadKnowledgeBase,computeIntegrityReport} from "./packages/grants/dist/index.js";
+for (const w of computeIntegrityReport(loadBank(), loadKnowledgeBase()))
+  console.log(w.severity, w.code);'
+
+# Full suite — expect 501 passed, 0 skipped, 24 files.
 # Requires: pnpm db:up, pnpm db:migrate, and pnpm --filter @lp-ai/mcp-server build
 pnpm test
 

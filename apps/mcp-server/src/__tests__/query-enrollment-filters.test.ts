@@ -357,7 +357,8 @@ describeLocal('query_enrollment filter application (live DB)', () => {
       limit: 1,
     })) as {
       student_count: number;
-      returned?: number;
+      record_count?: number;
+      total_matching?: number;
       truncated?: boolean;
       limit?: number;
       students: unknown[];
@@ -366,7 +367,12 @@ describeLocal('query_enrollment filter application (live DB)', () => {
     expect(res.students).toHaveLength(1);
     expect(res.student_count).toBe(matched);
     expect(res.truncated).toBe(true);
-    expect(res.returned).toBe(1);
+    // `returned` became `record_count` when #195 folded this tool's bespoke truncation
+    // keys into the one envelope `query_students` and `query_competency` also emit, so
+    // a caller reads the same four keys everywhere. `total_matching` is the same number
+    // as `student_count` here; `student_count` is kept for existing callers.
+    expect(res.record_count).toBe(1);
+    expect(res.total_matching).toBe(matched);
     expect(res.limit).toBe(1);
   });
 
@@ -385,7 +391,8 @@ describeLocal('query_enrollment filter application (live DB)', () => {
       limit: 1,
     })) as {
       student_count: number;
-      returned?: number;
+      record_count?: number;
+      total_matching?: number;
       truncated?: boolean;
       students: unknown[];
     };
@@ -394,7 +401,8 @@ describeLocal('query_enrollment filter application (live DB)', () => {
     expect(res.students).toHaveLength(1);
     expect(res.student_count).toBe(matched);
     expect(res.truncated).toBe(true);
-    expect(res.returned).toBe(1);
+    expect(res.record_count).toBe(1); // was `returned`; see the note on by_student above
+    expect(res.total_matching).toBe(matched);
   });
 });
 

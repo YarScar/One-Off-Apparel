@@ -57,6 +57,11 @@ The gate passing does not mean the connector can source a proposal. On the deplo
 semantic-search tools returned zero rows. A form asking for funder history or reusable narrative would
 have failed three steps later, after the user had already answered the framing questions.
 
+*The donor and development halves of that are fixed as of 2026-08-19 (#306) — the tab-name casing bug
+landed, and `query_donors` was repointed off a table no connector writes. Probe anyway: the point of
+this step is that you cannot tell a populated domain from an empty one without asking, and a fix is not
+a guarantee about the deployment in front of you.*
+
 So probe every domain the form will touch, in one batch, before Step 2:
 
 ```
@@ -132,7 +137,7 @@ Pull the numbers the form actually needs. This is the tool map.
 | One student's competency detail | `query_competency({query_type: "scores", student_number})`, `query_outcomes({student_name})` | Per-student only. There is no org-level competency aggregate, and an unfiltered `scores` call returns a payload too large to read |
 | Budget lines, expense actuals | `query_finances({query_type: "ytd"})` for budget vs actual by account; `get_finance_brief({period})` for Aplos accounts and dated transactions | Live |
 | Fund balances | `get_finance_brief` | **Names only.** The fund entries carry no balance amounts, and `sheet_fund_balances` and `recent_gifts` came back empty. Do not report a balance from this tool |
-| Donors, funder history, pipeline | `query_donors`, `query_finances({query_type: "dev_*"})` | **Empty for two different reasons.** `query_donors` reads tables that only the seed script writes, so in production it returns zero donors permanently. The `dev_*` tabs *are* synced, but the tool looked them up with the wrong casing and returned nothing; a fix is pending on the `fix/mcp-finance-tab-mapping` branch. Re-probe before assuming, and until it lands, funder history comes from staff or Drive |
+| Donors, funder history, pipeline | `query_donors`, `query_finances({query_type: "dev_*"})` | **Both work as of 2026-08-19 (#306).** `query_donors` was repointed off the unpopulated `donor_contacts` tables onto the `development:*` CRM tabs; it had returned `no_records` for every funder, which — being permitted rather than denied — read as a fact about the funder. Use `query_donors({query_type:"profile", donor_name})` for a funder: one call gives giving summary, itemised history, grants tracker, both pipelines and **prior declines**. It defaults to `launchpad_only: true` and every response states its `scope` — that matters, William Penn is $1.375M Launchpad-scoped against $1.6M all-B21, because each year splits $425K Launchpad + $75K Network. Read `giving_summary.by_project`. Giving totals are summed from gift rows, never from the Contacts tab's `lifetime_giving` column, which is wrong at source. Drop to `dev_*` only for a column the profile does not map |
 | Narrative material, prior language | `search_documents({query})`, `search_conversations({query, sources})` | **Empty.** No document chunks and no conversation hits returned. Reusable language must be pasted in by the user |
 | A named student's full picture | `get_entity_brief({person_name})`, `get_student_info({student_name})` | Live, and returns identifiable minors. See the privacy section |
 
@@ -205,15 +210,25 @@ and recency does not resolve it. Escalate with both numbers and their definition
   phase at all. Run `query_enrollment({query_type: "by_phase"})` before describing the program structure,
   and ask staff which terminology this funder should see.
 
-**A permission denial is not permission to guess.** `query_finances` and `query_donors` are often
-restricted by role. Fall back to `get_finance_brief` where it covers the question; otherwise write
-`[DATA UNAVAILABLE]` in the draft and list it in the handoff. Never substitute a remembered figure.
+**A permission denial is not permission to guess.** `query_finances` is sometimes restricted by role.
+Where `get_finance_brief` genuinely covers the question, use it; otherwise write `[DATA UNAVAILABLE]` in
+the draft and list it in the handoff. Never substitute a remembered figure.
 
-**An Aplos fund named for a funder is not evidence of a current relationship.** With the donor CRM empty,
-`get_finance_brief` is the only place funder names surface, and it holds a long list of restricted funds,
-some of them explicitly historical. A fund proves money was once tracked under that name, at Building 21
-scope, not that the relationship is live or that it was Launchpad's. Those names are a question for staff,
-never a line in a proposal. The naming rule in Step 5 governs them exactly as it governs employers.
+**And an empty result is not a denial.** Corrected 2026-08-19 (#306): this paragraph used to name
+`query_donors` as often role-restricted. It never was. It was *empty* — and the two call for opposite
+responses. A denial means *someone else can see this*, so escalate for access. An empty table means
+*nobody can*, so stop asking that tool and find the one holding the data. Reading `query_donors`'s
+`no_records` as a denial is exactly how the 2026-08-19 run filed `[DATA UNAVAILABLE]` for four funders
+whose giving history was live the whole time. **`query_donors` itself is fixed** — it reads the
+`development:*` CRM tabs now — but keep the distinction: any tool can be permitted and wrong, and a
+specific-looking reply is not evidence that it read anything.
+
+**An Aplos fund named for a funder is not evidence of a current relationship.** `get_finance_brief` holds a
+long list of restricted funds, some of them explicitly historical. A fund proves money was once tracked
+under that name, at Building 21 scope, not that the relationship is live or that it was Launchpad's. Those
+names are a question for staff, never a line in a proposal. The naming rule in Step 5 governs them exactly
+as it governs employers. To settle whether a relationship is live, `dev_grants_tracker` carries the
+lifecycle stage and `dev_giving_history` the last gift date — that is the check, not the fund name.
 
 **Every finance figure is Building 21 scope until staff say otherwise.** The accounts, funds, and
 transactions come from Building 21's books, and Launchpad is one initiative inside them. Ask which scope a

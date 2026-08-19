@@ -72,6 +72,16 @@ TODO.local.md
 # correspondence and unredacted student data — never commit it.
 packages/grants/data/
 
+# Drafted answer packages awaiting staff review. Same disclosure concern as
+# data/, and worse: these pair funder names with operating deficits by fiscal
+# year, wage aggregates, and per-employer placement counts. They are also
+# pre-review by construction, and a drafted answer found in git history reads
+# like approved language. See packages/grants/drafts/README.md.
+# Ignore the contents, not the directory: git does not descend into an excluded
+# directory, so `drafts/` followed by a negation would keep the README out too.
+packages/grants/drafts/*
+!packages/grants/drafts/README.md
+
 # Python bytecode from the parity regeneration scripts in packages/grants/scripts/
 __pycache__/
 

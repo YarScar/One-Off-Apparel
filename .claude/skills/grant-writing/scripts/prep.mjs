@@ -40,11 +40,17 @@ if (!target) {
   exit(2);
 }
 
+// Gate on `high` only. Since #275 a correctly maintained seed carries exactly one `medium`
+// (`stored_figure_unsourced`, the FIGURE_DEBT register), and packages/grants/CLAUDE.md §4 item 17
+// names the guarantee as "zero `high`". Gating on any warning refused on that baseline, making step 1
+// of the documented workflow unrunnable — OpenProject #307. Mediums are reported, not blocked on.
 const integrity = loadIntegrityReport();
-if (integrity.length > 0) {
-  console.error(`REFUSING: seed integrity report is not empty (${integrity.length} warnings).`);
+const highWarnings = integrity.filter((w) => w.severity === 'high');
+const otherWarnings = integrity.filter((w) => w.severity !== 'high');
+if (highWarnings.length > 0) {
+  console.error(`REFUSING: seed integrity report carries ${highWarnings.length} high-severity warning(s).`);
   console.error('Fix the seed before drafting — a defect here propagates into a funder-facing draft.');
-  for (const w of integrity) console.error(`  [${w.severity}] ${w.code ?? ''} ${w.message ?? JSON.stringify(w)}`);
+  for (const w of highWarnings) console.error(`  [${w.severity}] ${w.code ?? ''} ${w.message ?? JSON.stringify(w)}`);
   exit(1);
 }
 
@@ -96,6 +102,9 @@ const figures = buildFigureWorkOrder(kbRefs);
 
 const report = {
   form: { funder: form.meta?.funder, program: form.meta?.program, due: form.meta?.due, framing: form.meta?.framing },
+  // Surfaced 2026-08-19 (#307). The gate passes on non-`high` warnings now, so a --json consumer that
+  // inferred "prep exited 0, therefore the report was empty" would be wrong. Report it explicitly.
+  seed_integrity: { high: highWarnings, non_blocking: otherWarnings },
   questions: rows,
   figure_work_order: figures,
   gaps: {
@@ -116,7 +125,24 @@ const { funder, program, due, framing } = report.form;
 console.log(`FORM   ${funder ?? '(unknown funder)'}${program ? ` — ${program}` : ''}`);
 if (due) console.log(`DUE    ${due}`);
 if (framing) console.log(`FRAMING (as filed) ${framing}`);
-console.log(`SEED   integrity clean; ${rows.length} questions\n`);
+// Never say "clean" unconditionally — that was a false statement whenever the register was
+// non-empty, and the register is non-empty on a correct seed. Name what was actually seen.
+const seedState =
+  otherWarnings.length === 0
+    ? 'no warnings'
+    : `zero high, ${otherWarnings.length} non-blocking (${otherWarnings.map((w) => w.code).join(', ')})`;
+console.log(`SEED   integrity ${seedState}; ${rows.length} questions`);
+// The register's message concatenates every debt entry, so it runs to thousands of characters.
+// Printed in full it buries the work order below it. One truncated line each, and a pointer.
+for (const w of otherWarnings) {
+  const msg = String(w.message ?? '').replace(/\s+/g, ' ');
+  console.log(`  [${w.severity}] ${w.code}: ${msg.length > 150 ? `${msg.slice(0, 150)}…` : msg}`);
+}
+if (otherWarnings.length > 0) {
+  console.log('  ^ expected on a correct seed (the FIGURE_DEBT register, #280). Not a reason to stop;');
+  console.log('    do verify by hand any figure it names that this form actually asks for.');
+}
+console.log('');
 
 for (const r of rows) {
   const lim = r.limit ? `${r.limit.max} ${r.limit.unit}` : 'no limit';
@@ -153,7 +179,11 @@ for (const c of figures.items) {
   }
 }
 if (figures.blocked.length > 0) {
-  console.log('\nTOOLS THAT MAY BE ACL-DENIED');
+  // Was "TOOLS THAT MAY BE ACL-DENIED". Retitled 2026-08-19 (#306): the list now also carries a
+  // permitted-but-unpopulated tool and a reachable tab with wrong columns. Labelling those as ACL
+  // denials told the drafter to expect a permission error and to treat the tool as unavailable-to-them
+  // rather than wrong-for-everyone, which is a different, and wrong, next action.
+  console.log('\nTOOL CAVEATS — read the reason; not all of these are ACL denials');
   for (const b of figures.blocked) console.log(`  ${b.tool}: ${b.reason}`);
 }
 console.log(`\nPOLICY\n  ${figures.policy}`);

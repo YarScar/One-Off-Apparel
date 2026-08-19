@@ -49,6 +49,13 @@ right now, registered and unreachable.
   `20260812000000_add_grant_sourcing_evaluation_permission` (its INSERT is `ON CONFLICT DO NOTHING`).
   So `#220`'s owner job is now exactly "run these two migrations" (`20260729`, `20260803`), no
   exploration left.
+
+  **Correction, 2026-08-18.** `#220` closed, and those two migrations are *still* unapplied. The
+  2026-08-17 deploy (run `32047334123`) ran its migration task against the **previous** release's
+  image — 12 migration directories against the deployed commit's 19 — so `20260729` and `20260803`
+  were never in the set it considered, and it reported "Database schema is up to date!" anyway.
+  That is **`#295`** (Immediate). The line above is right about *what* to run and wrong about the
+  pipeline doing it: applying them still needs a hand-run ECS one-off task or the bastion.
 - **`skill_grant_sourcing_evaluation`'s permission row IS present in prod** (27 `tool_permissions`
   rows = main's 21 tools + the 6 phantom "future" rows; the grants tools are absent). The row was
   inserted outside the migration machinery — `20260812000000` is not in prod's `_prisma_migrations`
@@ -64,6 +71,14 @@ right now, registered and unreachable.
   doesn't register the tool, the merged connector doesn't fill the catalog). Decide before merge:
   cherry-pick that branch in, or retire the feature deliberately (and clean the row if it ever
   appears on prod).
+
+  **Resolved 2026-08-17 — the branch was folded, not retired** (work package `#256`, merge `7b31983`).
+  `origin/fix/google-drive-discovery` (`bc1de8c`) is an ancestor of `writing/dev`,
+  `registerFindGrantDocuments(server)` is wired at `apps/mcp-server/src/make-server.ts:62`, and the
+  `20260806*` migrations came with it — so the merge kept the live feature rather than removing it.
+  Its permission row is a different question: `20260806000100_add_find_grant_documents_permission`
+  was among the seven migrations the 08-17 deploy never considered (`#295`), so prod still has no row
+  for it, and the tool now fails closed there. Same hand-apply as `20260729`/`20260803`.
 - **Prod's 27-row permission set is consistent with main's 21 tools + 6 phantom rows.** The three
   `grant_*` tools will land registered-but-unreachable until `#220` is done — unchanged from the
   paragraph above.
@@ -73,7 +88,7 @@ right now, registered and unreachable.
 | | |
 |---|---|
 | PR | **#51 open** against `main` — "Grant writing layer and the unmatchable-filter guard". **69 commits ahead, 0 behind** `origin/main` as of 2026-08-17: PR #46 merged in at `d58ecff` (work package `#260`), the lockfile auto-merged, and `pnpm install --frozen-lockfile` confirms no drift. **Not yet pushed** |
-| Suite | **480 passing across 23 files, zero skipped.** `packages/grants` alone is 299 in 10 |
+| Suite | **501 passing across 24 files, zero skipped.** `packages/grants` alone is 320 in 11 |
 | Build / typecheck / lint | `pnpm -r build` clean **including `apps/hq`**, the only package whose build lints. `pnpm -r typecheck` clean across fourteen. `pnpm lint` clean — but it covers only `apps/hq` and `packages/grants`; `pnpm exec eslint apps/mcp-server` still reports errors (`#168`/`#169`) |
 | Tool surface | **25** on this branch, 21 on `main` — and **prod is not a subset**: it lacks the three `grant_*` tools and the fifth `skill_*`, and it *has* `find_grant_documents`, deployed from `fix/google-drive-discovery` on 2026-08-06 and merged here only on 2026-08-17 |
 | Migrations | **19** applied locally, `migrate status` clean. `migrate diff --from-migrations` shows only the **`student_employment`** entries — down from three tables (`#254`) plus the Drive index rename (`#256`). **A checksum changed:** see the CHANGELOG's 2026-08-17 clone note before running `pnpm db:migrate` on an existing clone |

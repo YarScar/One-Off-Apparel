@@ -406,8 +406,44 @@ stays case-insensitive for convenience, but is escaped before use.
 
 Donor lookup against the Building21 Development CRM (Contacts tab + linked records). Three modes:
 - `list` — donors filtered by name / type / status
-- `profile` — full record for one donor + linked Giving History + Prospect Pipeline + Launchpad Pipeline + Grants
-- `summary` — breakdown by donor type, status, lifetime giving total
+- `profile` — full record for one donor + linked Giving History + Prospect Pipeline + Launchpad Pipeline + Grants + prior declines
+- `summary` — donor count and lifetime giving total, by fiscal year
+
+> **Repointed 2026-08-19, work package #306.** This tool, `get_entity_brief`'s donor arm and
+> `get_finance_brief.recent_gifts` read the typed `donor_contacts` / `donor_gifts` / `donor_pipeline`
+> tables. **No connector has ever written them** — `packages/db/src/seed.ts` is their only writer in
+> the repo, and Givebutter, the source `schema.prisma` names, has no connector. All three returned
+> nothing in production while their descriptions promised Development CRM data.
+>
+> They now read the `development:*` tabs in `finance_snapshots` — the same rows `query_finances`'s
+> `dev_*` query types serve — via `apps/mcp-server/src/dev-crm.ts`. Four behaviours follow, and each
+> one changes a number a caller might quote:
+>
+> 1. **`launchpad_only` defaults to `true` and is now actually applied.** The previous implementation
+>    accepted the flag and never read it, so every response was all-Building-21 scope while the
+>    description promised Launchpad-only. Every response carries `scope` and `scope_note`.
+> 2. **Giving totals are summed from individual gift rows**, not read from the Contacts tab's
+>    `lifetime_giving` / `fy25_giving` / `fy26_giving` columns, which are **wrong at source** — William
+>    Penn Foundation reads `$0.00` lifetime against a real `$1,600,000.00`. Summing also makes
+>    `launchpad_only` mean something for a total, which a precomputed all-scope column cannot support.
+> 3. **`giving_summary.by_project` splits Launchpad from the other projects.** This matters: William
+>    Penn gives $500,000/yr of which **$425,000 is Launchpad** and $75,000 is Network Unrestricted.
+>    Quoting $500,000 as the Launchpad grant overstates it by $75,000/yr.
+> 4. **A funder with no Contacts row still resolves.** The Contacts tab is a stewardship roster, not
+>    the set of everyone we have asked, so a name found only on the giving-history, pipeline or denied
+>    tabs returns a profile with `profile: null` and a `profile_note` rather than `no_records`. Without
+>    this, a funder that had *declined* us was invisible — the most framing-relevant record there is.
+>
+> Name matching is confined to the name columns (`donor_name`, `funder`, the split person columns).
+> `query_finances`'s `contains` matches the serialized row, so searching it for "William Penn" also
+> returns Project Based Learning, Inc. — whose `primary_fund` is "William Penn". Reporting one
+> organisation's giving under another's name is worse than returning nothing.
+>
+> `no_records` now distinguishes three cases: out of Launchpad scope (retry with
+> `launchpad_only=false`), absent from Contacts but present on a transaction tab (returns a profile),
+> and absent everywhere. The old undifferentiated `no_records` read as "this funder has not given" when
+> it meant "no donor exists anywhere", which is how a 2026-08-19 drafting run filed
+> `[DATA UNAVAILABLE]` for four funders with live history.
 
 **Description shown to Claude:**
 > Look up Building21 donors and donor relationships from the Development CRM. Use for questions about specific donors ('what has Vanguard given'), donor population breakdowns ('how many active foundations'), or pulling a complete donor profile (gifts, pipeline, grants). Defaults to Launchpad-only data — set `launchpad_only=false` to see all B21 development data. For aggregate finance views (total raised, pipeline value by month, etc.), use `query_finances` with the `dev_*` query types instead.
@@ -498,12 +534,19 @@ Return a high-level financial overview — Aplos fund balances, a chart-of-accou
   },
   "recent_transactions": [ /* last 20 Aplos transactions (date, memo, amount) */ ],
   "sheet_fund_balances": [ /* Google Sheets fund balance rows from the Combined Funds tab */ ],
-  "recent_gifts": [ /* recent donor gift rows */ ],
+  "recent_gifts": [ /* last 10 development:giving history rows, in SHEET ORDER — see note */ ],
+  "recent_gifts_note": "…",
   "sources_active": ["aplos", "google_sheets"]
 }
 ```
 
 Queries Aplos (`finance_snapshots` with `aplos:*` tab names) and Google Sheets fund balances directly.
+
+**`recent_gifts` was always empty until 2026-08-19 (#306).** It read `donor_gifts`, a table no
+connector writes. It now reads `development:giving history`. Two caveats carried in
+`recent_gifts_note`: these are the **last ten rows in sheet order**, not a computed top-ten-by-date —
+the tab's `date` cell is a display string (`"Aug 2025"`) and is not sortable — and they are
+all-Building-21 scope. Use `query_donors` for a Launchpad-scoped view.
 
 **`aplos_funds` is pinned to one snapshot date.** The Aplos connector snapshots funds daily, so an
 unbounded "newest 50" spanned two `period` values and truncated the newest one — a caller reading the
@@ -625,13 +668,44 @@ and is rejected before the handler runs.
 
 ---
 
+### Truncation reporting (`query_competency`, `query_students`, `query_enrollment`, `query_finances`)
+
+Every query_type that returns a capped page of rows emits the same four keys:
+
+| Key | Meaning |
+|---|---|
+| `record_count` | Rows in **this response**. Never a population figure. |
+| `total_matching` | Rows matching the filter, counted in the database independently of `limit`. |
+| `truncated` | `record_count < total_matching` — the rows are a sample. |
+| `limit` | The cap applied, so a caller knows what to raise. |
+
+**Quote `total_matching`; never quote `record_count`.** Where a tool also returns a
+domain-specific name — `query_enrollment`'s and `query_students`'s `student_count` — that name
+now carries the true total on every path, matching `query_enrollment({query_type: "total"})`.
+`query_finances` additionally reports `total_matching_is_lower_bound` when a `contains` scan
+stopped early.
+
+---
+
 ### `query_competency`
 
-Per-student competency data (scores) or the rubric structure (skills + opportunity totals by phase and term).
+Per-student competency data (scores), the rubric structure (skills + opportunity totals by
+phase and term), or an org-wide growth aggregate.
 
-**Query types:** `scores`, `rubric`.
+**Query types:** `scores`, `rubric`, `growth_aggregate`.
 
-**Filters:** `student_number`, `competency` (partial match).
+**Filters:** `student_number`, `competency` (partial match), `limit` (default 500, max 1000;
+`scores` and `rubric` only).
+
+`scores` and `rubric` return a page and report it as one: `record_count`, `total_matching`,
+`truncated` and `limit` (see "Truncation reporting" below). `growth_aggregate` reads every
+matching row and returns scalars — `avg_growth`, `min_growth`, `max_growth`, `avg_baseline`,
+`avg_performance_level`, `avg_progress`, `row_count`, `student_count`, the per-column non-null
+counts that are the real denominators, and a `by_competency` breakdown.
+
+**Quote growth from `growth_aggregate`, never from `scores` rows.** `scores` capped at 1000 of
+~2346 rows and said nothing (#276), so any figure averaged from its response described an
+arbitrary slice of the organization.
 
 ---
 

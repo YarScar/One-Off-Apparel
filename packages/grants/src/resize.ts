@@ -40,10 +40,11 @@
  */
 
 import { loadKnowledgeBase } from './data.js';
-import { containsNumericClaim, extractNumericClaims } from './figures.js';
+import { extractNumericClaims } from './figures.js';
 import { buildHandback, type Handback, type HandbackContext } from './handback.js';
 import { MAX_COMPRESSION_RATIO, measure, type Measurement } from './limits.js';
 import type { FormLimit } from './schemas.js';
+import { needsManualFigureCheck, slotsIn } from './slots.js';
 import { addWarnings } from './warnings.js';
 
 /**
@@ -66,7 +67,15 @@ export type ResizeNote =
    * rewrite it had not just generated itself, and an MCP caller can send one. Distinct from
    * `rewrite_owed` so the caller learns its rewrite was discarded rather than never noticed.
    */
-  | 'rewrite_empty';
+  | 'rewrite_empty'
+  /**
+   * The source text carries figure slots and the rewrite lost one. Not acceptable at any length, and
+   * for the same reason `figures_altered` is not: a slot that vanishes during a rewrite removes the
+   * only thing that was going to force the live lookup. The difference is that a dropped *figure* is
+   * allowed — rule 2 licenses it — and a dropped *slot* is not, because it takes the requirement with
+   * it rather than just the detail.
+   */
+  | 'slots_dropped';
 
 /** What the caller may tell this module about where the text came from. Every field is optional. */
 export interface ResizeContextInput {
@@ -174,7 +183,8 @@ export function resizeAnswer(input: ResizeInput): ResizeResult {
   const slot = ctx.kbRef === undefined ? undefined : loadKnowledgeBase().answers[ctx.kbRef];
   const kbRef = ctx.kbRef ?? null;
   const verified = slot?.verified ?? null;
-  const carriesFigures = containsNumericClaim(text);
+  // Same change as `pipeline.ts`: a figure needing a hand check, not "contains two digits".
+  const carriesFigures = needsManualFigureCheck(text);
 
   const handbackContext: HandbackContext = {
     funder: ctx.funder ?? null,
@@ -322,6 +332,49 @@ export function resizeAnswer(input: ResizeInput): ResizeResult {
     `source: ${String(unitsBefore)}/${String(limit.max)} ${limit.unit}`,
     `attempt ${String(attempts)}: ${String(unitsAfter)}/${String(limit.max)} ${limit.unit}`,
   ];
+
+  // A lost slot outranks everything, including an invented figure — it is the same class of failure one
+  // step earlier. An invented figure is a wrong number in the text; a dropped slot removes the
+  // requirement that a number be fetched at all, so the next reader sees a sentence with no hole in it
+  // and no reason to check anything. Shortening approved language is allowed; shortening away the
+  // instruction to verify is not.
+  const sourceSlots = slotsIn(text);
+  const lostSlots = sourceSlots.filter((s) => !slotsIn(rewrite).includes(s));
+  if (lostSlots.length > 0) {
+    return {
+      ...base,
+      notes: 'slots_dropped',
+      accepted: false,
+      text: null,
+      attempts,
+      units_after: unitsAfter,
+      fits_after_resize: fitsAfter,
+      measurement: rewriteMeasurement,
+      figure_check: figureCheck,
+      trace: [...trace, `slots dropped: ${lostSlots.join(', ')}`],
+      handback: buildHandback({
+        task: 'resize',
+        sourceText: text,
+        limit,
+        measurement: sourceMeasurement,
+        context: handbackContext,
+        extraRules: [
+          `REJECTED. Your rewrite dropped the figure slot(s) ${lostSlots.map((s) => `{{${s}}}`).join(', ')}. ` +
+            `Each one marks a figure that must be fetched live before this answer is submitted, so ` +
+            `removing it removes the check rather than the detail. Every slot in the source must appear ` +
+            `in your rewrite, spelled identically. If a clause genuinely has to go to make the limit, ` +
+            `drop a clause that carries no slot.`,
+        ],
+      }),
+      action: addWarnings(
+        `REJECTED — the rewrite dropped ${lostSlots.map((s) => `{{${s}}}`).join(', ')}. A slot is the ` +
+          `only thing forcing a live lookup for that figure; losing it means the answer goes out ` +
+          `unverified with nothing to show it. Rewrite from the handback, keeping every slot.`,
+        verified,
+        carriesFigures,
+      ),
+    };
+  }
 
   // An invented figure outranks a length problem, and outranks a rewrite that fits. A funder reading
   // a number LaunchPad never stated is a worse outcome than a funder reading an over-long answer, and

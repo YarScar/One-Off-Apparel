@@ -123,6 +123,10 @@ const NEXT_STEP: Readonly<Record<AnswerStatus, string | null>> = {
     'Shorten from the handback and state which facts you dropped — or check whether the field wants a short structured value instead of a narrative.',
   derive_from_reference:
     'Derive the short value from the handback source material. If it is not in there, flag it for staff rather than inventing it.',
+  needs_live_figures:
+    'Fill every `{{slot}}` in `figure_template` from the call named for it in `figure_slots`, changing nothing else. Check each slot’s `population` against what the question actually asked: if they differ, the stored sentence does not answer this question — say so rather than filling it with a differently-cut number. Leave any slot you cannot fill in place and name it.',
+  needs_application_figures:
+    'Supply the value(s) in `figure_slots` that belong to this application — an amount, a period. No connector holds them, and the figure from a previously filed application is not a substitute.',
   fetch_figure:
     'Run the `query_*` call named in `figure_call` and write the number it returns. A frozen knowledge-base figure is not an acceptable answer.',
   figure_definitional:

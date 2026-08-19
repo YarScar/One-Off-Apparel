@@ -29,6 +29,10 @@ export * from './limits.js';
 // The figure verification work order. It returns connector calls; it never makes one.
 export * from './figures.js';
 
+// The language-only storage rule: figure slots, what fills each one, and the allowlist of literals
+// that legitimately stay. Depends on `figures.js` for the calls, so it is exported after it.
+export * from './slots.js';
+
 // CPython `difflib.SequenceMatcher.ratio()`, ported. Carries the parity risk for the whole layer.
 export * from './seq-ratio.js';
 

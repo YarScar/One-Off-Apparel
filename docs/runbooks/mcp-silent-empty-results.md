@@ -254,27 +254,71 @@ the test that stops a future change from replacing the false zero with a false e
 
 ## Found, not fixed, needs a decision
 
+> The first item below is **resolved** (2026-08-19, `#306`) and left in place, with its
+> resolution recorded, because its failure mode — a permitted tool answering a specific-looking
+> `no_records` over a table nothing writes — is the sharpest example in this document of the
+> class the whole runbook is about. Everything after it is still open.
 
-### `query_donors` has no data source in production
 
-`query_donors` and `get_finance_brief.recent_gifts` read the `donor_contacts` and
-`donor_gifts` tables. The only writer of either table is `packages/db/src/seed.ts`.
-No connector populates them, so in production every donor query returns zero
-donors and zero lifetime giving, while the tool's own description promises
-Development CRM data.
+### `query_donors` had no data source in production — FIXED 2026-08-19 (#306)
 
-The actual Development CRM *is* synced, by `sync-development-crm.ts`, into
-`finance_snapshots` under `development:*`. Two ways forward:
+**Resolved.** Kept here rather than deleted, because the failure mode is the most
+instructive one in this runbook: a tool that was *permitted* and *wrong* rather than
+denied or erroring.
 
-1. **Repoint `query_donors` at the `development:*` tabs.** No new sync, but the
-   tool has to interpret sheet columns instead of typed relations, and
-   `get_entity_brief`'s donor lookup needs the same treatment.
-2. **Add a sync that writes `donor_contacts` and `donor_gifts` from the CRM
-   sheet.** Keeps the tool and its relations, costs a connector and a schema
-   mapping, and gives `get_entity_brief` donor joins for free.
+`query_donors`, `get_finance_brief.recent_gifts` and `get_entity_brief`'s donor arm
+read the `donor_contacts` / `donor_gifts` / `donor_pipeline` tables. The only writer
+of any of them is `packages/db/src/seed.ts`; no connector populates them, and
+Givebutter — the source `schema.prisma` names on `donor_contacts.givebutter_contact_id`
+— has no connector at all. So in production every donor query returned zero donors
+and zero lifetime giving while the tool's description promised Development CRM data.
 
-Until one lands, treat donor and funder-history questions as unanswerable through
-the MCP and source them from staff.
+**Why it went undetected for so long.** The tool is not ACL-denied, so it answered
+`no_records` *per funder* — a well-formed, specific-looking reply that reads as "this
+funder has not given" when it meant "no donor exists anywhere." A 2026-08-19 grant
+drafting run filed `[DATA UNAVAILABLE]` for four funders on exactly that misreading,
+with $1.6M of William Penn history live in the sheet the whole time. The integration
+test made it worse: it asserted `total_donors === 2` against the *seeded* rows, so it
+passed locally and in CI while the production path returned nothing.
+
+**The fix, option 1 of the two originally listed here.** All three tools now read the
+`development:*` tabs in `finance_snapshots` — the rows `query_finances`'s `dev_*`
+query types serve — through `apps/mcp-server/src/dev-crm.ts`. Option 2 (a sync
+writing the typed tables from the CRM sheet) was rejected: its advantage was keeping
+typed relations, and once the data was already reachable that bought ergonomics for a
+sync that did not exist, while leaving two documented routes to one answer with one of
+them dead.
+
+Four things the repoint had to get right, each of which would otherwise have replaced
+a silent zero with a silent wrong number:
+
+1. **`launchpad_only` was accepted and never read.** Every response was
+   all-Building-21 scope while the description promised Launchpad-only. It now
+   defaults to `true` and is applied, and every response states its `scope`.
+2. **Giving is summed from gift rows, not read from `dev_contacts`.** That tab's
+   `lifetime_giving`, `fy25_giving` and `fy26_giving` columns are broken at source —
+   William Penn reads `$0.00` against a real `$1,600,000.00`, while `cy2025_giving` on
+   the same row carries a correct `$500,000.00`. They are inconsistent rather than
+   uniformly empty, which is what makes them unusable: a caller cannot tell a true
+   zero from a broken one. **Still broken at source; fix belongs in the sheet.**
+3. **Totals are split by project.** William Penn gives $500,000/yr of which $425,000
+   is Launchpad and $75,000 is Network Unrestricted. A precomputed all-scope column
+   could never express that, and quoting $500,000 as the Launchpad grant overstates it.
+4. **A funder with no Contacts row still resolves.** Contacts is a stewardship roster,
+   not the set of everyone we have asked. A name found only on the giving-history,
+   pipeline or denied tabs returns a profile with `profile: null` rather than
+   `no_records` — without which a funder that had *declined* us was invisible.
+
+Name matching is confined to the name columns. `query_finances`'s `contains` matches
+the serialized row, so "William Penn" there also returns Project Based Learning, Inc.,
+whose `primary_fund` is "William Penn"; reporting one organisation's giving under
+another's name is worse than returning nothing.
+
+Covered by `apps/mcp-server/src/dev-crm.test.ts` (28 unit tests over the parsers and
+scope logic, fixtures copied from live probes) and six integration tests in
+`__tests__/tools.test.ts`. `packages/db/src/seed.ts` now seeds `development:*` rows,
+including William Penn's real two-gifts-per-year split, so local dev and CI exercise
+the production path instead of a table nothing writes.
 
 ### `aplos:funds` rows carry no balance
 
@@ -289,12 +333,6 @@ It returns individual job rows, including student names, wages, and free-text
 notes. The aggregate path is `{query_type: "aggregate", group_by: "employer"}`.
 The `by_employer` name invites the wrong call and returns identifiable data about
 minors to a caller who wanted a summary.
-
-### `query_competency({query_type: "scores"})` is unbounded
-
-With no `student_number` it returns every score row, which measured 238 KB and
-exceeds what a client can read in one response. It should require a student or
-paginate.
 
 ### `query_postsecondary` publishes a misleading rate
 
@@ -349,3 +387,20 @@ this repo and gained a `dist/`-staleness guard worth pulling back.
 **Severity, for prioritising:** no path here sums currency from a truncated page,
 so unlike the North10 money tools there is no wrong dollar figure. The exposure is
 headcount and completeness claims.
+
+## Fixed since: truncation now reports itself (#276, #195)
+
+`query_competency({query_type: "scores"})` was unbounded, then capped at 1000 of ~2346 rows
+with nothing in the response saying so; `query_students({query_type: "list"})` returned
+`student_count: rows.length`, a page size under the name `query_enrollment`'s `total` path
+uses for a real `prisma.count()`; and `query_enrollment`'s `active_during` and `by_student`
+paths had no `orderBy` at all, so a truncated page was an arbitrary subset that could differ
+between two identical calls.
+
+All of them now emit the one envelope `query_finances` established — `record_count`,
+`total_matching`, `truncated`, `limit` — from `apps/mcp-server/src/result-envelope.ts`, and
+each paged query ends its `orderBy` on a unique column. `query_competency` gained
+`query_type: "growth_aggregate"`, which computes org-wide growth in the database over every
+matching row; it is the only growth figure safe to quote. Covered by
+`apps/mcp-server/src/__tests__/result-envelope.test.ts`, whose live-DB fixture front-loads low
+growth values so an aggregate that silently paged returns a visibly different number.

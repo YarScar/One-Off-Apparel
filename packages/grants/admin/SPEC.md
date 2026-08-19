@@ -353,13 +353,24 @@ VALUES (
   '<human-readable description>',
   NOW()
 )
-ON CONFLICT ("tool_name") DO NOTHING;
+ON CONFLICT ("tool_name") DO UPDATE SET
+  "allowed_roles" = EXCLUDED."allowed_roles",
+  "category"      = EXCLUDED."category",
+  "description"   = EXCLUDED."description",
+  "updated_at"    = NOW();
 ```
 
-Two follow-ups:
+`DO UPDATE`, not `DO NOTHING`. `DO NOTHING` silently declines to write when a row for the tool
+already exists, so the declared roles never land and the registry — which fails closed — denies a
+caller the migration says is allowed. See root `CLAUDE.md` step 6 for the full rationale and the one
+tradeoff it carries. The closest template above (`20260616000000_add_skill_tool_permissions`) still
+reads `DO NOTHING`; copy its shape, not that clause. Work package #294.
+
+Three follow-ups:
 
 1. `grants` is a new category. Add it to `CATEGORY_ORDER` and `CATEGORY_LABELS` in `apps/hq/app/admin/PermissionsMatrix.tsx`, or the tools will not render on the admin page.
 2. Apply each migration locally with `pnpm db:migrate`, and to production via a one-off ECS task or the bastion — RDS is not publicly reachable.
+3. `packages/db/src/tool-permission-migrations.test.ts` fails the build if a new migration writes `tool_permissions` with `DO NOTHING`.
 
 ---
 

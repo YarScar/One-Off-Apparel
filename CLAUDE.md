@@ -119,6 +119,24 @@ pnpm sync:all                   # all connectors in parallel
 #   - Auto-deploys on push to main (CI-gated; only changed services deploy)
 #   - Manual: gh workflow run deploy.yml -f services=hq   (or all|mcp-server|aws-mcp-server|sync)
 # Task definitions live in infra/ecs/*-taskdef.json; the workflow pins the image to the commit SHA.
+#
+# MIGRATIONS (#295, fixed 2026-08-18 — NOT YET PROVEN BY A DEPLOY): a `build-mcp-server` job
+# now builds the image and registers a task definition revision pinned to the commit's SHA, and
+# `migrate` runs its one-off task against THAT revision. A final step re-reads the task log and
+# fails the job unless the "N migrations found in prisma/migrations" count the image reports
+# equals `find packages/db/prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l` for the
+# deployed commit. Do not un-pin `--task-definition`, and do not move `build-mcp-server` after
+# `migrate` — that ordering is the fix.
+#
+# The historical behaviour, for reading old runs: `migrate` used `--task-definition
+# lp-internal-mcp-server` with no revision and ran BEFORE any image was built, so it applied the
+# PREVIOUS release's migration set and still reported success. Run 32047334123 saw 12 migrations
+# where the deployed commit had 19. Migrations therefore lagged EXACTLY ONE DEPLOY —
+# 20260812000000 merged 2026-08-12 and applied at the 2026-08-17 deploy. Any green `migrate` job
+# from before 2026-08-18 does NOT mean that commit's migration ran.
+#
+# Because of that lag, RDS is behind: the seven migrations in the writing/dev tree that run
+# 32047334123 never considered are still unapplied until the first deploy carrying this fix.
 
 # Database tools
 pnpm db:studio                  # open Prisma Studio
@@ -186,9 +204,24 @@ packages/grants      → zod; deterministic grant-writing logic + seed (question
      '<human-readable description>',
      NOW()
    )
-   ON CONFLICT ("tool_name") DO NOTHING;
+   ON CONFLICT ("tool_name") DO UPDATE SET
+     "allowed_roles" = EXCLUDED."allowed_roles",
+     "category"      = EXCLUDED."category",
+     "description"   = EXCLUDED."description",
+     "updated_at"    = NOW();
    ```
    Categories: `students`, `donor_finance`, `search`, `skills`, `future`. Roles: `pending`, `program_staff`, `development`, `sales`, `finance`, `software_dev`, `leadership`, `admin`. The tool will appear on the HQ `/admin` page where admins can adjust role access without code changes.
+
+   **`DO UPDATE`, never `DO NOTHING`.** `DO NOTHING` makes the insert a silent no-op whenever a row
+   for that tool already exists, so the migration's declared roles are never written and the two
+   never reconcile — the registry fails closed (`apps/mcp-server/src/permissions.ts:87`), so the
+   symptom is `permission_denied` for a caller the migration says is allowed, with no signal
+   anywhere. That is the defect behind #204 and #262. `DO UPDATE` costs one thing, knowingly: it
+   overwrites a role change an admin made on HQ `/admin` in the window between the merge and the
+   deploy that applies the migration. A migration applies exactly once, so an admin edit made after
+   it applied is never touched. `packages/db/src/tool-permission-migrations.test.ts` fails the build
+   on a new `DO NOTHING`; the six pre-existing `DO NOTHING` migrations are exempt by name, because Prisma
+   checksums applied migrations and editing one breaks `migrate deploy` everywhere it already ran.
 7. **If using a new category**, add it to `CATEGORY_ORDER` and `CATEGORY_LABELS` in `apps/hq/app/admin/PermissionsMatrix.tsx`. Existing categories (`students`, `donor_finance`, `search`, `skills`, `future`, `other`) don't need this step — only new ones. Without this, tools in the new category won't render on the admin page.
 8. Apply the migration locally (`pnpm db:migrate`) and to production (via ECS one-off task or bastion — RDS is not publicly accessible)
 

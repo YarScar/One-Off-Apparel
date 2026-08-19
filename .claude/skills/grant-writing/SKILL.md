@@ -52,6 +52,19 @@ Read the gaps as instructions:
 | `no_kb_answer` | Nothing stored. Research and draft it — see step 1b. |
 | `kb_unverified` | `verified:false` is a **true unknown**. Never present it as confirmed. Research and draft it. |
 | `over_limit` | `compression_infeasible` means a purpose-written short answer, not a squeeze. Check whether the question wants a structured value rather than prose. |
+| `needs_live_figures` | **Yours to resolve.** The stored answer holds `{{token}}` figure placeholders. Run each token's cut (step 3), substitute, then continue. |
+| `needs_application_figures` | Staff, not you. The figure is specific to this application: a request amount, a target, a grant period. |
+
+**Committed artifacts store language, not figures.** Every figure with a live source is a `{{token}}`
+in the KB prose, and `grant_build_draft` will not return slotted text as an `answer` at all. It comes
+back as `figure_template`, which is deliberately not called `answer` because a caller who treats it as
+one pastes `{{wages_total}}` into a funder's portal. Expect far more outstanding model work than the
+tool used to report: 12 of 17 questions on one real form.
+
+**Fill before you fit.** The figure gate precedes every length branch, so the resize and expand paths
+are largely unreachable from `grant_build_draft` directly. Fill the tokens first, then pass the filled
+text to `grant_resize_answer`. Measuring a template's length measures the wrong text, since a token is
+not the length of the number that replaces it.
 
 **Expect the matcher to do badly on a funder it has never seen.** The bank's wordings come from 24
 forms. On a form from one of them, matches land at 1.00; on a new funder, most fall below the 0.42
@@ -112,9 +125,39 @@ amounts. Three answers are needed every time, and the third is mandatory:
 
 Also ask which prior applications to build from, and propose candidates by matching orientation.
 
-## Step 3 — Verify every figure
+## Step 3 — Fetch every figure live, then cut it the way the question asks
 
-Run the `query_*` calls the work order named. Then, per `references/figures.md`:
+**Participant and program figures are always fetched live. There is no version of this step where a
+number comes from stored text.** Not from the KB, not from a prior filing, not from the work order's
+claim strings, not from an example in a reference file. If an answer carries a count, a rate, a wage,
+or a dollar figure, a `query_*` call in this session produced it.
+
+The work order is not the whole list of calls to make. It reports which *stored claims* have drifted,
+which fires off the KB rather than off the funder's question. A question can need a live figure the
+work order never mentions.
+
+So work both lists:
+
+1. **The question list.** For every question that asks for a number, look up the cut in
+   `references/figure-cuts.md` and run it. That file maps question shape to tool, `query_type`, and
+   filters for enrollment, employment, certifications, postsecondary, finance, and competency.
+2. **The work order list.** Run what `prep.mjs` named, to catch stale figures inside stored prose you
+   are reusing.
+
+**Getting a figure should be quick. Deciding the cut is the actual work.** If you are agonizing over
+whether a number is current, you have skipped the call. If you are agonizing over which population it
+counts, you are in the right place: that judgment is the job.
+
+Three failures to watch for, each of which produces a wrong number that reads as sourced:
+
+- **Scope mismatch.** The question asked for the last 12 months and you ran the all-time cut. Live
+  does not make it right. A count is only correct against the window and population asked for.
+- **Unstated denominator.** "92% pass rate" or "301 participants" with no population attached. The cut
+  goes in the same sentence as the figure.
+- **Summing phase counts.** Participants appear in every phase they touch, so the phase totals sum
+  above the unduplicated count. Union on `student_number`.
+
+Then, per `references/figures.md`:
 
 - **The claim strings in the work order are snapshots, not current facts.** They quote what the KB
   held on its snapshot date, and the live connector has moved past them — that is why the check
@@ -122,9 +165,15 @@ Run the `query_*` calls the work order named. Then, per `references/figures.md`:
 - **Live data beats a filed figure.** On a drift conflict, the connector wins.
 - **A definitional conflict never resolves by recency.** Two figures counting different populations
   both being correct is an escalation, not a choice. Ask which population the funder means.
+- **A scoping question is not a definitional conflict.** If the question names a year, a program, or a
+  phase, it has already told you the definition. Run that cut. Escalating it wastes a staff decision on
+  something the funder settled. Only escalate when two *correct* measurements count different
+  populations and the question does not say which it wants.
 - **Stamp every confirmed figure** with its source tool and `asOf` date. Re-check anything measured
   more than three days before submission.
-- **ACL denial is not permission to quote the frozen figure.** Write `[DATA UNAVAILABLE]`.
+- **ACL denial is not permission to quote the frozen figure.** Write `[DATA UNAVAILABLE]`. Neither is a
+  tool that returns something other than what you asked for: `get_finance_brief` carries no income or
+  expense totals, so it cannot answer a budget question no matter how successfully it returns.
 
 ## Step 4 — Draft
 
@@ -177,7 +226,9 @@ drawn from established filed material, and should.
 ## References
 
 - `references/style.md` — voice, banned words, the non-negotiables, the self-edit checklist
-- `references/figures.md` — figure verification, conflict resolution, which tool for which number
+- `references/figure-cuts.md` — **the cut catalogue: question shape to tool, `query_type` and filters.**
+  Read this whenever a question asks for a number
+- `references/figures.md` — drift in stored claims, conflict resolution, ACL denial
 - `references/gap-fill.md` — the gap classes, the source ladder, the candidate record
 - `packages/grants/docs/PLAYBOOK.md` — the source of the craft rules
 - `packages/grants/README.md` — the rules you cannot break; the deterministic layer's shape

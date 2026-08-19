@@ -105,7 +105,9 @@ static structured number for those three is the one answer this layer must not g
    much smaller scope than the issue assumes: it covers the ~7 absent values, not 40 percent of a form.
    The acceptance criteria's OR-branch is satisfied by recording it.
 5. **Route the three number questions to the live connector (new option).** `figures.ts` already names
-   the exact `query_*` call for each drifting figure — `annual_budget` → `get_finance_brief`,
+   the exact `query_*` call for each drifting figure — `annual_budget` → `query_finances {query_type:
+   'annual'}` (this said `get_finance_brief` until work package `#275` corrected it on 2026-08-17; that
+   tool returns no income or expense total),
    `students_served_total` → `query_enrollment`. The caller runs that call and writes the live number
    into the field; a frozen KB number never ships. This is `derive_from_reference`'s sibling: derive
    from the *live tool*, not from prose. It keeps the no-fetch rule intact (the caller executes the

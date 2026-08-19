@@ -226,12 +226,84 @@ describeLocal('MCP tool handlers (integration)', () => {
     expect(result.students.map((s) => s.canonical_name)).toEqual(['Tai Pham']);
   });
 
-  it('query_donors summary reflects seeded donors', async () => {
+  // Repointed at the development:* CRM tabs by #306. This used to assert against the seeded
+  // `donor_contacts` rows — a table no connector writes, so the assertion passed locally and the
+  // tool returned nothing in production. It now reads the same tabs `query_finances dev_*` serves.
+  it('query_donors summary reads the development CRM tabs, Launchpad-scoped by default', async () => {
     const result = (await client.callTool('query_donors', {
       query_type: 'summary',
-    })) as { total_donors: number; lifetime_giving: { total: number } };
+    })) as {
+      total_donors: number;
+      scope: string;
+      lifetime_giving: { total: number; contributing_gifts: number };
+    };
+    expect(result.scope).toBe('launchpad_only');
     expect(result.total_donors).toBe(2);
-    expect(result.lifetime_giving.total).toBeGreaterThan(0);
+    // Launchpad-scoped: William Penn's $425,000 Launchpad gift plus Christian's $5,000 + $100.
+    // The $75,000 Network gift is deliberately excluded.
+    expect(result.lifetime_giving.total).toBe(430100);
+    expect(result.lifetime_giving.contributing_gifts).toBe(3);
+  });
+
+  it('query_donors summary widens to all Building 21 scope on request', async () => {
+    const result = (await client.callTool('query_donors', {
+      query_type: 'summary',
+      launchpad_only: false,
+    })) as { scope: string; lifetime_giving: { total: number } };
+    expect(result.scope).toBe('all_building21');
+    // The same three gifts plus the $75,000 Network Unrestricted one.
+    expect(result.lifetime_giving.total).toBe(505100);
+  });
+
+  it('query_donors profile splits giving by project, so a Launchpad share is never mistaken for the whole grant', async () => {
+    const result = (await client.callTool('query_donors', {
+      query_type: 'profile',
+      donor_name: 'William Penn',
+      launchpad_only: false,
+    })) as {
+      matched_name: string;
+      contact_id: string;
+      giving_summary: { total: number; by_project: Record<string, number>; by_fiscal_year: Record<string, number> };
+      grants_tracker: Array<{ lifetime_total: number; program_officer: string | null }>;
+      prospect_pipeline: Array<{ prospect_id: string }>;
+    };
+    expect(result.matched_name).toBe('William Penn Foundation');
+    expect(result.contact_id).toBe('D-197');
+    expect(result.giving_summary.total).toBe(500000);
+    expect(result.giving_summary.by_project).toEqual({ Launchpad: 425000, Network: 75000 });
+    expect(result.giving_summary.by_fiscal_year).toEqual({ FY25: 500000 });
+    expect(result.grants_tracker[0]?.lifetime_total).toBe(500000);
+    // `[VP]` is a withholding marker in the sheet, not a value — it must not reach the caller.
+    expect(result.grants_tracker[0]?.program_officer).toBeNull();
+    expect(result.prospect_pipeline[0]?.prospect_id).toBe('P-0041');
+  });
+
+  it('query_donors profile reports a prior decline rather than staying silent about it', async () => {
+    const result = (await client.callTool('query_donors', {
+      query_type: 'profile',
+      donor_name: 'Eagles Social Justic Fund',
+    })) as { prior_declines: Array<{ asked: number }>; prior_declines_note?: string };
+    expect(result.prior_declines).toHaveLength(1);
+    expect(result.prior_declines[0]?.asked).toBe(25000);
+    expect(result.prior_declines_note).toContain('first-approach framing would be wrong');
+  });
+
+  it('query_donors list filters by donor type', async () => {
+    const result = (await client.callTool('query_donors', {
+      query_type: 'list',
+      donor_type: 'Foundations',
+    })) as { total_matching: number; donors: Array<{ donor_name: string; contact_id: string }> };
+    expect(result.total_matching).toBe(1);
+    expect(result.donors[0]?.donor_name).toBe('William Penn Foundation');
+  });
+
+  it('query_donors distinguishes out-of-scope from absent, instead of one ambiguous no_records', async () => {
+    const result = (await client.callTool('query_donors', {
+      query_type: 'profile',
+      donor_name: 'Nobody At All',
+    })) as { error?: { code: string; message: string } };
+    expect(result.error?.code).toBe('no_records');
+    expect(result.error?.message).toContain('development:contacts');
   });
 
   it('get_entity_brief surfaces student profile', async () => {
@@ -322,7 +394,14 @@ describeLocal('MCP tool handlers (integration)', () => {
         continue;
       }
       expect(r.handback?.source_text.length).toBeGreaterThan(0);
-      expect(r.handback?.rules.join(' ')).toMatch(/NEVER invent|ONLY from the source material/);
+      // Every handback carries a no-invention guardrail, whatever its task. The third alternative is
+      // `fill_figures` (work package #275), which states the rule about the thing it can invent — a
+      // figure — rather than about facts in general: "Do NOT invent a figure and do NOT delete the
+      // sentence to make the gap disappear". Matching on wording is fragile, and it is deliberate: the
+      // property under test is that the rule is *stated to the model*, which only its text can show.
+      expect(r.handback?.rules.join(' ')).toMatch(
+        /NEVER invent|ONLY from the source material|Do NOT invent a figure/,
+      );
       // The re-measure step must name a REGISTERED tool. G4 registered grant_resize_answer, so this
       // asserts against tools/list rather than against a hard-coded name — the property that matters
       // is reachability, and it is the one that broke when the name was chosen by hand.
