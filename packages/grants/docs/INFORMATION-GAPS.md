@@ -147,9 +147,9 @@ These are cover-sheet and people facts that every application needs and nothing 
 
 | Fact | Where it blocked | Why it is missing |
 |---|---|---|
-| Website | GSK Q15, WPF Q5 | No website stored anywhere. The pipeline answered with the street address (routing defect, §7.1). |
-| 501(c)(3) determination year | GSK Q13 | KB holds the founding year (2013) and the EIN, not the determination year; the two are not the same fact. The pipeline pasted the EIN (routing defect, §7.2). |
-| Building 21 registered address | GSK Q11 | KB holds only Launchpad's hub (801 Market Street). The fiscal sponsor's registered address is a different fact. |
+| Website | GSK Q15, WPF Q5 | **Closed 2026-08-20.** `kb.profile.identity` now states `https://launchpadphilly.org`. The pipeline still routes "Website" to `cover.address` (routing defect, §7) rather than to this prose, because no `cover.website` question id exists in `questions.json` — that part is unchanged. |
+| 501(c)(3) determination year | GSK Q13 | **Closed 2026-08-20.** `kb.profile.identity` now states 2018 (ProPublica: "tax-exempt since April 2018"), distinct from the 2013 founding year. The routing defect (§7, pipeline pastes the EIN here) is unchanged — the KB has the fact now, the bank still doesn't ask for it correctly. |
+| Building 21 registered address | GSK Q11 | **Partly closed 2026-08-20.** `kb.profile.identity` now states the registered locality is Plymouth Meeting, PA (ProPublica), confirming it differs from Launchpad's 801 Market Street hub. The exact street address is still unconfirmed — `[STAFF CONFIRM]`. |
 | Contact phone | GSK Q14 | Name, title, and email are stored; phone is not. |
 | Low-income / free-reduced-lunch shares | GSK Q8, Hamilton Q9 | Prior filings claim `~90%` low-income and `100%` FRL. **Neither figure is in the connector.** Hamilton's criteria require `>70%` FRL, so this is an eligibility claim and must be sourced from the enrollment workbook before filing. |
 | Staff headcount | JFF Q3 | `search_documents("org chart staff roster headcount")` returned **0 results** on 2026-08-11. The KB carries two conflicting numbers (15 and 9), and the stored answer asserts 9 full-time + 1 part-time + ~30 volunteers. Not filed. |
@@ -260,10 +260,12 @@ person.
 
 ### 6.3 The KB snapshot is older than the bank
 
-`kb.meta.updated` is `2026-07-23`; `questions.json` `meta.updated` is `2026-08-11`. The connector
-reconciliation prose is dated the same 07-23 and its four staff flags — served count, PCEP
-denominator, Lightspeed, postsecondary — are all still open. Every figure the KB carries is
-therefore a 07-23 snapshot, and the ledger re-checked each live before filing.
+`kb.meta.updated` moved to `2026-08-20` (the org-identity gapfill above); `questions.json`
+`meta.updated` is `2026-08-11`, so the KB is no longer the older of the two. The connector
+reconciliation prose is still dated 07-23 and its four staff flags — served count, PCEP
+denominator, Lightspeed, postsecondary — are all still open; the figures those flags cover are
+still a 07-23 snapshot, and the ledger re-checked each live before filing. Only the identity prose
+moved on 08-20, not the figures.
 
 ---
 
@@ -403,7 +405,8 @@ broken.** Two habits follow: rebuild workspace packages before believing a type 
 | Fiscal year on any finance figure (§1.1) | Probe `q3_2026_actuals*` and `phase_actuals_2025_*`, whose names carry a period, before escalating `grant-a54` | eng |
 | Prior funding per funder (§2.1) | Closed by `dev_grants_tracker` — route `eligibility.prior_funding` at it instead of the narrative slot | eng |
 | Unmatchable filter returns empty, not an error (§8.4) | **Merge `writing/dev`.** The fix is written and tested; only the deploy is missing | eng |
-| Website, registered address, phone, determination year, legal name (§2) | fill `kb.profile.identity` and contacts from a person | staff |
+| Website, registered address (locality), determination year (§2) | **Closed 2026-08-20** — found from public IRS filing data + the org's own email domain, not a person; see `CHANGELOG.md` 2026-08-20 | (found, not staff) |
+| Phone, exact Building 21 street address, legal name if spun out (§2) | fill `kb.profile.identity` and contacts from a person | staff |
 | Low-income / FRL shares (§2) | source from the enrollment workbook | staff |
 | Staff headcount and bios (§2) | org-chart source or staff | staff |
 | Definitional conflicts (§3) | a person picks the population; sentence names its denominator | staff |

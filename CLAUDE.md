@@ -1,6 +1,8 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Slimmed 2026-08-20 to cut per-request context — how-to detail lives in project skills (`add-mcp-tool`,
+`implement-connector`) and loads only when used.
 
 ## Work Tracking — OpenProject is mandatory
 
@@ -114,29 +116,10 @@ pnpm sync:all                   # all connectors in parallel
 #   AWS_PROFILE=lp-internal aws ecs run-task --cluster lp-internal \
 #     --task-definition lp-sync-google-sheets:1 --launch-type FARGATE ...
 
-# Deploy: GitHub Actions builds the image (Buildx) and ships via the lp-github-deploy
-# OIDC role — NO local Docker needed. See .github/workflows/deploy.yml.
-#   - Auto-deploys on push to main (CI-gated; only changed services deploy)
-#   - Manual: gh workflow run deploy.yml -f services=hq   (or all|mcp-server|aws-mcp-server|sync)
+# Deploy: GitHub Actions builds the image (Buildx) and ships via the lp-github-deploy OIDC rule.
+# See .github/workflows/deploy.yml. Auto-deploys on push to main (CI-gated); manual:
+#   gh workflow run deploy.yml -f services=hq   (or all|mcp-server|aws-mcp-server|sync)
 # Task definitions live in infra/ecs/*-taskdef.json; the workflow pins the image to the commit SHA.
-#
-# MIGRATIONS (#295, fixed 2026-08-18 — NOT YET PROVEN BY A DEPLOY): a `build-mcp-server` job
-# now builds the image and registers a task definition revision pinned to the commit's SHA, and
-# `migrate` runs its one-off task against THAT revision. A final step re-reads the task log and
-# fails the job unless the "N migrations found in prisma/migrations" count the image reports
-# equals `find packages/db/prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l` for the
-# deployed commit. Do not un-pin `--task-definition`, and do not move `build-mcp-server` after
-# `migrate` — that ordering is the fix.
-#
-# The historical behaviour, for reading old runs: `migrate` used `--task-definition
-# lp-internal-mcp-server` with no revision and ran BEFORE any image was built, so it applied the
-# PREVIOUS release's migration set and still reported success. Run 32047334123 saw 12 migrations
-# where the deployed commit had 19. Migrations therefore lagged EXACTLY ONE DEPLOY —
-# 20260812000000 merged 2026-08-12 and applied at the 2026-08-17 deploy. Any green `migrate` job
-# from before 2026-08-18 does NOT mean that commit's migration ran.
-#
-# Because of that lag, RDS is behind: the seven migrations in the writing/dev tree that run
-# 32047334123 never considered are still unapplied until the first deploy carrying this fix.
 
 # Database tools
 pnpm db:studio                  # open Prisma Studio
@@ -144,6 +127,13 @@ pnpm db:migrate                 # deploy pending migrations (production)
 pnpm --filter @lp-ai/lib-db migrate:dev  # create new migration file (dev)
 pnpm db:down                    # stop the local Postgres container
 ```
+
+**Migrations — do not touch the deploy ordering.** Since 2026-08-18 the workflow's `migrate` job runs
+a one-off task pinned to the image the `build-mcp-server` job just registered (commit-SHA-pinned
+`--task-definition`), and fails unless the image's applied-migration count matches the repo's.
+**Do not unpin `--task-definition`, do not move `build-mcp-server` after `migrate`.** Before that fix,
+`migrate` ran unpinned against the *previous* release's image and migrations lagged exactly one deploy
+(#295). Any green `migrate` job from before 2026-08-18 does not prove that commit's migration ran.
 
 ## Architecture
 
@@ -167,7 +157,7 @@ packages/grants      → zod; deterministic grant-writing logic + seed (question
 - `prisma.config.ts` (repo root) — Prisma config pointing at the schema and migrations
 - `packages/db/src/entity-resolution.ts` — fuzzy name matching across all data sources; called by `get_student_info` and `search_by_person`
 - `packages/db/src/sync-runs.ts` — `runSync()` wrapper used by every connector
-- `apps/mcp-server/src/make-server.ts` — registers all tools (25: 16 data + `find_grant_documents` + `grant_match_question` + `grant_build_draft` + `grant_resize_answer` + 5 skill); edit here to add/remove tools. Verify with `grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print s}'` rather than trusting this number
+- `apps/mcp-server/src/make-server.ts` — registers all tools; edit here to add/remove tools. Verify with `grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print s}'` rather than trusting a number
 - `apps/mcp-server/src/tool-helpers.ts` — `runTool()` wrapper (error capture + usage logging), `parseStr()`, `parseNum()`
 - `apps/mcp-server/src/errors.ts` — `toolError()` and `notImplemented()` for structured error envelopes
 - `apps/mcp-server/src/usage-log.ts` — writes every tool call to `usage_logs` table; surfaced in HQ `/tools`
@@ -187,69 +177,18 @@ packages/grants      → zod; deterministic grant-writing logic + seed (question
 | `/api/health` | Unauthenticated health check |
 | `/auth/signin` | Google OAuth sign-in (whitelisted from auth middleware) |
 
-### Adding a new MCP tool
+### How-tos live in skills
 
-1. Create `apps/mcp-server/src/tools/<tool-name>.ts` — export `registerXxx(server: McpServer): void`
-2. Inside, call `server.registerTool(NAME, { description, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) => runTool(NAME, input, async () => { ... }))` — annotations are required on all tools to avoid per-call approval prompts in Claude
-3. Use `toolError(code, message)` or `notImplemented(NAME)` for structured error returns
-4. Import and call `registerXxx(server)` in `apps/mcp-server/src/make-server.ts`
-5. Update the count in `apps/mcp-server/src/__tests__/tools.test.ts` and add the tool name to the expected list
-6. **Add a `tool_permissions` migration** so the tool is accessible to users. Without this, the tool will be blocked for all roles. Create a migration at `packages/db/prisma/migrations/<timestamp>_add_<name>_permission/migration.sql`:
-   ```sql
-   INSERT INTO "tool_permissions" ("tool_name", "allowed_roles", "category", "description", "updated_at")
-   VALUES (
-     '<tool_name>',
-     ARRAY['<role1>', '<role2>', 'leadership', 'admin'],
-     '<category>',
-     '<human-readable description>',
-     NOW()
-   )
-   ON CONFLICT ("tool_name") DO UPDATE SET
-     "allowed_roles" = EXCLUDED."allowed_roles",
-     "category"      = EXCLUDED."category",
-     "description"   = EXCLUDED."description",
-     "updated_at"    = NOW();
-   ```
-   Categories: `students`, `donor_finance`, `search`, `skills`, `future`. Roles: `pending`, `program_staff`, `development`, `sales`, `finance`, `software_dev`, `leadership`, `admin`. The tool will appear on the HQ `/admin` page where admins can adjust role access without code changes.
+- **Adding / renaming / removing an MCP tool** → invoke the `add-mcp-tool` skill. It covers the
+  `registerTool` call + annotations, `make-server.ts` wiring, the tool-count test, and the
+  `tool_permissions` migration + admin-page category step (including the **`DO UPDATE`, never
+  `DO NOTHING`** rule and the new-category step).
+- **Implementing or changing a connector** → invoke the `implement-connector` skill. It covers the
+  `sync()` + `runSync()` wrapper shape, the noop-when-key-missing pattern, and declaring tables for
+  the 5% integrity guard.
 
-   **`DO UPDATE`, never `DO NOTHING`.** `DO NOTHING` makes the insert a silent no-op whenever a row
-   for that tool already exists, so the migration's declared roles are never written and the two
-   never reconcile — the registry fails closed (`apps/mcp-server/src/permissions.ts:87`), so the
-   symptom is `permission_denied` for a caller the migration says is allowed, with no signal
-   anywhere. That is the defect behind #204 and #262. `DO UPDATE` costs one thing, knowingly: it
-   overwrites a role change an admin made on HQ `/admin` in the window between the merge and the
-   deploy that applies the migration. A migration applies exactly once, so an admin edit made after
-   it applied is never touched. `packages/db/src/tool-permission-migrations.test.ts` fails the build
-   on a new `DO NOTHING`; the six pre-existing `DO NOTHING` migrations are exempt by name, because Prisma
-   checksums applied migrations and editing one breaks `migrate deploy` everywhere it already ran.
-7. **If using a new category**, add it to `CATEGORY_ORDER` and `CATEGORY_LABELS` in `apps/hq/app/admin/PermissionsMatrix.tsx`. Existing categories (`students`, `donor_finance`, `search`, `skills`, `future`, `other`) don't need this step — only new ones. Without this, tools in the new category won't render on the admin page.
-8. Apply the migration locally (`pnpm db:migrate`) and to production (via ECS one-off task or bastion — RDS is not publicly accessible)
-
-### Implementing a connector
-
-All connectors follow the same pattern:
-
-```ts
-export async function sync(): Promise<SyncRunRecord> {
-  return runSync('connector-name', async () => {
-    const env = await loadEnv();
-    if (!env.REQUIRED_KEY) return { status: 'noop', notes: 'key not set' };
-    // ... upsert records into Prisma ...
-    return { status: 'ok', recordsUpserted: n };
-  });
-}
-```
-
-The `runSync` wrapper creates the `sync_runs` row, captures errors, records duration, and runs a **5% integrity guard** — if any declared table drops more than 5% in row count during a sync, an `INTEGRITY WARNING` is appended to the `sync_runs.notes` field.
-
-Pass the `tables` option to declare which tables a connector writes to:
-```ts
-return runSync('connector-name', async () => { ... }, {
-  tables: ['students', 'student_phase_outcomes'],
-});
-```
-
-**Critical sync safety rule:** NEVER use `deleteMany({})` or `TRUNCATE` before inserting data. If the sync crashes midway, the table is left empty with no recovery. Instead:
+**The critical sync safety rule, which applies regardless:** NEVER use `deleteMany({})` or `TRUNCATE`
+before inserting data. If the sync crashes midway, the table is left empty with no recovery. Instead:
 1. **Upsert** every row using a stable `sourceId` (platform ID or composite natural key — never row numbers)
 2. **Track** which sourceIds were seen during this run
 3. **After all upserts succeed**, delete only rows whose sourceId was NOT seen
@@ -290,7 +229,7 @@ The grant writing layer keeps its own document set, scoped to that workstream �
 from outside it, because the grant work landed platform-wide changes and recorded them there:
 
 - [Changelog](packages/grants/CHANGELOG.md) — material changes that workstream landed, including schema, tool surface, and corrections to documented procedures
-- [Documentation conventions](packages/grants/CLAUDE.md) — sources of truth, current verified state, and documentation debt
+- [Documentation conventions](packages/grants/CLAUDE.md) — sources of truth, current verified state, and documentation debt (detail lives in [`packages/grants/docs/STATE.md`](packages/grants/docs/STATE.md))
 
 ## Setup
 

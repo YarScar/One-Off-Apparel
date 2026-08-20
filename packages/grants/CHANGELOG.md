@@ -25,6 +25,54 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-20
+
+### Changed — `packages/grants/CLAUDE.md` slimmed; state snapshot, debt list, and verification commands moved to `docs/STATE.md`
+
+To cut per-request context cost (the file was ~38 KB and loads into every Claude Code request),
+`packages/grants/CLAUDE.md` now carries only the load-bearing rules: §1 (the reconciliation rule),
+§2 (sources of truth), a one-paragraph §3 current-state summary, and §5 (changelog maintenance).
+The full verified snapshot, the documentation-debt list, and the verification commands moved
+byte-for-byte into `packages/grants/docs/STATE.md` (§3 / §4 / §6 unchanged, plus a header noting the
+move). Root `CLAUDE.md` was slimmed the same way — the add-tool and connector how-tos were already
+duplicated verbatim by the `add-mcp-tool` and `implement-connector` skills, so those sections are now
+pointers to the skills; the migration-deploy ordering note is condensed.
+
+**Blast radius:** nothing functionally changed — same commands, same authority, same debt record, all
+one path hop away. If you reference `CLAUDE.md` §4 or §6, point at `docs/STATE.md` instead.
+
+### Added — three org-identity facts filled in `kb_launchpad.json`, closing a gap three runs flagged
+
+`drafts/runs/2026-08-19/GAPS-AND-UNCERTAINTIES.md` §D listed website, mailing address, and year founded
+as facts the platform holds no answer for, needed by all four grants in `#304`. The same gap was
+recorded on 2026-08-11 (`docs/INFORMATION-GAPS.md`) and never closed. Per staff direction, financial
+and other number-based figures were left alone here because they move day to day; these three do not.
+
+Added to `kb.profile.identity`'s prose (`packages/grants/seed/kb_launchpad.json`), sourced from public
+IRS filing data via web search — **not** filed Launchpad material, which is this KB's usual bar, so
+flag if a stricter provenance standard is wanted for this class of fact:
+
+- **Website**: `https://launchpadphilly.org`. Read off the org's own email domain already on file
+  (`dannyelle@launchpadphilly.org`, `giving@launchpadphilly.org`) and confirmed by web search.
+- **Building 21's IRS-registered address is not the Philadelphia hub.** ProPublica Nonprofit Explorer
+  (EIN 47-2514219) lists the registered locality as Plymouth Meeting, PA; 801 Market Street is
+  Launchpad's program site, not Building 21's registered address. Exact street still
+  `[STAFF CONFIRM]` — the full address sits behind an embedded PDF viewer this pass didn't extract.
+- **501(c)(3) determination year is 2018, not the 2013 founding year.** Same ProPublica source:
+  "tax-exempt since April 2018." The KB previously had only the founding year, so any field asking
+  specifically for the determination year had nothing correct to answer with — three separate runs
+  (`aug7_gsk`, `wpf_workforce_2026`) filed `[DATA UNAVAILABLE]` here.
+
+**Did not add** a `cover.website` structured value: no such question id exists in `questions.json` yet
+(`docs/INFORMATION-GAPS.md` §7.1 — the "Website" question currently routes to `cover.address` by
+design, a bank-wording defect, not a content one). Adding the key anyway fires
+`structured_key_dangling` (`data.test.ts`) — verified by trying it, reverting, and confirming
+`pnpm exec vitest run packages/grants` returns to 320/320 green. Wiring a real `cover.website`
+canonical is engineering work and is unchanged by this pass.
+
+Still open, and not addressable without a person: exact Building 21 registered street address, board
+list, audited financials/990 attachment. Tracked as work package `#317`, child of `#304`.
+
 ## 2026-08-19
 
 ### Fixed — `recent_gifts` returned the OLDEST gifts, because sheet order is not chronological

@@ -151,7 +151,7 @@ distinguish a closed year from a projection, and route it to finance. Do not pre
 actual.
 
 This is recorded as an open staff question: `FIGURE-LEDGER.md` under "Re-source, 2026-08-14" marks
-`annual_budget` ANSWERED with **fiscal year unverified**, and `packages/grants/CLAUDE.md` §4 item 11
+`annual_budget` ANSWERED with **fiscal year unverified**, and `packages/grants/docs/STATE.md` §4 item 11
 carries it as `grant-a54`. The same note records a second open question worth knowing: **no live total
 matches the KB's `$1.34M FY2025 expenses`.** The closest is Total *Administrative* Expenses at
 $1,394,055.02, which is a narrower measure than total expense, so the KB figure may never have meant
