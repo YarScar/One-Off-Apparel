@@ -296,12 +296,15 @@ export function computeIntegrityReport(
     });
   }
 
-  // -- kb refs named in the reconciliation prose -------------------------------------------
-  // `meta.connector_reconciliation` is currently the only machine-readable link between the KB and
-  // the live connector. Scraping prose is ugly, but letting that link rot silently is exactly the
-  // regression the data-honesty rules exist to prevent. The real fix is to promote the field to a
-  // structured array — see figures.ts.
-  const prose = `${kb.meta.connector_reconciliation} ${kb.meta.source_recency} ${kb.meta.note}`;
+  // -- kb refs named in meta prose -----------------------------------------------------------
+  // Scraping prose is ugly, but letting a dangling reference in staff-facing meta text rot silently
+  // is exactly the regression the data-honesty rules exist to prevent.
+  //
+  // `meta.connector_reconciliation` used to be scanned here too. It carried the same kind of stale-
+  // figure risk `stored_literal_figure` guards against for `kb.answers`, but outside that scan's
+  // loop — WP #322 removed it from the KB entirely rather than extend this scan to cover it: it's
+  // relocated, dated, to `docs/connector-reconciliation-notes.md`, which no code path reads.
+  const prose = `${kb.meta.source_recency} ${kb.meta.note}`;
   const named = new Set(prose.match(/kb\.[a-z0-9_.]+/g) ?? []);
   const proseDangling = [...named]
     .map((r) => r.replace(/\.$/, ''))

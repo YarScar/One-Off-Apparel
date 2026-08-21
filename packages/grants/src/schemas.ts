@@ -193,8 +193,6 @@ export const knowledgeBaseSchema = z
         note: z.string(),
         /** Precedence order for conflict resolution, newest first. */
         source_recency: z.string(),
-        /** Prose record of the last read-only cross-check against the live connector. */
-        connector_reconciliation: z.string(),
         framing: z.string().optional(),
       })
       .passthrough(),

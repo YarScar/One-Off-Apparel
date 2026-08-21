@@ -67,7 +67,6 @@ function kbWith(ref: string, text: string, verified = false): KnowledgeBase {
       updated: '2026-07-23',
       note: '',
       source_recency: '',
-      connector_reconciliation: '',
     },
     answers: { [ref]: { label: 'L', verified, text } },
   };

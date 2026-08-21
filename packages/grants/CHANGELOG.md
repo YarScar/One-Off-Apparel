@@ -27,6 +27,21 @@ entry can be verified rather than trusted.
 
 ## 2026-08-21
 
+### Removed — WP #322: `kb.meta.connector_reconciliation` relocated out of the KB
+
+`kb_launchpad.json`'s `meta.connector_reconciliation` carried dollar/percentage figures dated
+2026-07-23, a month stale against `meta.updated` (2026-08-20), and outside every staleness check:
+`computeIntegrityReport`'s `stored_literal_figure` scan (`src/data.ts`) only walks `kb.answers`, and
+the only scan that touched `meta` at all (`kb_ref_dangling_in_prose`) checks for dangling KB-slot
+references, a different concern. Confirmed (2026-08-21) the field was read by nothing besides that
+dangling-ref scan — never surfaced to a drafting model — so the field is deleted from the KB and its
+content relocated verbatim to [`docs/connector-reconciliation-notes.md`](docs/connector-reconciliation-notes.md),
+a dated staff note no code path reads. This removes the staleness risk instead of scanning for it
+forever. `knowledgeBaseSchema` (`src/schemas.ts`) no longer declares the field; `data.ts`'s prose scan
+now runs over `source_recency` + `note` only. If you have an existing local clone with an older
+`kb_launchpad.json`, `pnpm db:seed` or re-pulling picks up the trimmed file automatically — no
+migration involved, this is corpus JSON, not the database.
+
 ### Added — WP #321: `grant_verify_figure` closed-loop figure check
 
 `figure_call` in `pipeline.ts` tells the drafting model which `query_*` tool sources a figure, but

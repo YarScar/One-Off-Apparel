@@ -263,7 +263,7 @@ describe('computeIntegrityReport', () => {
 
   it('fires kb_ref_dangling_in_prose for a slot named only in meta, trailing period and all', () => {
     const { bank, kb } = corpus();
-    kb.meta.connector_reconciliation += ' Cross-checked against kb.gone_slot.';
+    kb.meta.note += ' Cross-checked against kb.gone_slot.';
     const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['kb_ref_dangling_in_prose']);
     // The sentence-final period must be stripped before the lookup, or a prose reference at the end
