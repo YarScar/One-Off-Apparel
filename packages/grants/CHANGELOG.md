@@ -25,6 +25,45 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-21
+
+### Removed — the five `FIGURE_DEBT` unsourced figures, stripped from the corpus rather than settled
+
+The language-only rule already blocked any *new* stored figure without a live slot or a recorded
+exemption (`stored_literal_figure`, `high`). It also carried one standing exception: `FIGURE_DEBT`
+(`packages/grants/src/slots.ts`) let five figures that drift with no connector to source them stay
+literal, reported at `medium` (`stored_figure_unsourced`) rather than blocked. On review, that
+exception was itself a hole in the "nothing pulled from the knowledge base can violate the live-figures
+rule" guarantee — so the five claims were removed from the corpus instead of left as acknowledged debt:
+
+- **Outreach reach** — "reached more than 1,000 young people through info sessions and outreach" /
+  "1,000+ reached through outreach" (`kb.history`, `kb.capacity`, `kb.metrics`).
+- **Recruitment footprint** — "more than 30 non-selective high schools", "30+ ZIP codes"
+  (`kb.program_desc`, `kb.target_population`, `kb.partnerships`, `kb.profile.demographics`).
+- **Volunteer count** — "roughly 30 volunteers" (`kb.staff_bios`).
+- **Recruitment-interest split** — "fewer than 10% of recruited students... the other ~90%", the stated
+  rationale for the Entrepreneurial Leadership pathway (`kb.dei`, rewritten to keep the pathway
+  rationale without the unsourced split).
+- **Draft-reconciliation commentary** — a note comparing how two draft applications rounded the wage
+  total, which had leaked into stored answer prose rather than staying in `meta` (`kb.outcomes`,
+  `kb.metrics`).
+
+`packages/grants/seed/kb_launchpad.json` no longer states any of these. The matching five entries in
+`slots.ts::FIGURE_DEBT` were removed with them — leaving a dead register entry pointing at a claim the
+corpus no longer makes would have been the "delete an entry to quiet the warning" move the module's own
+doc comment forbids; removing the claim and the entry together is not that. `FIGURE_DEBT` is now an
+empty array, kept as the mechanism for any *future* unfillable figure.
+
+**Test changes:** `data.test.ts::BASELINE_CODES` and the "carries no violation" assertion now expect an
+empty integrity report instead of `['stored_figure_unsourced']`. `slots.test.ts`'s "no leaked /g regex
+state" test for `FIGURE_DEBT` now asserts 0 matches instead of 1, since there is nothing left in the
+register to match — the regression it guards against re-arms the moment a new entry is added.
+
+**Blast radius:** `pnpm exec vitest run packages/grants/src/data.test.ts packages/grants/src/slots.test.ts`
+— 69/69 pass. Full `pnpm test` — 562/562 pass. `pnpm -r typecheck` clean across all fourteen typechecked
+packages. `loadIntegrityReport()` on the real seed now returns `[]` — zero warnings of any severity,
+not just zero `high`. See `CLAUDE.md` §3 and `docs/STATE.md` §3 for the updated snapshot.
+
 ## 2026-08-20
 
 ### Changed — `packages/grants/CLAUDE.md` slimmed; state snapshot, debt list, and verification commands moved to `docs/STATE.md`

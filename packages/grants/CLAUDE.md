@@ -83,7 +83,9 @@ any of the paragraph below — it is a snapshot, not a contract.
 
 - The corpus stores **language only**: live figures are `{{slot}}` fills owned by `query_*` calls;
   `pipeline.ts` refuses to return slotted text as an `answer`. **Zero `high` integrity warnings is
-  the guarantee**; one `medium` (`stored_figure_unsourced`) is the register. See `docs/STATE.md` §3.
+  the guarantee**, and as of 2026-08-21 the report is fully empty — the `medium`
+  (`stored_figure_unsourced`) register that used to sit here was retired by removing its five
+  unsourced claims from the corpus rather than settling them. See `docs/STATE.md` §3.
 - **19 migrations applied** locally via `pnpm db:migrate` — never `db:push` (no migration SQL ⇒
   `tool_permissions` rows never land ⇒ every tool fails closed).
 - **Run `pnpm test`, not just the grants suite**, before claiming green — the grants suite cannot see

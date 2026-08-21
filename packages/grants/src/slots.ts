@@ -466,8 +466,9 @@ export const IMMUTABLE_FIGURES: readonly { readonly pattern: RegExp; readonly re
   {
     pattern: /\bPhiladelphia,? PA 19107\b|\b19107\b/g,
     reason:
-      'The hub’s ZIP code. Note the separate `30+ ZIP codes` recruitment-footprint figure is NOT this ' +
-      'and is not exempt — it drifts, and it is in FIGURE_DEBT.',
+      'The hub’s ZIP code. Note the separate `30+ ZIP codes` recruitment-footprint claim was NOT this ' +
+      'and was never made exempt here — it drifted with no connector to source it, so it was removed ' +
+      'from the corpus (2026-08-21) rather than slotted or exempted.',
   },
 
   // -- programme design constants ---------------------------------------------------------
@@ -593,86 +594,34 @@ export const IMMUTABLE_FIGURES: readonly { readonly pattern: RegExp; readonly re
  * Figures that drift and have no live source — the case neither {@link FIGURE_SLOTS} nor
  * {@link IMMUTABLE_FIGURES} can honestly hold.
  *
- * The clean story is that every figure is either fetchable or fixed. The corpus does not cooperate.
- * `1,000+ young people reached through info sessions and outreach` moves with every recruitment season,
- * and no connector holds outreach contacts. `30+ ZIP codes` and `more than 30 non-selective high
- * schools` are the same shape. Each of these *should* be a slot and cannot be one yet, because the
- * number it would be filled from does not exist anywhere the platform can reach.
+ * **Empty as of 2026-08-21.** The five entries this register held (outreach contacts, recruitment
+ * footprint, volunteer count, the recruitment-interest split behind the Entrepreneurial Leadership
+ * pathway, and a draft-reconciliation note that had leaked into answer text) were removed from
+ * `kb_launchpad.json` rather than settled — see `CHANGELOG.md`. Deleting a register entry while the
+ * underlying claim still stands in the corpus is the one move this module forbids; deleting the claim
+ * itself and the entry together, so nothing drifting remains to report, is not that move.
  *
- * **Both alternatives to this register are worse.** Slotting them makes every draft that touches
- * kb.history or kb.program_desc permanently unfillable, which trains a reader to ignore unfilled slots —
- * and once slots are ignorable the mechanism is gone. Putting them in {@link IMMUTABLE_FIGURES} asserts
- * they do not drift, which is false, and buries that falsehood in an allowlist nobody re-reads.
+ * The clean story is that every figure is either fetchable or fixed. When the corpus does not
+ * cooperate, this is where that shows up: a figure that *should* be a slot and cannot be one yet,
+ * because the number it would be filled from does not exist anywhere the platform can reach.
  *
- * So they stay literal and stay **reported**: `data.ts::stored_figure_unsourced` raises them at
- * `medium`, separately from the `high` violation, with what would settle each one. A figure here is a
- * known hole with a named fix, which is the most this layer can honestly say about it.
+ * **Both alternatives to this register are worse than reporting.** Slotting an unfillable figure makes
+ * every draft that touches its slot permanently unfillable, which trains a reader to ignore unfilled
+ * slots — and once slots are ignorable the mechanism is gone. Putting it in {@link IMMUTABLE_FIGURES}
+ * asserts it does not drift, which would be false, and buries that falsehood in an allowlist nobody
+ * re-reads.
  *
- * Retiring an entry means one of two things happened: a connector started holding the figure (make it a
- * slot), or someone established that it is fixed (move it to {@link IMMUTABLE_FIGURES} with the
- * evidence). Deleting an entry to quiet the warning is the one move that is not allowed.
+ * A future unfillable figure goes here, reported by `data.ts::stored_figure_unsourced` at `medium`,
+ * separately from the `high` violation, with what would settle it. Retiring an entry means one of three
+ * things happened: a connector started holding the figure (make it a slot), someone established that it
+ * is fixed (move it to {@link IMMUTABLE_FIGURES} with the evidence), or the claim was removed from the
+ * corpus entirely. Deleting the register entry while the claim survives is the one move not allowed.
  */
 export const FIGURE_DEBT: readonly {
   readonly pattern: RegExp;
   readonly why_not_a_slot: string;
   readonly would_settle_it: string;
-}[] = [
-  {
-    pattern:
-      /\breached more than 1,000 young people\b|\b1,000\+ reached through outreach\b|\breached 1,000\+/g,
-    why_not_a_slot:
-      'Outreach and info-session contacts. No connector holds them — enrollment records start at ' +
-      'enrollment, and this population never enrolled.',
-    would_settle_it:
-      'Either a connector over whatever tracks outreach (a sheet, a CRM), or a staff decision to stop ' +
-      'making the claim.',
-  },
-  {
-    pattern:
-      /\bmore than 30 (?:non-selective )?(?:Philadelphia )?high schools\b|\bmore than 30 non-selective Philadelphia high schools\b|\b30\+ ZIP codes\b/g,
-    why_not_a_slot:
-      'Recruitment footprint. `students` holds no school or ZIP column, so the count cannot be derived ' +
-      'from what is stored. Note `query_enrollment {query_type:"by_school"}` exists — it breaks down ' +
-      'enrolled participants by school, which is a different population from the schools recruited FROM.',
-    would_settle_it:
-      'A school/ZIP field on the student record, which would make both a query_students breakdown. ' +
-      'Or a decision that the by_school breakdown is close enough, which is a staff call, not a ' +
-      'mechanical one.',
-  },
-  {
-    pattern: /\broughly 30 volunteers\b/g,
-    why_not_a_slot:
-      'Volunteers are not in any connector. `staff` covers paid staff; there is no volunteer record ' +
-      'anywhere in the schema.',
-    would_settle_it: 'A volunteer roster the platform can read, or dropping the count from the prose.',
-  },
-  {
-    // No trailing `\b` after `%`: a word boundary needs a word character on one side, and `%` followed
-    // by a space is not one. The same class of bug that made every `\b\$` currency exemption dead.
-    pattern: /\bfewer than 10% of recruited students|\bthe other ~90%/g,
-    why_not_a_slot:
-      'The split between students initially drawn to software engineering and those who are not — ' +
-      'recruitment interest, captured in no connector. It is load-bearing for the argument (it is the ' +
-      'stated reason the Entrepreneurial Leadership pathway exists), which makes leaving it unverified ' +
-      'worse than for a decorative figure, not better.',
-    would_settle_it:
-      'Whatever instrument produces it at recruitment — an intake survey — being read by a connector.',
-  },
-  {
-    // Not a Launchpad figure at all: this is commentary about two *drafts* that rounded the wage total
-    // differently, sitting inside answer prose. It is here rather than in IMMUTABLE_FIGURES because it
-    // is not exempt — it should not be in a stored answer in the first place.
-    pattern: /'\$5[05]0,000\+'/g,
-    why_not_a_slot:
-      'Draft-reconciliation commentary that leaked into answer text — "the GSK Aug-7 draft rounds this ' +
-      'to \'$500,000+\'". It is a note about which filing said what, not a claim about Launchpad, and a ' +
-      'funder reading the answer should never see it.',
-    would_settle_it:
-      'Moving the reconciliation note out of `answers[].text` and into `meta`, where the rest of the ' +
-      'source-precedence record already lives. That is a content edit needing staff sign-off on the ' +
-      'resulting prose, not a mechanical one.',
-  },
-];
+}[] = [];
 
 /**
  * Whether `text` states a {@link FIGURE_DEBT} figure, and which.
