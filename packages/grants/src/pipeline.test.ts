@@ -230,7 +230,7 @@ describe('the handback — outstanding text work goes to the calling model, not 
     const pkg = runPipeline(loadForm('aug7_truist'));
     const h = pkg.results.find((r) => r.handback !== undefined)?.handback;
     expect(h?.context.funder).toContain('Truist');
-    expect(h?.context.emphasis).toContain('Building 21');
+    expect(h?.context.emphasis).toBe('fiscal_sponsorship');
     expect(h?.context.answers).toBeTruthy();
   });
 
@@ -425,6 +425,40 @@ describe('structured values — a stored short value is the answer, keyed by que
     );
     expect(out.status).toBe<AnswerStatus>('derive_from_reference');
     expect(out.actor).toBe('llm');
+  });
+
+  it('picks a structured value by framing when the slot carries by_framing variants, and falls back without one', () => {
+    const kbFor = (): KnowledgeBase => ({
+      ...kbWith('kb.eligibility', 'narrative', true),
+      answers: {
+        'kb.eligibility': {
+          label: 'L',
+          verified: true,
+          text: 'narrative',
+          structured: {
+            'cover.fiscal_sponsor': {
+              value: 'default value',
+              verified: true,
+              by_framing: { initiative: 'initiative value', fiscal_sponsorship: 'sponsorship value' },
+            },
+          },
+        },
+      },
+    });
+    const m = match({ answer_type: 'boolean', kb_ref: 'kb.eligibility', matched_id: 'cover.fiscal_sponsor' });
+
+    const initiative = buildAnswer(m, null, kbFor(), { funder: null, emphasis: 'initiative' });
+    expect(initiative.answer).toBe('initiative value');
+
+    const sponsorship = buildAnswer(m, null, kbFor(), { funder: null, emphasis: 'fiscal_sponsorship' });
+    expect(sponsorship.answer).toBe('sponsorship value');
+
+    // 'silent' has no listed variant on this slot, and no framing at all is the same as none supplied
+    // — both fall back to the base `value` rather than throwing or returning undefined.
+    const silent = buildAnswer(m, null, kbFor(), { funder: null, emphasis: 'silent' });
+    expect(silent.answer).toBe('default value');
+    const none = buildAnswer(m, null, kbFor());
+    expect(none.answer).toBe('default value');
   });
 
   it('lets a per-value verified flag override the entry-level one', () => {

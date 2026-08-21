@@ -262,3 +262,75 @@ closed), `grant-a54` (figure-args carve-out) and `grant-lyy` (the D1e no-limit g
 5. **Commit decision:** this session's change set is ready to commit on `writing/dev` once the
    pre-existing D1a/D1b edits are reconciled with it.
 
+## 2026-08-21 — Three-principle review, four work packages opened, no code changed yet
+
+**From:** Demitri DeLuca-Lyons. **To:** whoever picks up `writing/dev` next.
+
+A `/code-review` pass was run against three product principles for grant writing: (1) numbers must
+be accurate and pulled live, (2) language should reuse Launchpad's typical prior-grant phrasing —
+Iman does final voice/style, so this is about sourcing, not tone, (3) always ask which program and
+fiscal-sponsor framing applies rather than assume. Three Explore agents traced each principle to its
+exact root cause against the current code, not just the skill docs. Full plan, with file/line
+citations for each claim below, is at `/home/mili/.claude/plans/develop-a-plan-to-lively-summit.md`
+on this machine — copy it into the repo if it needs to survive past this session.
+
+**What's actually wrong, briefly:**
+
+- ~~**Principle 3 is unenforced.**~~ **Fixed by #320, 2026-08-21** — see the session entry below.
+  `program`/`framing` on `grant_build_draft` were optional Zod fields nothing ever checked; `framing`
+  is now a closed enum and both are gated by a new `needs_input` `ToolErrorCode` before drafting.
+  `cover.fiscal_sponsor` now carries `initiative`/`fiscal_sponsorship` variants.
+- **Principle 1 has an honor-system hole.** `figure_call` tells the drafting model to run a named
+  query tool and use its return, but nothing — code or tests — diffs the number that lands in the
+  draft against the tool's actual return. Separately, `kb.meta.connector_reconciliation` carries
+  figures dated 2026-07-23, a month stale against `meta.updated` (2026-08-20), and is entirely
+  outside `computeIntegrityReport`'s scan (which only walks `kb.answers`). (The single-digit/
+  spelled-out-number blind spot in the literal-figure regex is **already tracked** as `docs/STATE.md`
+  debt #19 — not re-raised here.)
+- **Principle 2's real gap isn't the catalog.** `grant_documents` (1,253 Drive files) is built and
+  populated. What's missing is turning a catalog hit into text: `find_grant_documents` returns
+  metadata only, the Drive connector deliberately never embeds text, and the Notion alternative
+  (Phase E, `OPENPROJECT-TASKS.md` E1-E3) is open and externally owned. `corpus_search.py` only works
+  today because a gitignored local `data/Grants` mirror happens to exist on this dev machine — it's
+  documented as a dev-only fallback, and it is one, in production.
+
+**Four work packages opened under this project** (none started — status `New`, 0% complete):
+
+| WP | Subject | Parent |
+|---|---|---|
+| #320 | Enforce program/framing before drafting: `needs_input` gate + framing-conditional fiscal-sponsor answer | #121 Grant writing |
+| #321 | Add `grant_verify_figure`: closed-loop check that drafted figures match live query results | #121 Grant writing |
+| #322 | Fix stale figures in `kb.meta.connector_reconciliation` — outside the integrity staleness scan | #121 Grant writing |
+| #323 | Add Drive document text-fetch tool so `find_grant_documents` results are actionable in production | #164 Phase H — Grant document discovery |
+
+Recommended order: **#320 first** (smallest, and the one concretely-hardcoded answer,
+`cover.fiscal_sponsor`, only becomes meaningful once framing is actually asked for) — then #321,
+#322, #323 in any order; #323 depends on nothing above it but is the largest lift (new Drive-auth
+surface, doc extraction).
+
+**Deliberately not opened as work here:** full per-program KB sharding and a matcher-side ambiguity/
+runner-up signal. The KB is flat single-profile prose; splitting it by program is a content-authoring
+lift, not a code fix — noted as follow-on debt in `docs/STATE.md` rather than built speculatively.
+Also not opened: the single-digit figure blind spot (already #19 in `docs/STATE.md`) and production
+Drive auth (already tracked as `grant-kmi.3` above) — #323 inherits that limitation rather than fixing
+it twice.
+
+**Nothing in the repo has changed as of this entry.** The plan file and these four work packages are
+the entire output of this session.
+
+## 2026-08-21 (later) — #320 implemented and verified
+
+**From:** Claude (background session). **To:** whoever picks up `writing/dev` next.
+
+Implemented #320 per the plan file's spec. Summary lives in `CHANGELOG.md`'s `## 2026-08-21` /
+`### Added — WP #320` entry (not repeated here — see §1 of this package's `CLAUDE.md` on why).
+Docs reconciled: `docs/mcp-server-spec.md`'s `grant_build_draft` inputs section and this file's own
+"Principle 3 is unenforced" bullet above (now struck through).
+
+**Verified:** `pnpm -r typecheck` (14/14 packages), `pnpm test` (567/567), `pnpm lint` clean aside
+from the pre-existing `apps/hq` baseline. Nothing committed yet — `writing/dev` still carries this
+plus the pre-existing unrelated changes noted in the entry above.
+
+**Not touched:** `grant_resize_answer`'s `framing` input remains a free string — out of scope for
+#320 (the plan targeted `grant_build_draft`, the pipeline's one chokepoint). #321–#323 not started.
+

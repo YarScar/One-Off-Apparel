@@ -28,6 +28,16 @@ export const answerTypeSchema = z.enum(ANSWER_TYPES);
 export type AnswerType = z.infer<typeof answerTypeSchema>;
 
 /**
+ * How Launchpad names its relationship to Building 21 for a given funder — `docs/PLAYBOOK.md` step 3
+ * calls this the fiscal-sponsorship framing decision and says to ask every time, never assume. A
+ * fixed set of postures, not open text, because a KB structured value branches on it (see
+ * {@link kbStructuredValueSchema}'s `by_framing`) and a free string cannot drive that branch.
+ */
+export const FRAMINGS = ['initiative', 'fiscal_sponsorship', 'silent'] as const;
+export const framingSchema = z.enum(FRAMINGS);
+export type Framing = z.infer<typeof framingSchema>;
+
+/**
  * Answer types that want a short structured value or an uploaded document, not a narrative
  * paragraph.
  *
@@ -150,6 +160,12 @@ export const kbStructuredValueSchema = z.object({
   value: z.string(),
   /** Grounded in filed material, for THIS value. Defaults to the entry-level `verified`. */
   verified: z.boolean().optional(),
+  /**
+   * Framing-keyed overrides of `value`, for the rare slot whose correct wording depends on the
+   * fiscal-sponsorship posture (`cover.fiscal_sponsor` is the one that exists today). Falls back to
+   * `value` for any framing not listed here. Optional: most structured values don't vary by framing.
+   */
+  by_framing: z.record(framingSchema, z.string()).optional(),
 });
 export type KbStructuredValue = z.infer<typeof kbStructuredValueSchema>;
 
@@ -217,8 +233,8 @@ export const incomingFormSchema = z
         funder: z.string().min(1),
         program: z.string().optional(),
         note: z.string().optional(),
-        /** The funder "hat" — what to emphasise when drafting. */
-        framing: z.string().optional(),
+        /** The funder "hat" — what to emphasise when drafting, and which fiscal-sponsorship posture. */
+        framing: framingSchema.optional(),
         due: z.string().optional(),
       })
       .passthrough(),

@@ -27,6 +27,47 @@ entry can be verified rather than trusted.
 
 ## 2026-08-21
 
+### Added — WP #320: `needs_input` gate enforces program/framing before drafting
+
+`admin/HANDOFF.md`'s three-principle review found principle 3 unenforced: `program`/`framing` on
+`grant_build_draft` were optional Zod fields nothing ever checked, `cover.fiscal_sponsor` was one
+hardcoded answer regardless of which fiscal-sponsorship posture applied, and no "ask for
+clarification" mechanism existed anywhere in this MCP server.
+
+- **New `ToolErrorCode`: `needs_input`** (`apps/mcp-server/src/errors.ts`) — not a failure; the tool
+  needs a fact only the caller's conversation has. Reuses the existing `{ error: { code, message,
+  suggestions? } }` envelope.
+- **`grant_build_draft` gates on `program`/`framing` before calling `runPipeline`**
+  (`apps/mcp-server/src/tools/grant-build-draft.ts`) — the one chokepoint every draft passes through,
+  per `docs/PLAYBOOK.md` steps 2 and 3. Missing either returns `needs_input` naming which is missing,
+  with suggestions listing the concrete choices (program: 101/LiftOff/Inc.; framing: the three
+  postures below). Applies to both the inline-`questions` path and the `form_id` stored-fixture path.
+- **`framing` is now a closed enum, not a free string** — `FRAMINGS` / `framingSchema` / `Framing`
+  (`packages/grants/src/schemas.ts`): `initiative` | `fiscal_sponsorship` | `silent`, naming the three
+  postures `docs/PLAYBOOK.md` step 3 says to ask about every time. Applies to
+  `incomingFormSchema.meta.framing` and the `grant_build_draft` tool's `framing` input.
+- **`cover.fiscal_sponsor` now varies by framing** — `kbStructuredValueSchema` gained an optional
+  `by_framing` map (`packages/grants/src/schemas.ts`); `packages/grants/seed/kb_launchpad.json`'s
+  `cover.fiscal_sponsor` carries an `initiative` and a `fiscal_sponsorship` variant (the `silent`
+  variant and the base `value` are the same minimal answer). `pipeline.ts::buildAnswer` resolves the
+  effective value from `formContext.emphasis`, falling back to `value` when framing is absent or the
+  slot carries no variant for it — so any other structured value is unaffected.
+- **Blast radius: all 10 stored form fixtures now carry a `framing`.** Five (`allen_hiles_2024`,
+  `dolfinger_mcmahon_2023`, `jff_ai_pathways_2026`, `sample_incoming`, `sample_philly_innovation`) had
+  none and were backfilled `"silent"` — the least-assumption default for a blank template or a
+  synthetic non-real fixture. Five had descriptive free-text framing and were normalized to the
+  nearest enum value (`aug7_gsk`, `hamilton_loi_2025`, `jevs_c2l_2024` → `initiative`; `aug7_truist`,
+  `wpf_workforce_2026` → `fiscal_sponsorship`) — no test asserted the old wording, confirmed by grep
+  before the change.
+- **Deliberately out of scope, tracked as follow-on debt** (`docs/STATE.md`): full per-program KB
+  sharding and a matcher-side ambiguity/runner-up signal. The KB is flat prose; splitting it by
+  program is a content lift, not a code fix.
+- **Verified:** `pnpm -r typecheck` clean across 14 packages, `pnpm test` 567/567 (one pre-existing
+  `pipeline.test.ts` assertion updated — it checked a fixture's old free-text framing string passed
+  through verbatim, not the feature under test), `pnpm lint` clean. New coverage:
+  `pipeline.test.ts` (`by_framing` resolution + fallback) and `tools.test.ts` (the gate, drafting once
+  supplied, and the enum rejecting an unlisted posture at the schema layer).
+
 ### Removed — the five `FIGURE_DEBT` unsourced figures, stripped from the corpus rather than settled
 
 The language-only rule already blocked any *new* stored figure without a live slot or a recorded

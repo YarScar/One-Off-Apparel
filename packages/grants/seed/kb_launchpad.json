@@ -188,7 +188,12 @@
       "structured": {
         "cover.fiscal_sponsor": {
           "value": "Yes — Building 21 is the fiscal sponsor",
-          "verified": true
+          "verified": true,
+          "by_framing": {
+            "initiative": "Yes — Launchpad operates as an initiative of Building 21, its parent organization.",
+            "fiscal_sponsorship": "Yes — Building 21 is Launchpad's fiscal sponsor under a formal fiscal sponsorship agreement, providing back-office, financial, and governance support.",
+            "silent": "Yes — a fiscal sponsor is in place."
+          }
         },
         "eligibility.org_type": {
           "value": "501(c)(3) public charity via fiscal sponsor Building 21",

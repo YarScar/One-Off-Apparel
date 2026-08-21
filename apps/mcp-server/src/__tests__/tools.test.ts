@@ -580,4 +580,40 @@ describeLocal('MCP tool handlers (integration)', () => {
     })) as { error?: { code: string } };
     expect(result.error?.code).toBe('no_records');
   });
+
+  it('grant_build_draft asks for program and framing before drafting, rather than assume', async () => {
+    const result = (await client.callTool('grant_build_draft', {
+      questions: [{ text: 'What is your mission?' }],
+      funder: 'Example Foundation',
+    })) as { error?: { code: string; message: string; suggestions?: string[] } };
+    expect(result.error?.code).toBe('needs_input');
+    expect(result.error?.message).toContain('program');
+    expect(result.error?.message).toContain('framing');
+    expect(result.error?.suggestions?.some((s) => s.startsWith('program:'))).toBe(true);
+    expect(result.error?.suggestions?.some((s) => s.startsWith('framing:'))).toBe(true);
+  });
+
+  it('grant_build_draft drafts once program and framing are supplied', async () => {
+    const result = (await client.callTool('grant_build_draft', {
+      questions: [{ text: 'What is your mission?' }],
+      funder: 'Example Foundation',
+      program: 'LiftOff',
+      framing: 'initiative',
+    })) as { error?: { code: string }; summary?: { total: number } };
+    expect(result.error).toBeUndefined();
+    expect(result.summary?.total).toBe(1);
+  });
+
+  it('grant_build_draft rejects a framing value outside the three fiscal-sponsorship postures', async () => {
+    // Enforced by the input schema itself (a z.enum), so the MCP layer refuses the call before it
+    // ever reaches the handler — not a toolError envelope.
+    await expect(
+      client.callTool('grant_build_draft', {
+        questions: [{ text: 'What is your mission?' }],
+        funder: 'Example Foundation',
+        program: 'LiftOff',
+        framing: 'not_a_real_posture',
+      }),
+    ).rejects.toThrow();
+  });
 });

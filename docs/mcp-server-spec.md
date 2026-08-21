@@ -734,7 +734,7 @@ Match a funder application question to a canonical entry in the LaunchPad grant 
 
 Resolve a captured funder form into a reviewable draft package: match each question, retrieve the mapped knowledge-base answer, measure it against the funder's stated limit, and flag what a person must do. Deterministic, and it reads seed files only.
 
-**Inputs:** either `funder` + `questions[]` (each `{ text, limit?: { unit, max } }`, max 200) or `form_id` for a stored fixture; optional `program`, `due`, `framing`, `threshold`, `include_markdown`.
+**Inputs:** either `funder` + `questions[]` (each `{ text, limit?: { unit, max } }`, max 200) or `form_id` for a stored fixture; optional `due`, `threshold`, `include_markdown`. **`program` and `framing` are enforced, not optional** — both fields exist on the schema so a well-formed call can supply them up front, but the tool returns a `needs_input` error naming whichever is missing before it will draft anything, rather than assume. `framing` is one of the three enum values `initiative` / `fiscal_sponsorship` / `silent` (`docs/PLAYBOOK.md` step 3), not a free string.
 
 **Returns:** `results[]` (one answer plan per question), `summary` (including `by_actor`), `your_tasks`, `staff_actions`, `kb_refs_used`, `figure_work_order`, `integrity_warnings`, and the rendered `markdown` draft.
 

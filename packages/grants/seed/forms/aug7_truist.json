@@ -2,7 +2,7 @@
   "meta": {
     "funder": "Truist Foundation Inspire Awards (via MIT Solve)",
     "program": "Truist Foundation Inspire Awards 2026",
-    "framing": "Building 21 applicant, Launchpad as the fiscally sponsored solution",
+    "framing": "fiscal_sponsorship",
     "due": "2026-08-07",
     "note": "Real Aug-7 pilot form (Priority 0). Questions + limits transcribed from sources/aug7-pilot-forms.md#form-2. Rich word/character limits — the primary resize test case. Run with --resize to exercise pipeline/resize.py."
   },
