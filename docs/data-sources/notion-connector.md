@@ -193,14 +193,15 @@ The three pieces of infra above are tracked as their own task; the connector is 
 
 ```
 NOTION_API_KEY=                           # Notion internal integration token
-NOTION_MEETING_TRANSCRIPTS_DB_ID=         # 32-char Notion database ID
+NOTION_MEETING_TRANSCRIPTS_DB_ID=         # meeting transcripts DB (comma-separated OK)
+NOTION_SYNC_DATABASE_IDS=                 # generic DB sync — "id:Name, id:Name"
+NOTION_SYNC_PAGE_IDS=                     # standalone-page sync — "id:Name, id:Name"
 ```
 
-Future extension (when knowledge-base pages land):
+- `NOTION_SYNC_DATABASE_IDS` — each row of each listed database becomes one document (see `sync-databases.ts`). Property values are included in the header for context. Metadata: `subtype='document'`, `notion_database_id`, `notion_database_name`, `properties`.
+- `NOTION_SYNC_PAGE_IDS` — each listed root page is ingested along with any subpages reached via `child_page` blocks (BFS up to depth 4). Every discovered page becomes its own document. Metadata: `subtype='document'`, `notion_page_id`, `root_page_id`, `root_page_name`, `breadcrumbs`, `depth`. Use this for wiki-style hub pages and playbooks that contain nested subpages.
 
-```
-NOTION_KNOWLEDGE_BASE_DB_ID=              # different DB, same connector, different subtype
-```
+**Remember to invite the integration to each database and each root page** (Notion `•••` → Connections → Add connections). Without this, the connector sees zero content. Subpages inherit their parent's connections, so inviting the root page is enough to reach the whole tree.
 
 ## Rate limits
 
@@ -226,7 +227,9 @@ connectors/notion/
     ├── notion-client.ts           # auth + paginated GET helpers
     ├── block-walker.ts            # recursive plaintext extraction from page blocks
     ├── chunker.ts                 # block-aware chunking with overlap
-    ├── sync-meetings.ts           # the actual sync logic (one DB → document_chunks)
+    ├── sync-meetings.ts           # meeting-transcript sync (visibility ACL, attendees)
+    ├── sync-databases.ts          # generic DB sync (rows → documents, with properties)
+    ├── sync-pages.ts              # standalone root pages + recursive child_page subpages
     ├── index.ts                   # orchestrator
     └── cli.ts                     # dotenv loader, dynamic import of index
 ```
