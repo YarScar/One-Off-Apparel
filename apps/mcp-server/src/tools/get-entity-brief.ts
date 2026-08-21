@@ -83,7 +83,6 @@ export function registerGetEntityBrief(server: McpServer): void {
           alt_school_email: student.altSchoolEmail,
           current_phase: student.currentPhase,
           enrollment_status: student.enrollmentStatus,
-          cohort: student.cohort,
           neighborhood: student.neighborhood,
         };
         result['known_aliases'] = aliases.map((a) => ({

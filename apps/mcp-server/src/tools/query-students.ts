@@ -4,18 +4,22 @@ import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { cohortNotSupported } from '../errors.js';
 
 const NAME = 'query_students';
 
 const DESCRIPTION =
-  'Population-level analytics on the students table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table.';
+  'Population-level analytics on the students table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table. Cohort is not tracked — filter by current_phase and a date range instead.';
 
 const inputSchema = {
   query_type: z.enum(['numeric_stats', 'breakdown', 'list']),
   field: z.string().optional(),
   enrollment_status: z.string().optional(),
   current_phase: z.string().optional(),
-  cohort: z.number().optional(),
+  cohort: z
+    .number()
+    .optional()
+    .describe('Deprecated — cohort is no longer tracked. Use current_phase instead.'),
   filter_field: z.string().optional(),
   filter_min: z.number().optional(),
   filter_max: z.number().optional(),
@@ -25,7 +29,6 @@ const inputSchema = {
 const BREAKDOWN_FIELDS = new Set([
   'current_phase',
   'enrollment_status',
-  'cohort',
   'neighborhood',
 ]);
 
@@ -44,6 +47,7 @@ export function registerQueryStudents(server: McpServer): void {
       const enrollmentStatus = parseStr(raw, 'enrollment_status');
       const currentPhase = parseStr(raw, 'current_phase');
       const cohort = parseNum(raw, 'cohort');
+      if (cohort !== undefined) return cohortNotSupported();
       const filterField = parseStr(raw, 'filter_field');
       const filterMin = parseNum(raw, 'filter_min');
       const filterMax = parseNum(raw, 'filter_max');
@@ -52,7 +56,6 @@ export function registerQueryStudents(server: McpServer): void {
       const where: Prisma.StudentWhereInput = {
         ...(enrollmentStatus ? { enrollmentStatus } : {}),
         ...(currentPhase ? { currentPhase } : {}),
-        ...(cohort ? { cohort } : {}),
       };
       if (filterField === 'distance_to_office' && (filterMin !== undefined || filterMax !== undefined)) {
         where.distanceToOffice = {};
@@ -116,7 +119,7 @@ export function registerQueryStudents(server: McpServer): void {
         const camel = field
           .split('_')
           .map((p, i) => (i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1)))
-          .join('') as 'currentPhase' | 'enrollmentStatus' | 'cohort' | 'neighborhood';
+          .join('') as 'currentPhase' | 'enrollmentStatus' | 'neighborhood';
         const grouped = await prisma.student.groupBy({
           by: [camel],
           where,
@@ -149,7 +152,6 @@ export function registerQueryStudents(server: McpServer): void {
           alt_school_email: s.altSchoolEmail,
           current_phase: s.currentPhase,
           enrollment_status: s.enrollmentStatus,
-          cohort: s.cohort,
           neighborhood: s.neighborhood,
           distance_to_office: s.distanceToOffice,
           graduation_date: s.graduationDate,

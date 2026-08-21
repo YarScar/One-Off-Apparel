@@ -95,7 +95,7 @@ Questions to add:
 ### Dashboard 2: Attendance Trends
 
 Questions to add:
-- **Average attendance by cohort** — `SELECT cohort, AVG(percentage) FROM attendance_records GROUP BY cohort`
+- **Average attendance by phase** — `SELECT s.current_phase, AVG(a.percentage) FROM attendance_records a JOIN students s ON s.student_number = a.student_number GROUP BY s.current_phase`
 - **Weekly attendance trend** — group `attendance_records` by `week_of`
 - **Students below 80% attendance** — filter `percentage < 0.8`, list names
 

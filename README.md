@@ -331,10 +331,10 @@ All tools return structured JSON. Errors use `{ error: { code, message } }`.
 | `get_finance_brief` | Composite: budget summary + actuals + grants + giving pipeline |
 | `query_students` | Population stats + filtered student lists |
 | `query_outcomes` | Phase progression (Foundations → 101 → Lightspeed → LiftOff) |
-| `query_enrollment` | Enrollment stats by phase, school, cohort, race |
+| `query_enrollment` | Enrollment stats by phase, school, race |
 | `query_certifications` | PCEP exam results and scores |
 | `query_competency` | Per-student Beacon competency scores |
-| `query_attendance` | Unified attendance across three cohort formats |
+| `query_attendance` | Unified attendance across three source-sheet formats |
 | `query_employment` | Post-program employment data (employer, wages, hours, exit codes) |
 | `query_postsecondary` | College enrollment tracking (National Student Clearinghouse) |
 | `query_finances` | Budgets, actuals, forecasts, stipends, CRM giving/pipeline/grants |

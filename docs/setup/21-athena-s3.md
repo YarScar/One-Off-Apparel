@@ -128,8 +128,7 @@ aws glue create-table \
         {"Name": "id", "Type": "string"},
         {"Name": "canonical_name", "Type": "string"},
         {"Name": "current_phase", "Type": "string"},
-        {"Name": "enrollment_status", "Type": "string"},
-        {"Name": "cohort", "Type": "string"}
+        {"Name": "enrollment_status", "Type": "string"}
       ]
     }
   }'

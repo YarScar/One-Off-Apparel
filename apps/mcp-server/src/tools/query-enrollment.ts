@@ -4,11 +4,12 @@ import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { cohortNotSupported } from '../errors.js';
 
 const NAME = 'query_enrollment';
 
 const DESCRIPTION =
-  'Aggregate student enrollment data. Supports total headcount, phase status breakdowns, date-range active queries, cohort breakdowns, and per-student rows.';
+  'Aggregate student enrollment data. Supports total headcount, phase status breakdowns, date-range active queries, and per-student rows. Cohort is not tracked — filter/group by phase and a date range instead.';
 
 const inputSchema = {
   query_type: z.enum([
@@ -27,7 +28,10 @@ const inputSchema = {
   end_date: z.string().optional(),
   current_phase: z.string().optional(),
   enrollment_status: z.string().optional(),
-  cohort: z.number().optional(),
+  cohort: z
+    .number()
+    .optional()
+    .describe('Deprecated — cohort is no longer tracked. Use phase/current_phase instead.'),
   limit: z.number().optional(),
 };
 
@@ -50,6 +54,7 @@ export function registerQueryEnrollment(server: McpServer): void {
       const currentPhase = parseStr(raw, 'current_phase');
       const enrollmentStatus = parseStr(raw, 'enrollment_status');
       const cohort = parseNum(raw, 'cohort');
+      if (cohort !== undefined || queryType === 'by_cohort') return cohortNotSupported();
       const startDate = parseStr(raw, 'start_date');
       const endDate = parseStr(raw, 'end_date');
       const limit = Math.min(parseNum(raw, 'limit') ?? 500, 1000);
@@ -57,7 +62,6 @@ export function registerQueryEnrollment(server: McpServer): void {
       const studentWhere: Prisma.StudentWhereInput = {
         ...(currentPhase ? { currentPhase } : {}),
         ...(enrollmentStatus ? { enrollmentStatus } : {}),
-        ...(cohort ? { cohort } : {}),
       };
 
       switch (queryType) {
@@ -111,20 +115,6 @@ export function registerQueryEnrollment(server: McpServer): void {
               start_date: (r as unknown as Record<string, Date | null>)[f.start],
               end_date: (r as unknown as Record<string, Date | null>)[f.end],
               status: (r as unknown as Record<string, string | null>)[f.status],
-            })),
-          };
-        }
-        case 'by_cohort': {
-          const grouped = await prisma.student.groupBy({
-            by: ['cohort'],
-            where: studentWhere,
-            _count: { _all: true },
-          });
-          return {
-            query_type: 'by_cohort',
-            breakdown: grouped.map((g) => ({
-              cohort: g.cohort,
-              count: g._count?._all ?? 0,
             })),
           };
         }
@@ -185,7 +175,6 @@ export function registerQueryEnrollment(server: McpServer): void {
               canonical_name: s.canonicalName,
               current_phase: s.currentPhase,
               enrollment_status: s.enrollmentStatus,
-              cohort: s.cohort,
               phase_outcomes: s.phaseOutcomes.flatMap((po) => unpackPhases(po)),
             })),
           };

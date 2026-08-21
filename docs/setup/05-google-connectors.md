@@ -38,7 +38,7 @@ Set the resource IDs the connectors read. The full list is in `packages/config/s
 
 - `GOOGLE_SERVICE_ACCOUNT_JSON` — base64 key from step 1
 - `GOOGLE_DRIVE_FOLDER_ID` — Drive docs folder
-- `GOOGLE_SHEETS_*` — one ID per source spreadsheet (Dashboard, Outcomes, attendance cohorts, finance workbook, etc.)
+- `GOOGLE_SHEETS_*` — one ID per source spreadsheet (Dashboard, Outcomes, attendance source sheets, finance workbook, etc.)
 
 Only the IDs you set are synced; an unset sheet is skipped.
 

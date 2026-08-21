@@ -2,7 +2,6 @@
 
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ReferenceLine,
@@ -14,16 +13,10 @@ import {
 
 export interface AttendanceTrendPoint {
   month: string;
-  Cohort1?: number;
-  Cohort2?: number;
-  Cohort3?: number;
+  rate?: number;
 }
 
-const COLORS = {
-  Cohort1: '#2563eb',
-  Cohort2: '#16a34a',
-  Cohort3: '#d97706',
-} as const;
+const LINE_COLOR = '#2563eb'; // blue-600
 
 interface Props {
   data: AttendanceTrendPoint[];
@@ -54,7 +47,6 @@ export function AttendanceTrendChart({ data }: Props): JSX.Element {
               fontSize: 12,
             }}
           />
-          <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
           <ReferenceLine
             y={80}
             stroke="#dc2626"
@@ -63,24 +55,8 @@ export function AttendanceTrendChart({ data }: Props): JSX.Element {
           />
           <Line
             type="monotone"
-            dataKey="Cohort1"
-            stroke={COLORS.Cohort1}
-            strokeWidth={2}
-            dot={{ r: 3 }}
-            connectNulls
-          />
-          <Line
-            type="monotone"
-            dataKey="Cohort2"
-            stroke={COLORS.Cohort2}
-            strokeWidth={2}
-            dot={{ r: 3 }}
-            connectNulls
-          />
-          <Line
-            type="monotone"
-            dataKey="Cohort3"
-            stroke={COLORS.Cohort3}
+            dataKey="rate"
+            stroke={LINE_COLOR}
             strokeWidth={2}
             dot={{ r: 3 }}
             connectNulls

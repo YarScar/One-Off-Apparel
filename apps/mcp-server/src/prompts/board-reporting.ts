@@ -176,7 +176,7 @@ Call these MCP tools in parallel. After each call, **write down the specific num
 - \`query_employment\` with query_type "aggregate" → extract: job_count, active_jobs, student_count, total_earned, avg_wage, avg_hours
 - \`query_employment\` with query_type "by_employer" → extract: top 5-10 employers with student counts
 - \`query_postsecondary\` with query_type "summary" → extract: total records, distinct students, graduates, graduation rate
-- \`query_attendance\` with query_type "aggregate" → extract: overall rate, per-cohort or per-phase rates if available
+- \`query_attendance\` with query_type "aggregate" → extract: overall rate, per-phase rates if available
 
 ### Financial data:
 - \`get_finance_brief\` → extract: fund balances (list each fund and amount), recent gifts (list amounts)

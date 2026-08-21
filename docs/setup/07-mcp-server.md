@@ -90,8 +90,9 @@ For raw SQL (used in `query_students` for percentiles and aggregations):
 ```typescript
 const result = await prisma.$queryRaw<{ avg_attendance: number }[]>`
   SELECT AVG(percentage) as avg_attendance
-  FROM attendance_records
-  WHERE cohort = ${cohort}
+  FROM attendance_records a
+  JOIN students s ON s.student_number = a.student_number
+  WHERE s.current_phase = ${phase}
 `;
 ```
 

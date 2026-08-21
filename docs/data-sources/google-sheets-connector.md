@@ -15,9 +15,9 @@ Syncs structured data from multiple Google Sheets into Postgres. The connector i
 | PEX card transactions | `GOOGLE_SHEETS_PEX` | `finance_snapshots` (Dashboard + FY2022–FY2026) |
 | Student Competency | `GOOGLE_SHEETS_STUDENT_COMPETENCY` | `finance_snapshots` (`student_competency:scores`, `student_competency:rubric`) |
 | Building21 Development CRM | `GOOGLE_SHEETS_DEVELOPMENT_CRM` | `finance_snapshots` (6 tabs: contacts, giving history, prospect pipeline, denied, launchpad pipeline, grants tracker) |
-| Attendance — Cohort 1 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_1` | `attendance_records` (cohort=1) |
-| Attendance — Cohort 2 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_2` | `attendance_records` (cohort=2) |
-| Attendance — Cohort 3 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_3` | `attendance_records` (cohort=3) |
+| Attendance — Cohort 1 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_1` | `attendance_records` (source_format=1) |
+| Attendance — Cohort 2 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_2` | `attendance_records` (source_format=2) |
+| Attendance — Cohort 3 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_3` | `attendance_records` (source_format=3) |
 
 ## Read-Only Enforcement
 
@@ -102,23 +102,23 @@ PII handling note: per the data owner, **no fields are excluded from the Contact
 
 Column names are normalized to snake_case via `headerToKey`: lowercased, non-alphanumerics collapsed to underscores, `(auto)`, `?`, and `$` stripped (e.g., `Donor Type (COA)` → `donor_type_coa`; `Admin Fee?` → `admin_fee`).
 
-### Attendance — three cohort sheets
+### Attendance — three source sheets
 
-Each cohort is a separate spreadsheet ingested into the `attendance_records` table (cohort column 1 / 2 / 3). Cohorts are loose Launchpad student groupings — students may move between them as they accelerate.
+Attendance is ingested from three separate spreadsheets, historically named "Cohort 1/2/3" by the data owner — that naming is a spreadsheet label, not a Launchpad program grouping. Each row is tagged internally with `attendance_records.source_format` (1 / 2 / 3) purely to record which spreadsheet's row shape it came from, since the three sheets use different layouts (weekly aggregate %, daily codes, weekly check-in/out logs) and the rate-calculation logic needs to know which shape it's reading. This is an internal implementation detail — it is not exposed to MCP callers and does not represent an explicit per-student cohort designation (that concept was removed system-wide; see `docs/mcp-server-spec.md`).
 
-| Cohort | Row granularity | Source-tab convention |
+| Source sheet | Row granularity | Source-tab convention |
 |---|---|---|
-| 1 | Weekly aggregates with a `Percentage` column | tab name ends in `attendanceData` |
-| 2 | Daily rows with `Code` ∈ {P, A, E} | tab name ends in `attendanceData` |
-| 3 | Weekly check-in/out logs (one event per row), `Code` + `CheckInOrOut` event type | tab name ends in `attendanceData` (Cohort 3's actual tab is `Attendance Tracker _ Cohort3 - allAttendanceData`, matched by suffix) |
+| "Cohort 1" (`GOOGLE_SHEETS_ATTENDANCE_COHORT_1`) | Weekly aggregates with a `Percentage` column | tab name ends in `attendanceData` |
+| "Cohort 2" (`GOOGLE_SHEETS_ATTENDANCE_COHORT_2`) | Daily rows with `Code` ∈ {P, A, E} | tab name ends in `attendanceData` |
+| "Cohort 3" (`GOOGLE_SHEETS_ATTENDANCE_COHORT_3`) | Weekly check-in/out logs (one event per row), `Code` + `CheckInOrOut` event type | tab name ends in `attendanceData` (the actual tab is `Attendance Tracker _ Cohort3 - allAttendanceData`, matched by suffix) |
 
-Sync flow per cohort (memory-bounded):
+Sync flow per source sheet (memory-bounded):
 1. Metadata-only fetch: list tab titles + grid dimensions
 2. Filter titles by `/attendanceData$/i` regex
 3. Fetch row 1 of each candidate (single-row, cheap) to find the live tab via the "Student Number" header check
 4. Loop in 5,000-row chunks via `values.get` with quoted A1 ranges; upsert each chunk; never hold the full tab in memory
 
-Skipped headers (sheet-script metadata): `sheetName`, `sheetId`, `spreadsheetName`, `spreadsheetId`, `teacherPostingDate`. For Cohort 3 only: `ExpStartTime`, `ExpEndTime` (superseded by `StuExpStartTime` / `StuExpEndTime` per data owner).
+Skipped headers (sheet-script metadata): `sheetName`, `sheetId`, `spreadsheetName`, `spreadsheetId`, `teacherPostingDate`. For the "Cohort 3" sheet only: `ExpStartTime`, `ExpEndTime` (superseded by `StuExpStartTime` / `StuExpEndTime` per data owner).
 
 ### Student Competency
 
@@ -283,7 +283,7 @@ Key files:
 - `src/sync-rapid.ts`, `src/sync-pex.ts` — stipend sheets
 - `src/sync-student-competency.ts` — competency scores + rubric
 - `src/sync-development-crm.ts` — Building21 CRM (6 tabs)
-- `src/sync-attendance.ts` — three cohort sheets, chunked-fetch (5,000 rows per chunk)
+- `src/sync-attendance.ts` — three source sheets, chunked-fetch (5,000 rows per chunk)
 - `src/sync-distances.ts` — geocodes student zips to office distance
 - `src/sync.ts` — orchestrates all syncs, writes `sync_runs`
 - `src/index.ts` — entrypoint

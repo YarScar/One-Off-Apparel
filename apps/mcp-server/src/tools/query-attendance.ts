@@ -4,11 +4,12 @@ import { prisma } from '@lp-ai/lib-db';
 import type { Prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { cohortNotSupported } from '../errors.js';
 
 const NAME = 'query_attendance';
 
 const DESCRIPTION =
-  'Query Launchpad student attendance from the three cohort sheets (Cohort 1 / 2 / 3). Use for per-student attendance rates, aggregate rates by phase / race / cohort / school / etc., or raw event drill-downs over a date range. Cohorts are loose Launchpad groupings; rates blend cohort 1 (already-aggregated weekly %), cohort 2 (daily P/A/E codes), and cohort 3 (weekly check-in/out logs with codes). Excused absences are excluded from rate calculations.';
+  'Query Launchpad student attendance records. Use for per-student attendance rates, aggregate rates by phase / race / school / etc., or raw event drill-downs over a date range. Excused absences are excluded from rate calculations. Cohort is not tracked — filter/group by current_phase and a date range instead.';
 
 const inputSchema = {
   query_type: z.enum(['by_student', 'aggregate', 'events']),
@@ -16,7 +17,10 @@ const inputSchema = {
     .string()
     .optional()
     .describe('LP#### (joins students.student_number).'),
-  cohort: z.number().optional().describe('1, 2, or 3.'),
+  cohort: z
+    .number()
+    .optional()
+    .describe('Deprecated — cohort is no longer tracked. Use current_phase and a date range instead.'),
   current_phase: z.string().optional(),
   start_date: z.string().optional(),
   end_date: z.string().optional(),
@@ -29,12 +33,10 @@ const inputSchema = {
 function buildWhere(raw: Record<string, unknown>): Prisma.AttendanceRecordWhereInput {
   const where: Prisma.AttendanceRecordWhereInput = {};
   const studentNumber = parseStr(raw, 'student_number');
-  const cohort = parseNum(raw, 'cohort');
   const startDate = parseStr(raw, 'start_date');
   const endDate = parseStr(raw, 'end_date');
 
   if (studentNumber) where.studentNumber = studentNumber;
-  if (cohort !== undefined) where.cohort = cohort;
   if (startDate || endDate) {
     where.date = {};
     if (startDate) where.date.gte = new Date(startDate);
@@ -47,23 +49,26 @@ interface AttendanceTotals {
   present: number;
   absent: number;
   excused: number;
-  cohort1Sum: number;
-  cohort1Count: number;
+  pctSum: number;
+  pctCount: number;
 }
 
 function emptyTotals(): AttendanceTotals {
-  return { present: 0, absent: 0, excused: 0, cohort1Sum: 0, cohort1Count: 0 };
+  return { present: 0, absent: 0, excused: 0, pctSum: 0, pctCount: 0 };
 }
 
+// `sourceFormat` is an internal signal for which of the 3 source spreadsheets
+// a row came from (1 = weekly aggregate %, 2/3 = daily/weekly P/A/E codes) —
+// never expose this to callers, see AttendanceRecord.sourceFormat in schema.prisma.
 function addRow(
   totals: AttendanceTotals,
-  cohort: number,
+  sourceFormat: number,
   code: string | null,
   percentage: number | null,
 ): void {
-  if (cohort === 1 && percentage !== null) {
-    totals.cohort1Sum += percentage;
-    totals.cohort1Count += 1;
+  if (sourceFormat === 1 && percentage !== null) {
+    totals.pctSum += percentage;
+    totals.pctCount += 1;
     return;
   }
   if (code === 'P') totals.present += 1;
@@ -73,11 +78,10 @@ function addRow(
 
 function rate(totals: AttendanceTotals): number | null {
   const codeDenom = totals.present + totals.absent;
-  if (codeDenom === 0 && totals.cohort1Count === 0) return null;
+  if (codeDenom === 0 && totals.pctCount === 0) return null;
   const codeRate = codeDenom > 0 ? (totals.present / codeDenom) * 100 : null;
-  const cohort1Rate =
-    totals.cohort1Count > 0 ? totals.cohort1Sum / totals.cohort1Count : null;
-  const parts = [codeRate, cohort1Rate].filter((p): p is number => p !== null);
+  const pctRate = totals.pctCount > 0 ? totals.pctSum / totals.pctCount : null;
+  const parts = [codeRate, pctRate].filter((p): p is number => p !== null);
   if (parts.length === 0) return null;
   const sum = parts.reduce((a, b) => a + b, 0);
   return Math.round((sum / parts.length) * 10) / 10;
@@ -88,6 +92,9 @@ export function registerQueryAttendance(server: McpServer): void {
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
       const queryType = parseStr(raw, 'query_type') ?? 'aggregate';
+      const cohort = parseNum(raw, 'cohort');
+      const groupByInput = parseStr(raw, 'group_by');
+      if (cohort !== undefined || groupByInput === 'cohort') return cohortNotSupported();
       const where = buildWhere(raw);
 
       if (queryType === 'events') {
@@ -108,7 +115,6 @@ export function registerQueryAttendance(server: McpServer): void {
           truncated: rows.length < totalMatched,
           records: rows.map((r) => ({
             id: r.id,
-            cohort: r.cohort,
             student_number: r.studentNumber,
             student_name: students.get(r.studentNumber)?.canonicalName ?? null,
             current_phase: students.get(r.studentNumber)?.currentPhase ?? null,
@@ -123,7 +129,7 @@ export function registerQueryAttendance(server: McpServer): void {
       const rows = await prisma.attendanceRecord.findMany({
         where,
         select: {
-          cohort: true,
+          sourceFormat: true,
           code: true,
           percentage: true,
           studentNumber: true,
@@ -132,18 +138,14 @@ export function registerQueryAttendance(server: McpServer): void {
       const students = await loadStudents(rows.map((r) => r.studentNumber));
 
       if (queryType === 'by_student') {
-        const perStudent = new Map<
-          string,
-          { totals: AttendanceTotals; cohorts: Set<number> }
-        >();
+        const perStudent = new Map<string, { totals: AttendanceTotals }>();
         for (const r of rows) {
           let entry = perStudent.get(r.studentNumber);
           if (!entry) {
-            entry = { totals: emptyTotals(), cohorts: new Set() };
+            entry = { totals: emptyTotals() };
             perStudent.set(r.studentNumber, entry);
           }
-          addRow(entry.totals, r.cohort, r.code, r.percentage ? Number(r.percentage) : null);
-          entry.cohorts.add(r.cohort);
+          addRow(entry.totals, r.sourceFormat, r.code, r.percentage ? Number(r.percentage) : null);
         }
         return {
           query_type: 'by_student',
@@ -152,10 +154,9 @@ export function registerQueryAttendance(server: McpServer): void {
             student_number: sn,
             canonical_name: students.get(sn)?.canonicalName ?? null,
             current_phase: students.get(sn)?.currentPhase ?? null,
-            cohorts: Array.from(e.cohorts).sort(),
             attendance_rate_pct: rate(e.totals),
             rows_counted:
-              e.totals.present + e.totals.absent + e.totals.excused + e.totals.cohort1Count,
+              e.totals.present + e.totals.absent + e.totals.excused + e.totals.pctCount,
             present: e.totals.present,
             absent: e.totals.absent,
             excused: e.totals.excused,
@@ -163,7 +164,7 @@ export function registerQueryAttendance(server: McpServer): void {
         };
       }
 
-      const groupBy = parseStr(raw, 'group_by') ?? 'cohort';
+      const groupBy = parseStr(raw, 'group_by') ?? 'current_phase';
       const groups = new Map<
         string,
         { totals: AttendanceTotals; students: Set<string> }
@@ -171,26 +172,24 @@ export function registerQueryAttendance(server: McpServer): void {
       for (const r of rows) {
         const student = students.get(r.studentNumber);
         const key =
-          groupBy === 'cohort'
-            ? `cohort_${r.cohort}`
-            : groupBy === 'current_phase'
-              ? (student?.currentPhase ?? 'unknown')
-              : groupBy === 'enrollment_status'
-                ? (student?.enrollmentStatus ?? 'unknown')
-                : 'overall';
+          groupBy === 'current_phase'
+            ? (student?.currentPhase ?? 'unknown')
+            : groupBy === 'enrollment_status'
+              ? (student?.enrollmentStatus ?? 'unknown')
+              : 'overall';
         let entry = groups.get(key);
         if (!entry) {
           entry = { totals: emptyTotals(), students: new Set() };
           groups.set(key, entry);
         }
-        addRow(entry.totals, r.cohort, r.code, r.percentage ? Number(r.percentage) : null);
+        addRow(entry.totals, r.sourceFormat, r.code, r.percentage ? Number(r.percentage) : null);
         entry.students.add(r.studentNumber);
       }
 
       const overallTotals = emptyTotals();
       const overallStudents = new Set<string>();
       for (const r of rows) {
-        addRow(overallTotals, r.cohort, r.code, r.percentage ? Number(r.percentage) : null);
+        addRow(overallTotals, r.sourceFormat, r.code, r.percentage ? Number(r.percentage) : null);
         overallStudents.add(r.studentNumber);
       }
 
@@ -204,14 +203,14 @@ export function registerQueryAttendance(server: McpServer): void {
             overallTotals.present +
             overallTotals.absent +
             overallTotals.excused +
-            overallTotals.cohort1Count,
+            overallTotals.pctCount,
         },
         breakdown: Array.from(groups.entries()).map(([group, e]) => ({
           group,
           student_count: e.students.size,
           attendance_rate_pct: rate(e.totals),
           rows_counted:
-            e.totals.present + e.totals.absent + e.totals.excused + e.totals.cohort1Count,
+            e.totals.present + e.totals.absent + e.totals.excused + e.totals.pctCount,
           present: e.totals.present,
           absent: e.totals.absent,
           excused: e.totals.excused,

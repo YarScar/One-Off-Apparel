@@ -1,13 +1,13 @@
 import { prisma } from '@lp-ai/lib-db';
 import { AttendanceTrendChart, type AttendanceTrendPoint } from './charts/AttendanceTrendChart';
-import { CohortCompletionChart, type CohortCompletionPoint } from './charts/CohortCompletionChart';
+import { ProgramCompletionChart, type ProgramCompletionPoint } from './charts/ProgramCompletionChart';
 import { CompetencyAttendanceHeatmap, type HeatmapCell } from './charts/CompetencyAttendanceHeatmap';
 import { CompetencyScatterChart, type CompetencyScatterPoint } from './charts/CompetencyScatterChart';
 
 export const dynamic = 'force-dynamic';
 
 interface CompletionRow {
-  cohort_year: string;
+  program_year: string;
   student_count: string;
   foundations_started: string;
   foundations_complete: string;
@@ -20,7 +20,6 @@ interface CompletionRow {
 }
 
 interface AttendanceMonthRow {
-  cohort: number;
   month: string;
   avg_attendance: string;
 }
@@ -36,7 +35,7 @@ interface CompetencyAvgRow {
 interface HeadlineRow {
   total_students: string;
   active_students: string;
-  cohorts_running: string;
+  attendance_record_count: string;
 }
 
 interface CompetencyScatterRow {
@@ -116,13 +115,13 @@ const headlineSql = `
   SELECT
     (SELECT COUNT(*)::text FROM students) AS total_students,
     (SELECT COUNT(*)::text FROM students WHERE UPPER(COALESCE(enrollment_status, '')) = 'E') AS active_students,
-    (SELECT COUNT(DISTINCT cohort)::text FROM attendance_records WHERE cohort IN (1, 2, 3)) AS cohorts_running
+    (SELECT COUNT(*)::text FROM attendance_records) AS attendance_record_count
 `;
 
 const completionSql = `
   WITH base AS (
     SELECT
-      COALESCE(EXTRACT(YEAR FROM spo.foundations_start_date)::text, 'Unknown') AS cohort_year,
+      COALESCE(EXTRACT(YEAR FROM spo.foundations_start_date)::text, 'Unknown') AS program_year,
       s.id,
       spo.foundations_start_date, LOWER(TRIM(spo.foundations_status)) AS foundations_status,
       spo.phase_101_start_date,   LOWER(TRIM(spo.phase_101_status))   AS phase_101_status,
@@ -131,9 +130,9 @@ const completionSql = `
     FROM students s
     INNER JOIN student_phase_outcomes spo ON s.id = spo.student_id
   ),
-  by_cohort AS (
+  by_year AS (
     SELECT
-      cohort_year,
+      program_year,
       COUNT(DISTINCT id)::text AS student_count,
       COUNT(DISTINCT CASE WHEN foundations_start_date IS NOT NULL THEN id END)::text AS foundations_started,
       COUNT(DISTINCT CASE WHEN foundations_status = 'completed' THEN id END)::text AS foundations_complete,
@@ -144,11 +143,11 @@ const completionSql = `
       COUNT(DISTINCT CASE WHEN liftoff_start_date     IS NOT NULL THEN id END)::text AS liftoff_started,
       COUNT(DISTINCT CASE WHEN liftoff_status     = 'completed' THEN id END)::text AS liftoff_complete
     FROM base
-    GROUP BY cohort_year
+    GROUP BY program_year
   ),
   totals AS (
     SELECT
-      'All Time' AS cohort_year,
+      'All Time' AS program_year,
       COUNT(DISTINCT id)::text AS student_count,
       COUNT(DISTINCT CASE WHEN foundations_start_date IS NOT NULL THEN id END)::text AS foundations_started,
       COUNT(DISTINCT CASE WHEN foundations_status = 'completed' THEN id END)::text AS foundations_complete,
@@ -161,17 +160,16 @@ const completionSql = `
     FROM base
   )
   SELECT * FROM (
-    SELECT *, 0 AS sort_order FROM by_cohort
+    SELECT *, 0 AS sort_order FROM by_year
     UNION ALL
     SELECT *, 1 AS sort_order FROM totals
   ) combined
-  ORDER BY sort_order, cohort_year DESC NULLS LAST
+  ORDER BY sort_order, program_year DESC NULLS LAST
 `;
 
 const attendanceMonthlySql = `
   WITH per_student_month AS (
     SELECT
-      cohort,
       TO_CHAR(date, 'YYYY-MM') AS month,
       student_number,
       ROUND(
@@ -179,13 +177,13 @@ const attendanceMonthlySql = `
           / NULLIF(COUNT(*), 0) * 100, 1
       ) AS student_rate
     FROM attendance_records
-    WHERE cohort IN (1, 2, 3) AND code IS NOT NULL AND date IS NOT NULL
-    GROUP BY cohort, TO_CHAR(date, 'YYYY-MM'), student_number
+    WHERE code IS NOT NULL AND date IS NOT NULL
+    GROUP BY TO_CHAR(date, 'YYYY-MM'), student_number
   )
-  SELECT cohort, month, ROUND(AVG(student_rate), 1)::text AS avg_attendance
+  SELECT month, ROUND(AVG(student_rate), 1)::text AS avg_attendance
   FROM per_student_month
-  GROUP BY cohort, month
-  ORDER BY cohort, month
+  GROUP BY month
+  ORDER BY month
 `;
 
 const competencyAvgsSql = `
@@ -223,7 +221,7 @@ const heatmapSql = `
           / NULLIF(COUNT(*), 0) * 100, 1
       ) AS att_rate
     FROM attendance_records
-    WHERE cohort IN (1, 2, 3) AND code IS NOT NULL
+    WHERE code IS NOT NULL
     GROUP BY student_number
     HAVING COUNT(*) >= 5
   ),
@@ -291,11 +289,11 @@ export default async function DashboardPage(): Promise<JSX.Element> {
   const scatterRows = competencyScatter.data ?? [];
   const heatmapRows = heatmap.data ?? [];
 
-  // Cohort completion → bar chart points (exclude "All Time" totals)
-  const completionChartData: CohortCompletionPoint[] = completionRows
-    .filter((r) => r.cohort_year !== 'All Time')
+  // Program completion → bar chart points (exclude "All Time" totals)
+  const completionChartData: ProgramCompletionPoint[] = completionRows
+    .filter((r) => r.program_year !== 'All Time')
     .map((r) => ({
-      cohort: r.cohort_year,
+      program_year: r.program_year,
       Foundations: pctNum(r.foundations_complete, r.foundations_started),
       '101': pctNum(r.phase_101_complete, r.phase_101_started),
       Lightspeed: pctNum(r.lightspeed_complete, r.lightspeed_started),
@@ -303,31 +301,12 @@ export default async function DashboardPage(): Promise<JSX.Element> {
     }))
     .reverse(); // ascending year order for chart
 
-  // Attendance → line chart points (pivot cohort to columns)
-  const attendanceByCohort = new Map<number, AttendanceMonthRow[]>();
-  for (const row of monthlyRows) {
-    const c = Number(row.cohort);
-    if (!attendanceByCohort.has(c)) attendanceByCohort.set(c, []);
-    attendanceByCohort.get(c)!.push(row);
-  }
-  for (const rows of attendanceByCohort.values()) {
-    rows.sort((a, b) => a.month.localeCompare(b.month));
-  }
-
-  const allMonths = [...new Set(monthlyRows.map((r) => r.month))].sort();
-  const attendanceChartData: AttendanceTrendPoint[] = allMonths.map((month) => {
-    const point: AttendanceTrendPoint = { month };
-    for (const cohort of [1, 2, 3] as const) {
-      const row = (attendanceByCohort.get(cohort) ?? []).find((r) => r.month === month);
-      const v = row ? parseFloat(row.avg_attendance) : NaN;
-      if (!isNaN(v)) {
-        if (cohort === 1) point.Cohort1 = v;
-        if (cohort === 2) point.Cohort2 = v;
-        if (cohort === 3) point.Cohort3 = v;
-      }
-    }
-    return point;
-  });
+  // Attendance → line chart points
+  const sortedMonthlyRows = [...monthlyRows].sort((a, b) => a.month.localeCompare(b.month));
+  const attendanceChartData: AttendanceTrendPoint[] = sortedMonthlyRows.map((row) => ({
+    month: row.month,
+    rate: parseFloat(row.avg_attendance),
+  }));
 
   // Competency scatter
   const scatterChartData: CompetencyScatterPoint[] = scatterRows
@@ -352,7 +331,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
       <header className="border-b border-slate-200 pb-6">
         <h1 className="text-3xl font-semibold tracking-tight text-ink">Launchpad Dashboard</h1>
         <p className="mt-2 text-sm text-muted">
-          Program completion, attendance trends, and competency outcomes across active cohorts.
+          Program completion, attendance trends, and competency outcomes across the program.
         </p>
       </header>
 
@@ -361,7 +340,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <StatCard label="Total Students" value={headlineRow.total_students} />
           <StatCard label="Active Students" value={headlineRow.active_students} hint="Currently enrolled" />
-          <StatCard label="Cohorts Tracked" value={headlineRow.cohorts_running} hint="With attendance data" />
+          <StatCard label="Attendance Records" value={headlineRow.attendance_record_count} hint="Synced from source sheets" />
         </section>
       )}
 
@@ -369,7 +348,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
       <section>
         <div className="mb-4 flex items-baseline justify-between">
           <h2 className="text-lg font-semibold text-ink">Program Completion</h2>
-          <span className="text-xs text-muted">Completion % by phase, grouped by cohort year</span>
+          <span className="text-xs text-muted">Completion % by phase, grouped by program year</span>
         </div>
         {completion.error ? (
           <SectionError message={completion.error} />
@@ -378,7 +357,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
         ) : (
           <div className="space-y-6">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <CohortCompletionChart data={completionChartData} />
+              <ProgramCompletionChart data={completionChartData} />
             </div>
             <details className="rounded-xl border border-slate-200 bg-white shadow-sm">
               <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-ink hover:bg-slate-50">
@@ -388,7 +367,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-50 text-left">
-                      <th className="px-4 py-2 font-medium text-muted border border-slate-200">Cohort</th>
+                      <th className="px-4 py-2 font-medium text-muted border border-slate-200">Year</th>
                       <th className="px-4 py-2 font-medium text-muted border border-slate-200">Students</th>
                       <th className="px-4 py-2 font-medium text-muted border border-slate-200 text-center" colSpan={2}>Foundations</th>
                       <th className="px-4 py-2 font-medium text-muted border border-slate-200 text-center" colSpan={2}>101</th>
@@ -409,14 +388,14 @@ export default async function DashboardPage(): Promise<JSX.Element> {
                   </thead>
                   <tbody>
                     {completionRows.map((row) => {
-                      const isTotal = row.cohort_year === 'All Time';
+                      const isTotal = row.program_year === 'All Time';
                       const rowClass = isTotal
                         ? 'border-t-2 border-slate-400 bg-slate-50 font-semibold'
                         : 'hover:bg-slate-50';
                       const cellClass = `px-4 py-2 border border-slate-200${isTotal ? ' text-ink' : ''}`;
                       return (
-                        <tr key={row.cohort_year} className={rowClass}>
-                          <td className={`${cellClass} font-medium`}>{row.cohort_year}</td>
+                        <tr key={row.program_year} className={rowClass}>
+                          <td className={`${cellClass} font-medium`}>{row.program_year}</td>
                           <td className={cellClass}>{row.student_count}</td>
                           <td className={cellClass}>{row.foundations_started}</td>
                           <td className={cellClass}>
@@ -461,7 +440,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
       <section>
         <div className="mb-4 flex items-baseline justify-between">
           <h2 className="text-lg font-semibold text-ink">Attendance</h2>
-          <span className="text-xs text-muted">Monthly trend by cohort · 80% threshold marked</span>
+          <span className="text-xs text-muted">Monthly trend · 80% threshold marked</span>
         </div>
         {attendanceMonthly.error ? (
           <SectionError message={attendanceMonthly.error} />
@@ -472,58 +451,47 @@ export default async function DashboardPage(): Promise<JSX.Element> {
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <AttendanceTrendChart data={attendanceChartData} />
               <p className="mt-3 text-xs text-amber-700">
-                <span className="font-medium">Caveat:</span> Cohort 1 source may be missing Jan–Aug 2023.
+                <span className="font-medium">Caveat:</span> One data source may be missing Jan–Aug 2023.
                 Late (L) days count as present.
               </p>
             </div>
             <details className="rounded-xl border border-slate-200 bg-white shadow-sm">
               <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-ink hover:bg-slate-50">
-                Show per-cohort monthly tables
+                Show monthly table
               </summary>
-              <div className="space-y-4 border-t border-slate-200 p-4">
-                {[1, 2, 3].map((cohort) => {
-                  const rows = attendanceByCohort.get(cohort) ?? [];
-                  if (rows.length === 0) return null;
-                  return (
-                    <div key={cohort}>
-                      <h3 className="mb-2 text-sm font-medium text-ink">Cohort {cohort}</h3>
-                      <div className="overflow-x-auto">
-                        <table className="text-sm border-collapse">
-                          <thead>
-                            <tr className="bg-slate-50">
-                              {rows.map((r) => (
-                                <th
-                                  key={r.month}
-                                  className="px-3 py-2 font-medium text-muted border border-slate-200 text-center min-w-[80px]"
-                                >
-                                  {r.month}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              {rows.map((r) => {
-                                const val = parseFloat(r.avg_attendance);
-                                const flagged = val < 80;
-                                return (
-                                  <td
-                                    key={r.month}
-                                    className={`px-3 py-2 border border-slate-200 text-center ${
-                                      flagged ? 'bg-red-50 text-red-700 font-semibold' : 'text-ink'
-                                    }`}
-                                  >
-                                    {r.avg_attendance}%
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="overflow-x-auto border-t border-slate-200 p-4">
+                <table className="text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      {sortedMonthlyRows.map((r) => (
+                        <th
+                          key={r.month}
+                          className="px-3 py-2 font-medium text-muted border border-slate-200 text-center min-w-[80px]"
+                        >
+                          {r.month}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {sortedMonthlyRows.map((r) => {
+                        const val = parseFloat(r.avg_attendance);
+                        const flagged = val < 80;
+                        return (
+                          <td
+                            key={r.month}
+                            className={`px-3 py-2 border border-slate-200 text-center ${
+                              flagged ? 'bg-red-50 text-red-700 font-semibold' : 'text-ink'
+                            }`}
+                          >
+                            {r.avg_attendance}%
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </details>
           </div>

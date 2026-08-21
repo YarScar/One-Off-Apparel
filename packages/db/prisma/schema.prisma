@@ -19,7 +19,6 @@ model Student {
   phone            String?
   currentPhase     String?   @map("current_phase")
   enrollmentStatus String?   @map("enrollment_status")
-  cohort           Int?
   distanceToOffice Float?    @map("distance_to_office")
   neighborhood     String?
   graduationDate   DateTime? @map("graduation_date")
@@ -80,7 +79,6 @@ model Student {
   postsecondary  StudentPostsecondary[]
 
   @@index([canonicalName])
-  @@index([cohort])
   @@map("students")
 }
 
@@ -279,7 +277,11 @@ model EnrollmentSnapshot {
 model AttendanceRecord {
   id            String    @id @default(uuid())
   sourceId      String    @unique @map("source_id")
-  cohort        Int
+  // Internal-only: which of the 3 source spreadsheets this row came from,
+  // and thus which shape its rate math uses (avg percentage vs P/A/E ratio).
+  // Never expose this as a filter/output/grouping to MCP callers — see
+  // apps/mcp-server/src/tools/query-attendance.ts.
+  sourceFormat  Int       @map("source_format")
   studentNumber String    @map("student_number")
   date          DateTime? @db.Date
   startDate     DateTime? @map("start_date") @db.Date
@@ -290,7 +292,7 @@ model AttendanceRecord {
   lastSyncedAt  DateTime  @default(now()) @map("last_synced_at")
 
   @@index([studentNumber])
-  @@index([cohort, date])
+  @@index([sourceFormat, date])
   @@index([date])
   @@map("attendance_records")
 }

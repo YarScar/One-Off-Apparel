@@ -7,13 +7,13 @@ The server currently exposes **16 tools**, all active — backed by Google Sheet
 **Active tools (16):**
 - `get_student_info` — Sheets student roster + Drive student info doc
 - `query_outcomes` — Phase progression from Student Information sheet
-- `query_enrollment` — enrollment statistics by phase, school, cohort, race, date ranges, with full per-student profile filters
+- `query_enrollment` — enrollment statistics by phase, school, race, date ranges, with full per-student profile filters
 - `query_certifications` — PCEP pass/fail results, scores, by phase
 - `query_students` — population statistics + filtered lists with full demographic, academic, and post-program filter set
 - `query_competency` — per-student competency scores and the rubric structure
 - `query_finances` — Launchpad Dashboard, Phase Budget Dashboard (incl. monthly LiftOff/HS), Phase Actuals 2025 + Q3 2026, Rapid + PEX stipends, **and Building21 Development CRM** (giving history, prospect pipeline, denied, Launchpad pipeline, grants tracker, contacts)
 - `query_donors` — Building21 Development CRM donor lookup (list / profile / summary). Profile mode joins one donor's record to their gift history, pipeline, Launchpad-specific asks, and grants
-- `query_attendance` — three Launchpad cohort attendance sheets unified into `attendance_records`. By-student rates, aggregate breakdowns, raw event drill-downs
+- `query_attendance` — student attendance unified into `attendance_records` from three source sheets. By-student rates, aggregate breakdowns by phase, raw event drill-downs
 - `query_employment` — post-program employment data (employer, wages, hours, exit codes) from the Employment tab
 - `query_postsecondary` — college enrollment tracking from National Student Clearinghouse data
 - `search_conversations` — semantic search over Drive docs + Notion meeting transcripts (pgvector)
@@ -43,19 +43,14 @@ Every tool call is logged to the `usage_logs` Postgres table (tool name, timesta
 
 ### `query_attendance`
 
-Query Launchpad student attendance from the three cohort sheets unified into the `attendance_records` table. Supports per-student rates, aggregate breakdowns by any demographic dimension, and raw event drill-downs over a date range.
+Query Launchpad student attendance unified into the `attendance_records` table. Supports per-student rates, aggregate breakdowns by phase / enrollment status / overall, and raw event drill-downs over a date range.
 
-**Source:** Three Google Sheets (`GOOGLE_SHEETS_ATTENDANCE_COHORT_1/2/3`).
+**Source:** Three Google Sheets (`GOOGLE_SHEETS_ATTENDANCE_COHORT_1/2/3`), each with a different row shape (weekly aggregate %, daily P/A/E codes, weekly check-in/out logs). Which shape a row came from is tracked internally (`attendance_records.source_format`) purely so rate math can be computed correctly — it is **not** exposed to callers. Linkage to the students table is via `student_number` (LP####).
 
-**Cohort shapes:**
-- Cohort 1 — weekly aggregate rows with a `Percentage` column (0–100); no P/A/E codes.
-- Cohort 2 — daily rows with `Code` ∈ {`P`, `A`, `E`}, `Check in` / `Check out` decimal times, expected vs. actual time-spent.
-- Cohort 3 — weekly check-in / check-out logs with `Code` (`P`/`A`/`E`) and `CheckInOrOut` event type. `LearningExp` values: `F1`/`F2` = Foundations Term 1/2, `O1` = 101.
-
-Cohorts are loose Launchpad groupings; a student may move between cohorts as they accelerate. Linkage to the students table is via `student_number` (LP####).
+**Cohort is not a supported query dimension.** An explicit per-student cohort designation was removed system-wide (see the "Removal of cohort" note below); callers that pass `cohort` as a filter or `group_by` value receive a `cohort_not_supported` error directing them to filter by `current_phase` and a date range instead. Program-phase history (with start/end dates) lives in `student_phase_outcomes`, sourced from the Student Information sheet's PhaseCompletion tab.
 
 **Description shown to Claude:**
-> Query Launchpad student attendance from the three cohort sheets (Cohort 1 / 2 / 3). Use for per-student attendance rates, aggregate rates by phase / race / cohort / school / etc., or raw event drill-downs over a date range. Cohorts are loose Launchpad groupings (students may move between them as they accelerate); rates blend cohort 1 (already-aggregated weekly %), cohort 2 (daily P/A/E codes), and cohort 3 (weekly check-in/out logs with codes). Excused absences are excluded from rate calculations.
+> Query Launchpad student attendance records. Use for per-student attendance rates, aggregate rates by phase / race / school / etc., or raw event drill-downs over a date range. Excused absences are excluded from rate calculations. Cohort is not tracked — filter/group by current_phase and a date range instead.
 
 **Input Schema:**
 ```json
@@ -63,20 +58,15 @@ Cohorts are loose Launchpad groupings; a student may move between cohorts as the
   "type": "object",
   "properties": {
     "query_type": { "type": "string", "enum": ["by_student", "aggregate", "events"] },
-    "student_number": { "type": "string", "description": "LP#### (joins students.student_id)" },
-    "cohort": { "type": "number", "enum": [1, 2, 3], "description": "Restrict to one cohort. Default: all three." },
+    "student_number": { "type": "string", "description": "LP#### (joins students.student_number)" },
+    "cohort": { "type": "number", "description": "Deprecated — cohort is no longer tracked. Passing this returns a cohort_not_supported error." },
     "current_phase": { "type": "string", "description": "Foundations / 101 / Lightspeed / LiftOff. Joined via students table." },
-    "race": { "type": "string" },
-    "gender": { "type": "string" },
-    "school": { "type": "string", "description": "Partial match." },
-    "enrollment_status": { "type": "string", "description": "E / EP / EL / N." },
-    "graduation_year": { "type": "number" },
     "start_date": { "type": "string", "format": "date" },
     "end_date": { "type": "string", "format": "date" },
     "group_by": {
       "type": "string",
-      "enum": ["cohort", "current_phase", "race", "gender", "school", "enrollment_status", "graduation_year"],
-      "description": "For 'aggregate' only. Default 'cohort'."
+      "enum": ["current_phase", "enrollment_status", "overall"],
+      "description": "For 'aggregate' only. Default 'current_phase'."
     },
     "limit": { "type": "number", "description": "For 'events' only. Default 200, max 500." }
   },
@@ -85,9 +75,9 @@ Cohorts are loose Launchpad groupings; a student may move between cohorts as the
 ```
 
 **Rate calculation:**
-- Cohort 1 — weighted average of the `percentage` column.
-- Cohort 2 / 3 — `present / (present + absent)`, with **excused excluded from both numerator and denominator**.
-- Mixed-cohort students contribute via both signals (cohort-1 rows weight 1 each; cohort-2/3 P/A rows weight 1 each).
+- Rows sourced from the weekly-aggregate sheet — weighted average of the `percentage` column.
+- Rows sourced from the two P/A/E-code sheets — `present / (present + absent)`, with **excused excluded from both numerator and denominator**.
+- Students whose records span more than one source sheet contribute via both signals.
 
 **Output Schema (`by_student`):**
 ```json
@@ -99,9 +89,6 @@ Cohorts are loose Launchpad groupings; a student may move between cohorts as the
       "student_number": "LP0181",
       "canonical_name": "Tai Pham",
       "current_phase": "101",
-      "race": "Asian",
-      "school": "Furness High School",
-      "cohorts": [2, 3],
       "attendance_rate_pct": 92.4,
       "rows_counted": 187,
       "present": 167,
@@ -116,10 +103,10 @@ Cohorts are loose Launchpad groupings; a student may move between cohorts as the
 ```json
 {
   "query_type": "aggregate",
-  "group_by": "cohort",
+  "group_by": "current_phase",
   "overall": { "student_count": 151, "attendance_rate_pct": 86.1, "rows_counted": 14092 },
   "breakdown": [
-    { "group": "cohort_3", "student_count": 85, "attendance_rate_pct": 85.1,
+    { "group": "101", "student_count": 85, "attendance_rate_pct": 85.1,
       "rows_counted": 8296, "present": 6438, "absent": 1126, "excused": 112 }
   ]
 }
@@ -133,7 +120,7 @@ Cohorts are loose Launchpad groupings; a student may move between cohorts as the
   "records_returned": 200,
   "truncated": true,
   "records": [
-    { "id": "...", "cohort": 3, "studentNumber": "LP0181", "date": "2026-04-22",
+    { "id": "...", "studentNumber": "LP0181", "date": "2026-04-22",
       "code": "P", "rowData": { "learning_exp": "O1", "...": "..." } }
   ]
 }
@@ -254,7 +241,7 @@ Query Beacon competency outcomes for a student.
 Retrieve a student's structured profile.
 
 **Description shown to Claude:**
-> Get structured profile information for a student — grade, cohort, program, IEP/ELL status, interests, goals, and known aliases across all data sources. Use this tool to understand who a student is before asking follow-up questions about their attendance or outcomes.
+> Get structured profile information for a student — grade, program phase, IEP/ELL status, interests, goals, and known aliases across all data sources. Use this tool to understand who a student is before asking follow-up questions about their attendance or outcomes.
 
 **Input Schema:**
 ```json
@@ -278,7 +265,6 @@ Retrieve a student's structured profile.
     "canonical_name": "Maria Garcia",
     "student_id": "S1042",
     "grade": "11",
-    "cohort": "2025",
     "program": "Launchpad",
     "email": "maria@school.edu",
     "iep": false,
@@ -604,17 +590,18 @@ Queries Aplos (`finance_snapshots` with `aplos:*` tab names) and Google Sheets f
 
 ### `query_enrollment`
 
-Aggregate student enrollment data from `student_phase_outcomes`. Supports total headcount, phase breakdowns with optional status filter, date-range active queries, school / cohort / race breakdowns, per-student rows with the full demographic filter set, and per-Launchpad-cohort grad/retention rates.
+Aggregate student enrollment data from `student_phase_outcomes`. Supports total headcount, phase breakdowns with optional status filter, date-range active queries, school / race breakdowns, per-student rows with the full demographic filter set, and per-program-year grad/retention rates.
+
+Cohort is not a supported query dimension — passing `cohort` (as a filter or as `query_type: "by_cohort"`) returns a `cohort_not_supported` error directing callers to filter by phase and a date range instead.
 
 **Query types:**
 - `total` — all-time headcount
 - `by_phase` — count per phase, optional `status` filter (Completed / Dropped Before Completion / In Progress / Not Enrolled)
 - `active_during` — students enrolled in a phase during a date window
 - `by_school` — breakdown by school name
-- `by_cohort` — breakdown by HS graduation year
 - `by_race` — breakdown by race / ethnicity
 - `by_student` — per-student records with phase statuses, supports the **full student-info filter set** (race, gender, school, current_phase, enrollment_status, withdrawal_code, entry/withdrawal date ranges, city, zip, college_enroll, university, major, workforce_*, internship_status, income range, parental_ed range, plus numeric range filters on interview/GPA/algebra/geometry scores)
-- `by_program_year` — grad/retention rates per Launchpad cohort year (grouped by foundations_start_date), supports `liftoff_graduating` and `phase_101_graduating` projections
+- `by_program_year` — grad/retention rates per program year, supports `liftoff_graduating` and `phase_101_graduating` projections
 
 `by_student` is the right tool for sliced retention queries (e.g., "101 retention for African American students" → `query_type=by_student`, `phase=101`, `race='Black or African American'`, then tally `phase_101_status` on the result).
 
@@ -666,4 +653,8 @@ Per-student competency data (scores) or the rubric structure (skills + opportuni
 }
 ```
 
-Error codes: `entity_not_found`, `no_records`, `search_failed`, `internal_error`
+Error codes: `entity_not_found`, `no_records`, `search_failed`, `internal_error`, `not_yet_implemented`, `cohort_not_supported`
+
+### Removal of cohort as a query dimension
+
+Launchpad no longer tracks an explicit per-student "cohort" designation. The `students` table no longer has a `cohort` column (it was sourced from column AQ of the Students tab and is no longer synced), and none of the query tools (`query_students`, `query_enrollment`, `query_attendance`, `get_student_info`, `get_entity_brief`) expose cohort as a filter, group-by, or output field. Tools that used to accept `cohort` still recognize the input key so they can respond with a clear `cohort_not_supported` error rather than a generic validation failure — callers should filter by `current_phase` and a date range instead. Program-phase history (with per-phase start/end dates) comes from `student_phase_outcomes`, sourced from the Student Information sheet's PhaseCompletion tab.

@@ -8,7 +8,7 @@ import { toolError } from '../errors.js';
 const NAME = 'get_student_info';
 
 const DESCRIPTION =
-  'Get structured profile information for a student — grade, cohort, program, IEP/ELL status, interests, goals, and known aliases across all data sources. Use this tool to understand who a student is before asking follow-up questions about their attendance or outcomes.';
+  'Get structured profile information for a student — grade, program phase, IEP/ELL status, interests, goals, and known aliases across all data sources. Use this tool to understand who a student is before asking follow-up questions about their attendance or outcomes.';
 
 const inputSchema = {
   student_name: z.string().describe('Name, nickname, or ID of the student.'),
@@ -55,7 +55,6 @@ export function registerGetStudentInfo(server: McpServer): void {
           phone: student.phone,
           current_phase: student.currentPhase,
           enrollment_status: student.enrollmentStatus,
-          cohort: student.cohort,
           neighborhood: student.neighborhood,
           distance_to_office: student.distanceToOffice,
           graduation_date: student.graduationDate,

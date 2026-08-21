@@ -61,10 +61,10 @@ These return data directly from the database. Typical query tools include:
 
 | Tool | What It Does |
 |---|---|
-| `get_student_info` | Full profile — demographics, cohort, program phase, status, goals, aliases |
+| `get_student_info` | Full profile — demographics, program phase, status, goals, aliases |
 | `query_students` | Population-level analytics — averages, breakdowns, filtered lists |
-| `query_enrollment` | Enrollment headcounts, phase breakdowns, cohort summaries |
-| `query_attendance` | Per-person or aggregate attendance rates by phase, cohort, demographic |
+| `query_enrollment` | Enrollment headcounts, phase breakdowns, program-year summaries |
+| `query_attendance` | Per-person or aggregate attendance rates by phase, demographic |
 | `query_outcomes` | Program outcomes — baseline, performance level, growth, progress |
 | `query_competency` | Per-person competency analytics or rubric structure |
 | `query_certifications` | Certification pass/fail rates, scores, breakdowns |
@@ -144,7 +144,7 @@ You can guide the process:
 
 ### Tips
 
-- **Be specific about time ranges** when asking about attendance, finances, or enrollment: "attendance for Cohort 3 in January 2026" gets better results than "recent attendance."
+- **Be specific about time ranges** when asking about attendance, finances, or enrollment: "attendance for 101 in January 2026" gets better results than "recent attendance."
 - **Name matching is fuzzy** — the system resolves aliases across data sources, so first names, partial names, and full names all work.
 - **Ask for CSV** if you want data you can paste into a spreadsheet: "Give me a CSV of all participants with their attendance rates and competency growth."
 
@@ -188,7 +188,7 @@ HQ is your operations dashboard at **[PLACEHOLDER: https://hq.yourorg.example.co
 | Page | URL | What It Shows |
 |---|---|---|
 | **Home** | [PLACEHOLDER: https://hq.yourorg.example.com/] | Data freshness — when each data source was last synced and how many records it has. Also shows Claude token usage and recent tool calls. |
-| **Dashboard** | [PLACEHOLDER: https://hq.yourorg.example.com/dashboard] | Analytic charts — enrollment by cohort, attendance trends, competency scatter plots, and a competency-by-attendance heatmap. |
+| **Dashboard** | [PLACEHOLDER: https://hq.yourorg.example.com/dashboard] | Analytic charts — program completion by year, attendance trends, competency scatter plots, and a competency-by-attendance heatmap. |
 | **Sync** | [PLACEHOLDER: https://hq.yourorg.example.com/sync] | Connector health — status of each data sync (Google Sheets, donation platform, accounting system, etc.) with recent run history. |
 | **Tool Log** | [PLACEHOLDER: https://hq.yourorg.example.com/tools] | Every MCP tool call — which tool, who called it, how long it took, whether it succeeded. Filterable by tool name or error status. |
 

@@ -11,8 +11,8 @@ import {
   YAxis,
 } from 'recharts';
 
-export interface CohortCompletionPoint {
-  cohort: string;
+export interface ProgramCompletionPoint {
+  program_year: string;
   Foundations: number | null;
   '101': number | null;
   Lightspeed: number | null;
@@ -27,10 +27,10 @@ const COLORS = {
 } as const;
 
 interface Props {
-  data: CohortCompletionPoint[];
+  data: ProgramCompletionPoint[];
 }
 
-export function CohortCompletionChart({ data }: Props): JSX.Element {
+export function ProgramCompletionChart({ data }: Props): JSX.Element {
   if (data.length === 0) {
     return <p className="text-sm text-muted">No completion data to chart.</p>;
   }
@@ -40,7 +40,7 @@ export function CohortCompletionChart({ data }: Props): JSX.Element {
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 16, right: 16, bottom: 8, left: -8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis dataKey="cohort" stroke="#64748b" fontSize={12} />
+          <XAxis dataKey="program_year" stroke="#64748b" fontSize={12} />
           <YAxis
             stroke="#64748b"
             fontSize={12}

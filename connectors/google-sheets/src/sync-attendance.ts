@@ -34,23 +34,26 @@ function parseDateStr(v: string | undefined): Date | null {
   return null;
 }
 
-type CohortConfig = {
-  cohort: 1 | 2 | 3;
+// Internal-only classification of which source spreadsheet a row came from,
+// and thus which shape its rate math uses (avg percentage vs P/A/E ratio).
+// This is never exposed to MCP callers — see query-attendance.ts.
+type SourceFormatConfig = {
+  sourceFormat: 1 | 2 | 3;
   envKey: string;
 };
 
-const COHORT_CONFIGS: CohortConfig[] = [
-  { cohort: 1, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_1' },
-  { cohort: 2, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_2' },
-  { cohort: 3, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_3' },
+const SOURCE_FORMAT_CONFIGS: SourceFormatConfig[] = [
+  { sourceFormat: 1, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_1' },
+  { sourceFormat: 2, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_2' },
+  { sourceFormat: 3, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_3' },
 ];
 
 const ROW_CHUNK_SIZE = 5000;
 
-async function syncOneCohort(config: CohortConfig): Promise<number> {
+async function syncOneSource(config: SourceFormatConfig): Promise<number> {
   const spreadsheetId = process.env[config.envKey];
   if (!spreadsheetId) {
-    console.warn(`  cohort ${config.cohort}: ${config.envKey} not set, skipping`);
+    console.warn(`  source ${config.sourceFormat}: ${config.envKey} not set, skipping`);
     return 0;
   }
 
@@ -62,13 +65,13 @@ async function syncOneCohort(config: CohortConfig): Promise<number> {
       getSheetGridDimensions(spreadsheetId),
     ]);
   } catch (err) {
-    console.warn(`  cohort ${config.cohort}: failed to list tabs — ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`  source ${config.sourceFormat}: failed to list tabs — ${err instanceof Error ? err.message : String(err)}`);
     return 0;
   }
 
   const candidateTabs = titles.filter((t) => /attendanceData\s*$/i.test(t));
   if (candidateTabs.length === 0) {
-    console.warn(`  cohort ${config.cohort}: no tab matching "*attendanceData" — available: ${titles.join(', ')}`);
+    console.warn(`  source ${config.sourceFormat}: no tab matching "*attendanceData" — available: ${titles.join(', ')}`);
     return 0;
   }
 
@@ -91,10 +94,10 @@ async function syncOneCohort(config: CohortConfig): Promise<number> {
   }
 
   if (!chosenTab) {
-    console.warn(`  cohort ${config.cohort}: no tab with "Student Number" header (candidates: ${candidateTabs.join(', ')})`);
+    console.warn(`  source ${config.sourceFormat}: no tab with "Student Number" header (candidates: ${candidateTabs.join(', ')})`);
     return 0;
   }
-  console.log(`  cohort ${config.cohort}: detected primary tab "${chosenTab}"`);
+  console.log(`  source ${config.sourceFormat}: detected primary tab "${chosenTab}"`);
 
   const seenKeys = new Set<string>();
   const columnMap: { rawIdx: number; key: string }[] = [];
@@ -109,7 +112,7 @@ async function syncOneCohort(config: CohortConfig): Promise<number> {
   if (columnMap.length === 0) return 0;
 
   const totalRows = dims.get(chosenTab)?.rowCount ?? 0;
-  const sourcePrefix = `attendance:cohort_${config.cohort}`;
+  const sourcePrefix = `attendance:source_${config.sourceFormat}`;
   let synced = 0;
 
   for (let chunkStart = 2; chunkStart <= totalRows; chunkStart += ROW_CHUNK_SIZE) {
@@ -119,7 +122,7 @@ async function syncOneCohort(config: CohortConfig): Promise<number> {
     try {
       chunkRows = await getSheetRows(spreadsheetId, dataRange);
     } catch (err) {
-      console.warn(`  cohort ${config.cohort}: chunk ${chunkStart}-${chunkEnd} failed — ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`  source ${config.sourceFormat}: chunk ${chunkStart}-${chunkEnd} failed — ${err instanceof Error ? err.message : String(err)}`);
       continue;
     }
 
@@ -147,7 +150,7 @@ async function syncOneCohort(config: CohortConfig): Promise<number> {
         where: { sourceId },
         create: {
           sourceId,
-          cohort: config.cohort,
+          sourceFormat: config.sourceFormat,
           studentNumber,
           date,
           startDate: null,
@@ -157,7 +160,7 @@ async function syncOneCohort(config: CohortConfig): Promise<number> {
           rowData,
         },
         update: {
-          cohort: config.cohort,
+          sourceFormat: config.sourceFormat,
           studentNumber,
           date,
           startDate: null,
@@ -171,14 +174,14 @@ async function syncOneCohort(config: CohortConfig): Promise<number> {
     }
   }
 
-  console.log(`  attendance:cohort_${config.cohort}: ${synced} rows synced (${columnMap.length} cols mapped, ${totalRows} rows total in tab)`);
+  console.log(`  attendance:source_${config.sourceFormat}: ${synced} rows synced (${columnMap.length} cols mapped, ${totalRows} rows total in tab)`);
   return synced;
 }
 
 export async function syncAttendance(): Promise<number> {
   let total = 0;
-  for (const config of COHORT_CONFIGS) {
-    total += await syncOneCohort(config);
+  for (const config of SOURCE_FORMAT_CONFIGS) {
+    total += await syncOneSource(config);
   }
   return total;
 }

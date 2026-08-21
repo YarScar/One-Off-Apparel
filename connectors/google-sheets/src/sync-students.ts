@@ -86,7 +86,6 @@ export async function syncStudents(): Promise<number> {
       hoursOutsideCommitted: s.hoursOutsideCommitted,
       permissionSlip: s.permissionSlip,
       extraTime: s.extraTime,
-      cohort: s.cohort,
       techInterestOnboarding: s.techInterestOnboarding,
       interviewPassionScore: s.interviewPassionScore,
       interviewCollegeScore: s.interviewCollegeScore,

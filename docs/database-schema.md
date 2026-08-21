@@ -14,9 +14,11 @@ Canonical student records. Sourced from the `Students` tab of the "Student Infor
 
 **PII exclusions:** `dob` is stored but was historically excluded; `phone` is stored but should not be exposed via MCP tools. The connector enforces column-level allowlists.
 
-Key columns: `id` (UUID PK), `student_number` (LP#### format, unique), `canonical_name`, `email`, `current_phase`, `enrollment_status`, `cohort`, `gender`, `race_ethnicity`, `school_name`, `hs_graduation_year`, `entry_date`, `withdrawal_date`, `withdrawal_code`, plus academic scores (`interview_score`, `hs_gpa`, `algebra1_grade`, `geometry_grade`), post-program fields (`college_enroll`, `university`, `major`), and V2 additions (`dob`, `suffix`, `rapid_account_number`, `algebra_keystone_score`, `works_outside_launchpad`, etc.).
+Key columns: `id` (UUID PK), `student_number` (LP#### format, unique), `canonical_name`, `email`, `current_phase`, `enrollment_status`, `gender`, `race_ethnicity`, `school_name`, `hs_graduation_year`, `entry_date`, `withdrawal_date`, `withdrawal_code`, plus academic scores (`interview_score`, `hs_gpa`, `algebra1_grade`, `geometry_grade`), post-program fields (`college_enroll`, `university`, `major`), and V2 additions (`dob`, `suffix`, `rapid_account_number`, `algebra_keystone_score`, `works_outside_launchpad`, etc.).
 
-Indexes: `canonical_name`, `cohort`.
+There is no `cohort` column — an explicit per-student cohort designation (formerly sourced from column AQ of the Students tab) was removed system-wide. Program-phase history lives in `student_phase_outcomes` instead.
+
+Index: `canonical_name`.
 
 #### `staff`
 
@@ -84,11 +86,11 @@ Indexes: `period_month`, `phase`.
 
 #### `attendance_records`
 
-Unified storage for three Launchpad cohort attendance sheets. Each cohort has a different shape; common fields are promoted to columns and the full source row is preserved in `row_data`.
+Unified storage for attendance from three source Google Sheets, each with a different row shape. Common fields are promoted to columns and the full source row is preserved in `row_data`.
 
-Key columns: `id` (UUID PK), `source_id` (unique), `cohort` (1|2|3), `student_number` (LP####), `date`, `start_date`, `end_date`, `code` (P/A/E), `percentage` (cohort 1 only), `row_data` (JSON).
+Key columns: `id` (UUID PK), `source_id` (unique), `source_format` (1|2|3 — internal-only signal for which source sheet/shape a row came from; not exposed via MCP), `student_number` (LP####), `date`, `start_date`, `end_date`, `code` (P/A/E), `percentage` (source_format 1 only), `row_data` (JSON).
 
-Indexes: `student_number`, `(cohort, date)`, `date`.
+Indexes: `student_number`, `(source_format, date)`, `date`.
 
 #### `finance_snapshots`
 

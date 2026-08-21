@@ -34,7 +34,7 @@ tokens distributed to laptops.
 ### After that — just use Claude
 
 Ask Claude things like *"Give me a brief on student John Doe"* or *"What's the
-attendance trend for Cohort 3 this week?"* — Claude will pick the right tool
+attendance trend for 101 this week?"* — Claude will pick the right tool
 from the LP Internal AI server, your stored credential is used automatically.
 
 ### Refresh

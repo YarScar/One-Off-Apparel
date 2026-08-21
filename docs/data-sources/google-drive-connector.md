@@ -20,7 +20,7 @@ Documents are identified by name pattern within a designated Drive folder (`GOOG
 ## Structured vs. Unstructured Split
 
 ### Goes to Postgres (structured)
-- Tabular rows where each row = one student: name, ID, grade, cohort, IEP flag, ELL flag, interests list, goals list
+- Tabular rows where each row = one student: name, ID, grade, IEP flag, ELL flag, interests list, goals list
 - Any field that is discrete and filterable belongs in Postgres
 
 ### Goes to pgvector (unstructured)

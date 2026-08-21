@@ -71,7 +71,6 @@ model Student {
   phone             String?
   currentPhase      String?  @map("current_phase")
   enrollmentStatus  String?  @map("enrollment_status")
-  cohort            String?
   distanceToOffice  Float?   @map("distance_to_office")
   neighborhood      String?
   graduationDate    DateTime? @map("graduation_date")
@@ -190,7 +189,7 @@ model EnrollmentSnapshot {
 model AttendanceRecord {
   id           String   @id @default(uuid())
   studentId    String   @map("student_id")
-  cohort       String
+  sourceFormat String   @map("source_format")
   weekOf       String?  @map("week_of")
   attendanceDate String? @map("attendance_date")
   status       String?

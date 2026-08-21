@@ -16,6 +16,7 @@
 //   col 43 Age               — derivable from DOB; don't store both
 //   col 47 PCEP Score        — redundant with student_certifications
 //   col 51 Has Disability?   — sensitive
+//   col 42 Cohort            — deprecated; use PhaseCompletion tab (phase + date) instead
 export const EXPECTED_STUDENTS_V2_HEADERS = [
   'Student Number',                            // A  0
   'First Name',                                // B  1
@@ -59,7 +60,7 @@ export const EXPECTED_STUDENTS_V2_HEADERS = [
   'Hours Outside of School/week committed',    // AN 39
   'Permission Slip?',                          // AO 40
   'Extra Time?',                               // AP 41
-  'Cohort',                                    // AQ 42
+  'Cohort',                                    // AQ 42 — EXCLUDED (deprecated)
   'Age',                                       // AR 43 — EXCLUDED (use dob)
   'Tech Interest Onboarding',                  // AS 44
   'Interview Passion Score',                   // AT 45
@@ -166,7 +167,6 @@ export type StudentV2Row = {
   hoursOutsideCommitted: string | null;
   permissionSlip: boolean | null;
   extraTime: boolean | null;
-  cohort: number | null;
   techInterestOnboarding: number | null;
   interviewPassionScore: number | null;
   interviewCollegeScore: number | null;
@@ -225,7 +225,7 @@ export function parseStudentV2Row(raw: string[]): StudentV2Row | null {
     hoursOutsideCommitted: parseNum(get(39)),
     permissionSlip: parseBool(get(40)),
     extraTime: parseBool(get(41)),
-    cohort: parseInt2(get(42)),
+    // col 42 Cohort — EXCLUDED (deprecated; use PhaseCompletion tab instead)
     // col 43 Age — EXCLUDED (derivable)
     techInterestOnboarding: parseInt2(get(44)),
     interviewPassionScore: parseInt2(get(45)),
