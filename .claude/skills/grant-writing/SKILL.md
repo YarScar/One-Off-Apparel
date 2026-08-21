@@ -6,7 +6,7 @@ description: Draft a Launchpad grant application, LOI, or funder report. Runs th
 # Grant writing
 
 Turn a funder's form into a draft answer package for staff review. Never a first draft — the version
-Chip Linehan or Dannyelle Austin sees should already read like a third draft.
+Chip, Iman, or Dannyelle sees should already read like a third draft.
 
 **A person always reviews and submits. Never submit. Never send anything to a funder.**
 
@@ -110,20 +110,33 @@ entity names, and definitional figure conflicts.
 
 ## Step 2 — Intake: ask before writing
 
+**Gate: wait for Iman's Criteria + Positioning section.** Before intake questions, check whether Iman
+has already built the "Criteria + Positioning" bullet section (Grant Criteria/Hot Buttons +
+Positioning/Main sell) in the Grant Overview Template — she builds it from her own research, Step 1's
+research, and funder history. If it exists, intake answers come from it, not from a fresh ask. If it
+doesn't exist yet, say so explicitly rather than drafting a positioning stance from scratch — this
+section is what keeps drafting from drifting off the strategic angle, and skipping it just means
+redoing the work once Iman produces it.
+
 Research what you can, then ask. Do not guess at funder priorities, program scope, framing, or dollar
 amounts. Three answers are needed every time, and the third is mandatory:
 
-1. **Which programs to tee up** — 101 (two pathways: AI Software Development, Entrepreneurial
+1. **Positioning** — workforce-oriented (job outcomes, paid work, certifications, employers) or
+   education-oriented (AI fluency, durable skills, competency-based learning). Any specific angle the
+   funder's priorities call for? This is the same question Criteria + Positioning answers — work
+   through feasibility with Iman if the section is still open.
+2. **Which programs to tee up** — 101 (two pathways: AI Software Development, Entrepreneurial
    Leadership), LiftOff (six-month learn-and-earn), Launchpad Inc. (paid client work). Workforce
    funders lead with LiftOff + Inc; education funders with 101 + AI fluency. Propose a default from
    the funder's priorities, then wait.
-2. **Positioning** — workforce-oriented (job outcomes, paid work, certifications, employers) or
-   education-oriented (AI fluency, durable skills, competency-based learning).
 3. **Fiscal-sponsorship framing — ASK EVERY TIME, never assume.** Initiative (an initiative of
    Building 21) / Fiscal Sponsorship (the formal structure, with planned spin-out) / Silent (focus on
    Launchpad, B21 relationship not detailed).
 
 Also ask which prior applications to build from, and propose candidates by matching orientation.
+
+**Essential before drafting starts:** Dannyelle, Iman, and Chip have an upfront strategic conversation
+about positioning, letters of support, and narrative framing before drafting begins.
 
 ## Step 3 — Fetch every figure live, then cut it the way the question asks
 
@@ -222,6 +235,14 @@ something plausible.
 **List the researched candidates separately from the KB-backed answers**, each with its sources and its
 `needs_staff` note. A reviewer reads an answer written this session from research differently from one
 drawn from established filed material, and should.
+
+**What happens after hand-off, so a status question can be answered accurately:** Iman does a first
+pass (word count, canonical and content facts) and tags Dannyelle (program content) and Chip (budgets,
+budget narratives, financial reports) on what needs their input. After the second round, Iman
+pressure-tests the draft with a neutral LLM (e.g. ChatGPT) about a week out from deadline — Claude
+cannot fill that role for itself, being biased toward its own output. Dannyelle, Iman, and Chip edit
+from that feedback; the third-round draft goes back to Iman for a Claude clarity/consistency/alignment
+pass, then Iman uploads the final draft for Chip and Dannyelle's submission review.
 
 ## References
 

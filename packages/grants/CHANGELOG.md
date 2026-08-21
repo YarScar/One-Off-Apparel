@@ -27,6 +27,18 @@ entry can be verified rather than trusted.
 
 ## 2026-08-21
 
+### Fixed — WP #327: `.claude/skills/grant-writing/SKILL.md` had not caught up to WP #326's PLAYBOOK fix
+
+WP #326 reconciled `packages/grants/docs/PLAYBOOK.md` against the Notion Grant Writing Playbook, but
+the operational skill that implements PLAYBOOK stayed on the old process: `SKILL.md`'s roster still
+named only Chip and Dannyelle, `Step 2 — Intake` asked the positioning question fresh with no gate for
+Iman's "Criteria + Positioning" section (the artifact PLAYBOOK's Step 2 now requires before drafting),
+and `Step 6 — Hand off` stopped at what Claude presents with no mention of the review chain after
+(Iman's first pass, Dannyelle/Chip tagged by domain, the neutral-LLM pressure test, third-round
+re-review). Fixed the roster, added the Criteria + Positioning gate ahead of the intake questions, and
+added the post-hand-off review chain to Step 6. Checked `packages/grants/README.md` and `docs/STATE.md`
+for the same drift — neither mentions the roster or this process, so neither needed a change.
+
 ### Fixed — WP #326: `docs/PLAYBOOK.md` had drifted from the team's Notion Grant Writing Playbook
 
 `packages/grants/docs/PLAYBOOK.md` is a fork of the Notion "Grant Writing Playbook" page
