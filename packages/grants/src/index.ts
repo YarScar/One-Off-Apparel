@@ -53,3 +53,7 @@ export * from './resize.js';
 // Form → match → KB retrieve → limit check → Markdown. Returns the figure work order; never calls a
 // connector.
 export * from './pipeline.js';
+
+// Closed-loop check that a drafted figure traces to the live query_* result the caller ran for it.
+// Never re-runs the call itself — see the module header for why.
+export * from './verify.js';

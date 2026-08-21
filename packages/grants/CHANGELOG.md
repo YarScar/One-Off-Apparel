@@ -27,6 +27,39 @@ entry can be verified rather than trusted.
 
 ## 2026-08-21
 
+### Added — WP #321: `grant_verify_figure` closed-loop figure check
+
+`figure_call` in `pipeline.ts` tells the drafting model which `query_*` tool sources a figure, but
+nothing mechanically checked that the number it wrote down actually matched what that tool
+returned — the drafting model could still hallucinate a plausible-looking figure.
+
+- **New `verifyFigureAnswer(draftText, figureCall, queryResult)`** (`packages/grants/src/verify.ts`) —
+  extracts literal figures from the draft via the existing `literalFigures()` (`slots.ts`), walks
+  `queryResult` recursively collecting every numeric leaf (numbers and numeric substrings in
+  strings, via the existing `extractNumericClaims()` from `figures.ts`), and reports which drafted
+  figures do and don't appear anywhere in the live result. No new number-parsing was written.
+- **New MCP tool `grant_verify_figure`** (`apps/mcp-server/src/tools/grant-verify-figure.ts`) — takes
+  `{ answer_text, figure_call, query_result }` and returns `needs_input` naming the unmatched
+  figure(s) plus the correct live value(s) as suggestions, or `{ matched: true, drafted_figures }`
+  on success. Registered in `make-server.ts`; ACL row added via migration
+  `20260821000000_add_grant_verify_figure_permission` (`leadership`, `admin`, same as the other
+  `grant_*` tools).
+- **Deviates from the WP's literal text on purpose.** WP #321 as written says
+  `grant_verify_figure` should re-invoke the named `query_*` tool server-side. That would launder
+  permissions: `runTool`'s ACL check (`apps/mcp-server/src/permissions.ts`) keys on the literal
+  inbound tool name, so an internal call to e.g. `query_finances` from inside
+  `grant_verify_figure` would be authorized as `grant_verify_figure`, not as `query_finances` —
+  exactly the ACL-bypass pattern `figures.ts`'s own header comment already forbids. Raised to the
+  user, who chose the caller-supplies-`query_result` shape instead: the drafting model runs the
+  `query_*` tool itself (ACL-checked under its own name) and hands the raw result to
+  `grant_verify_figure` for comparison only. `pipeline.ts`'s `fetch_figure` action-text and the
+  markdown renderer's `figure_call` block both now instruct the drafting model to call
+  `grant_verify_figure` with that result before finalizing a figure answer.
+- **Verified:** `pnpm -r typecheck` clean across 14 packages, `pnpm test` 573/573, `pnpm lint`
+  clean. New coverage: `verify.test.ts` (5 cases — match, mismatch, nested-in-result match,
+  vacuous pass with no literal figures, multiple simultaneous mismatches) and two `tools.test.ts`
+  integration cases (mismatch → `needs_input` with the correct suggestion; match → `matched: true`).
+
 ### Added — WP #320: `needs_input` gate enforces program/framing before drafting
 
 `admin/HANDOFF.md`'s three-principle review found principle 3 unenforced: `program`/`framing` on

@@ -434,7 +434,9 @@ export function buildAnswer(
             `means before writing the number.`
           : `This question wants a live ${figure.tool} figure. Run it with ` +
             `${JSON.stringify(figure.args)} and write the returned number — do not quote a frozen ` +
-            `KB figure.`,
+            `KB figure. Before finalizing, call grant_verify_figure with this answer text, this ` +
+            `figure_call, and ${figure.tool}'s result to confirm the number you wrote actually came ` +
+            `from it.`,
         figure_call: { tool: figure.tool, args: figure.args },
       };
     }
@@ -949,7 +951,8 @@ export function renderMarkdown(pkg: DraftPackage): string {
         .join(', ');
       L.push(
         `Run \`${r.figure_call.tool}\` with (${args}) and write the returned figure. ` +
-          `Do NOT quote a frozen KB number.`,
+          `Do NOT quote a frozen KB number. Then call \`grant_verify_figure\` with this answer, this ` +
+          `figure_call, and the result before finalizing.`,
       );
       L.push('');
     }

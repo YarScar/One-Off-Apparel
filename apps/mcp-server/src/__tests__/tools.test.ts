@@ -19,7 +19,7 @@ describeLocal('MCP tool handlers (integration)', () => {
     await prisma.$disconnect();
   });
 
-  it('tools/list exposes all 25 tools', async () => {
+  it('tools/list exposes all 26 tools', async () => {
     const tools = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -31,6 +31,7 @@ describeLocal('MCP tool handlers (integration)', () => {
         'grant_build_draft',
         'grant_match_question',
         'grant_resize_answer',
+        'grant_verify_figure',
         'query_attendance',
         'query_certifications',
         'query_competency',
@@ -492,6 +493,29 @@ describeLocal('MCP tool handlers (integration)', () => {
     })) as { error?: { code: string; message: string } };
     expect(result.error?.code).toBe('no_records');
     expect(result.error?.message).toContain('Whitespace is not an answer');
+  });
+
+  // grant_verify_figure, WP #321. Driven through the real server so the zod schema (`query_result` as
+  // z.unknown()) and the runTool envelope are exercised, not just verifyFigureAnswer directly.
+  it('grant_verify_figure rejects a drafted number the caller\'s own query result does not carry', async () => {
+    const result = (await client.callTool('grant_verify_figure', {
+      answer_text: 'Participants earned $350,268 in total wages.',
+      figure_call: { tool: 'query_employment', args: { query_type: 'aggregate' } },
+      query_result: { wages_total: 362030.26, wage_participants: 45 },
+    })) as { error?: { code: string; message: string; suggestions?: string[] } };
+    expect(result.error?.code).toBe('needs_input');
+    expect(result.error?.message).toContain('$350,268');
+    expect(result.error?.suggestions?.join(' ')).toContain('362030.26');
+  });
+
+  it('grant_verify_figure passes a drafted number that matches the caller\'s own query result', async () => {
+    const result = (await client.callTool('grant_verify_figure', {
+      answer_text: 'Participants earned $362,030.26 in total wages.',
+      figure_call: { tool: 'query_employment', args: { query_type: 'aggregate' } },
+      query_result: { wages_total: 362030.26, wage_participants: 45 },
+    })) as { matched: boolean; drafted_figures: string[] };
+    expect(result.matched).toBe(true);
+    expect(result.drafted_figures).toEqual(['$362,030.26']);
   });
 
   // The defect this pins: `your_tasks` and `staff_actions` were built from two hand-written maps keyed
