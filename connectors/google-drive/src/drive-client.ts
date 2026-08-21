@@ -126,6 +126,8 @@ export interface DriveClient {
   listTree(root: DriveRoot): Promise<TreeListing>;
   /** Plain text for a Google-native document. Null when the type has no text export. */
   exportText(fileId: string, mimeType: string): Promise<string | null>;
+  /** Raw bytes of a binary file (e.g. an uploaded .docx) — for callers that parse it themselves. */
+  downloadFile(fileId: string): Promise<Buffer>;
 }
 
 // ---------------------------------------------------------------------------
@@ -604,6 +606,16 @@ function makeClient(drive: drive_v3.Drive): DriveClient {
         ),
       );
       return typeof res.data === 'string' ? res.data : null;
+    },
+
+    async downloadFile(fileId): Promise<Buffer> {
+      const res = await withRetry('files.get(alt=media)', () =>
+        drive.files.get(
+          { fileId, alt: 'media', supportsAllDrives: true },
+          { responseType: 'arraybuffer', timeout: REQUEST_TIMEOUT_MS },
+        ),
+      );
+      return Buffer.from(res.data as ArrayBuffer);
     },
   };
 }

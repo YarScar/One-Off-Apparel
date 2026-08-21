@@ -91,9 +91,10 @@ any of the paragraph below — it is a snapshot, not a contract.
 - **Run `pnpm test`, not just the grants suite**, before claiming green — the grants suite cannot see
   MCP tool-surface breaks — *and* pair it with `pnpm -r typecheck` (a green test run misses stale
   types). The pair is the check; neither half is.
-- **MCP server: 26 tools registered on this branch** (16 data + `find_grant_documents` + 4 `grant_*`
-  + 5 `skill_*`); production is at 21 and is **not** a subset (main lacks the `grant_*` tools but has
-  `find_grant_documents`). **Quote the command, not the number.**
+- **MCP server: 27 tools registered on this branch** (16 data + `find_grant_documents` +
+  `get_grant_document_text` + 4 `grant_*` + 5 `skill_*`); production is at 21 and is **not** a subset
+  (main lacks `get_grant_document_text` and the `grant_*` tools but has `find_grant_documents`).
+  **Quote the command, not the number.**
 - **Every registered tool has a `tool_permissions` row locally**; whether the grant rows exist on RDS
   is still unverified (board A7 / #163) and the registry fails closed. #295's migration pin fix landed
   2026-08-18 but is not yet proven by a deploy — see root `CLAUDE.md`.

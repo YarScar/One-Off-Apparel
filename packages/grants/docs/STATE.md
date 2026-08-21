@@ -78,15 +78,17 @@ suite passed 187/187 throughout, and the break sat undetected in the working tre
 declarations can go stale while every case passes. `pnpm -r typecheck` caught exactly that on the
 same fix. The pairing is the check; neither half is.
 
-**MCP server: 26 tools registered** on this branch — 16 data, `find_grant_documents`, the four
-`grant_*` tools, and 5 `skill_*`. Counted 2026-08-21 by the §6 command, after `grant_verify_figure`
-landed (WP #321) alongside the closed-loop figure check. The count has moved five times in five days
-and each move is worth knowing: `skill_grant_sourcing_evaluation` (PR #48, from `main`) took it
-23 → 24; `query_hours` briefly took it to 25 before being **withdrawn from this branch** on
-2026-08-14 (§4 item 15); the Drive merge took it 24 → 25 on 2026-08-17; and `grant_verify_figure`
-took it 25 → 26 on 2026-08-21. **Quote the command, not the number.**
+**MCP server: 27 tools registered** on this branch — 16 data, `find_grant_documents`,
+`get_grant_document_text`, the four `grant_*` tools, and 5 `skill_*`. Counted 2026-08-21 by the §6
+command, after `get_grant_document_text` landed (WP #323) alongside `grant_verify_figure` earlier the
+same day. The count has moved six times in five days and each move is worth knowing:
+`skill_grant_sourcing_evaluation` (PR #48, from `main`) took it 23 → 24; `query_hours` briefly took it
+to 25 before being **withdrawn from this branch** on 2026-08-14 (§4 item 15); the Drive merge took it
+24 → 25 on 2026-08-17; `grant_verify_figure` took it 25 → 26 on 2026-08-21; and
+`get_grant_document_text` took it 26 → 27 the same day. **Quote the command, not the number.**
 
-**Production is at 21, and it is NOT a subset of the 26.** `main` lacks the four `grant_*` tools and
+**Production is at 21, and it is NOT a subset of the 27.** `main` lacks `get_grant_document_text`, the
+four `grant_*` tools, and
 the fifth `skill_*` tool, and it *has* `find_grant_documents` — deployed on 2026-08-06 from
 `fix/google-drive-discovery`, before `main` became the only deploy branch, and never merged until
 2026-08-17. **That asymmetry is why "merging removes a live feature" was true right up to that merge**,

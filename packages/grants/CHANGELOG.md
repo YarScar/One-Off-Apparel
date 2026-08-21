@@ -27,6 +27,31 @@ entry can be verified rather than trusted.
 
 ## 2026-08-21
 
+### Added — WP #323: `get_grant_document_text`, the Drive text-fetch tool `find_grant_documents` promised
+
+`find_grant_documents` catalogs 1,253 Drive files but only ever returned metadata — its `usage_note`
+pointed at "a Google Drive read tool" that did not exist. New MCP tool
+`apps/mcp-server/src/tools/get-grant-document-text.ts` closes that: given a `drive_file_id`, it reads
+the `grant_documents` catalog to gate on `contentClass`/`driveFileId` (the same `fetchable` flag
+`find_grant_documents` already returns), then fetches via the `google-drive` connector's own client
+(`clientFromEnv`, now exposed to `apps/mcp-server` as `@lp-ai/connector-google-drive`) rather than a
+second Drive credential path. Google Docs/Slides export as plain text; uploaded `.docx`/`.dotx` are
+downloaded raw and extracted with a new `extractDocxText` (`packages/grants/src/docx.ts`, new `jszip`
+dependency) — a straight port of `.claude/skills/grant-writing/scripts/corpus_search.py`'s paragraph
+extraction, kept in parity with it deliberately. Other `contentClass: "text"` types (PDF, `.doc`,
+spreadsheets, `.csv`, `.vtt`, `.html`) are out of scope for this pass and return `not_yet_implemented`
+— `find_grant_documents`'s `fetchable=true` no longer guarantees this tool can read the file, which is
+now stated in both tools' descriptions and in `docs/mcp-server-spec.md`. `find-grant-documents.ts`'s
+`usage_note` and `.claude/skills/grant-writing/references/gap-fill.md` (rung 3) now name the new tool
+as the production path, with `corpus_search.py` kept as the documented dev-only fallback. Registered
+in `make-server.ts`; `tool_permissions` row added
+(`20260821010000_add_get_grant_document_text_permission`, same roles as `find_grant_documents`).
+**Production Drive auth for the Grants tree remains unverified** (the service account may lack
+access) — this tool inherits that limitation and says so in its error path rather than papering over
+it. Tool count: 26 → 27 on this branch; `docs/mcp-server-spec.md`, `docs/STATE.md`, and this package's
+`CLAUDE.md` all updated. If you have an existing local clone: `pnpm install` (new `jszip` dependency)
+and `pnpm db:migrate`.
+
 ### Removed — WP #322: `kb.meta.connector_reconciliation` relocated out of the KB
 
 `kb_launchpad.json`'s `meta.connector_reconciliation` carried dollar/percentage figures dated

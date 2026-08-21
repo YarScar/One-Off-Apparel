@@ -30,13 +30,17 @@ skipped: for most questions, someone at Launchpad has already written a good ans
    operational or financial. Any figure in the answer must come from here or be flagged.
 2. **Internal documents and conversations** — `search_documents`, `search_conversations` (Drive docs
    and Notion meeting transcripts in pgvector).
-3. **Prior filed applications** — the grant corpus. Someone has probably answered this question:
+3. **Prior filed applications** — the grant corpus. Someone has probably answered this question.
+   The production path is `find_grant_documents` to locate the file, then
+   `get_grant_document_text` to read it:
    ```bash
-   # MCP-first: same chain as rung 2, scoped to the grants corpus
-   search_documents({ query: "…", source: "drive" })
+   find_grant_documents({ doc_kind: "application_response", ... })
+   get_grant_document_text({ drive_file_id: "<from the row above>" })
    ```
-   On a dev machine with the local mirror present, `corpus_search.py` can grep it directly, but it is
-   a fallback, not the source of truth — the server has no `data/Grants` tree:
+   `get_grant_document_text` extracts Google Docs/Slides and .docx/.dotx today; other text-bearing
+   types come back `not_yet_implemented`. On a dev machine with the local mirror present,
+   `corpus_search.py` can grep it directly, but it is a dev-only fallback, not the source of
+   truth — the server has no `data/Grants` tree:
    ```bash
    python3 .claude/skills/grant-writing/scripts/corpus_search.py "current/recent funders"
    ```

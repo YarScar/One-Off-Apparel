@@ -10,7 +10,7 @@ const NAME = 'find_grant_documents';
 const DESCRIPTION =
   'Find grant documents in the Google Drive "Grants" tree by funder, year, and document kind. ' +
   'Returns a catalog listing (no document text) including each match\'s Drive file ID, which you ' +
-  'then pass to a Google Drive read tool to fetch the content you actually need. Use this whenever ' +
+  'then pass to get_grant_document_text to fetch the content you actually need. Use this whenever ' +
   'you need past applications, budgets, reports, or letters of support: Drive search cannot see ' +
   'inside this tree, so this catalog is the only way to discover what exists. ' +
   'By default results exclude archive-only material (older applications describing a program ' +
@@ -257,9 +257,10 @@ export function registerFindGrantDocuments(server: McpServer): void {
           // Stated inline so a caller acting on these rows knows the next step
           // and the one real constraint, without needing the tool description.
           usage_note:
-            'Pass drive_file_id to a Google Drive read tool to fetch content. Rows with ' +
-            'fetchable=false have no Drive ID recorded yet. Never use archive_only or ' +
-            'external_reference documents as drafting context.',
+            'Pass drive_file_id to get_grant_document_text to fetch content. Rows with ' +
+            'fetchable=false have no Drive ID recorded yet, or a type get_grant_document_text ' +
+            'does not extract yet. Never use archive_only or external_reference documents as ' +
+            'drafting context.',
         };
       }),
   );

@@ -17,6 +17,7 @@ import { registerGetEntityBrief } from './tools/get-entity-brief.js';
 import { registerGetFinanceBrief } from './tools/get-finance-brief.js';
 import { registerSearchDocuments } from './tools/search-documents.js';
 import { registerFindGrantDocuments } from './tools/find-grant-documents.js';
+import { registerGetGrantDocumentText } from './tools/get-grant-document-text.js';
 
 import { registerGrantMatchQuestion } from './tools/grant-match-question.js';
 import { registerGrantBuildDraft } from './tools/grant-build-draft.js';
@@ -61,6 +62,7 @@ export function makeServer(): McpServer {
 
   // Grant writing tools (deterministic; they read seed data, never the database)
   registerFindGrantDocuments(server);
+  registerGetGrantDocumentText(server);
   registerGrantMatchQuestion(server);
   registerGrantBuildDraft(server);
   registerGrantResizeAnswer(server);
