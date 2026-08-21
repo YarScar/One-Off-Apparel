@@ -1,4 +1,6 @@
-A repeatable process for drafting a Launchpad grant. Chip or Dannyelle points Claude at a funder; Claude runs the four intake steps below, then drafts. The point of the intake is that Claude never guesses at funder priorities, program scope, framing, or dollar amounts — it researches what it can and asks about the rest before writing a word.
+A repeatable process for drafting a Launchpad grant. Chip, Iman, or Dannyelle points Claude at a funder; Claude runs the five intake steps below, then drafts. The point of the intake is that Claude never guesses at funder priorities, program scope, framing, or dollar amounts — it researches what it can and asks about the rest before writing a word.
+
+*This file tracks the team's Notion "Grant Writing Playbook" page (teamspace `a3cbc9382180834fbd0e81ab0da2569c`), which is the process source Chip/Iman/Dannyelle edit directly. Re-diff against it whenever a grant-writing session surfaces a process change there — the two have already drifted once (see `packages/grants/CHANGELOG.md`).*
 
 ## How to start
 
@@ -18,15 +20,19 @@ Claude does this before asking anything, so the intake questions are informed.
 
 Claude returns a tight brief, not a data dump. If a fact can't be found, it says so rather than inventing it.
 
-# Step 2 — Which parts of the program are we teeing up?
+# Step 2 — Strategic positioning
+
+Iman prepares a "Criteria + Positioning" section in the Grant Overview Template before drafting starts — a short bullet-point section at the top of the grant document: (1) Grant Criteria/Hot Buttons and (2) Positioning/Main sell. Its purpose is to stop drafting from drifting off the strategic angle. Iman builds it from her own research, from Claude's Step 1 research run through a close read of the grant criteria, and from funder history.
+
+Within this step, Claude asks how to frame overall positioning: workforce-oriented (job outcomes, paid work, employer partnerships, certifications) or education-oriented (AI fluency, durable/transferable skills, competency-based learning, experience matters more in an AI economy)? Any specific angle the funder's priorities call for? Iman supplies an angle, works through its feasibility with Claude, then adds it to Criteria and Positioning.
+
+# Step 3 — Which parts of the program are we teeing up?
 
 Claude asks. Options: **HS / 101** (on-ramp, AI fluency + durable skills, two pathways — AI Software Development and Entrepreneurial Leadership), **LiftOff** (six-month learn-and-earn AI engineering program), **Launchpad Inc.** (the social enterprise / paid client work). Most workforce pitches lead with LiftOff + Inc; education pitches lead with 101 + AI fluency. Claude proposes a default based on Step 1 but waits for the answer.
 
-# Step 3 — Overall positioning and messaging
-
-Claude asks how to frame this one. Workforce-oriented (job outcomes, paid work, employer partnerships, certifications) or education-oriented (AI fluency, durable/transferable skills, competency-based learning, experience matters more in an AI economy)? Any specific angle the funder's priorities call for?
-
 **Also settled here — fiscal-sponsorship framing. Ask every time:** Initiative (Launchpad as an initiative of Building 21), Fiscal Sponsorship (the formal fiscally sponsored structure, with planned spin-out), or Silent (focus on Launchpad, B21 relationship not detailed). Do not assume.
+
+**Essential before drafting starts:** the team (Dannyelle, Iman, Chip) has an upfront strategic conversation about positioning, letters of support, and narrative framing before Claude drafts anything.
 
 # Step 4 — Which prior grants should we draw from?
 
@@ -57,19 +63,19 @@ Write simply and directly. No rhetorical flourishes, no setups, no building to a
 
 No em dashes; use hyphens. No nonprofit jargon (transformative, innovative, holistic, leverage, ecosystem, move the needle, at the intersection of, reimagine).
 
-## Mandatory self-edit pass before showing Chip or Dannyelle
+## Mandatory self-edit pass before showing Iman, Chip, or Dannyelle
 
 Never hand over a first draft. After writing, read the whole thing back against the style rules above and fix Claude's own weak sentences BEFORE presenting. Specifically hunt for: throat-clearing openers, setup-pivots, emotional-reach words, stilted constructions, and any sentence that could appear in any nonprofit's proposal. The version Chip sees should already be a third draft. He is the final editor, not the first.
 
 ## Non-negotiables when drafting
 
-- **NEVER name a specific entity Claude cannot trace to a confirmed source.** This is the highest rule. Employer partners, funders, placement sites, client names, schools, partner organizations, and people. If Claude cannot point to exactly where a name came from and confirm it is a real, current relationship, the name does not go in the draft. Naming a fake or unverified employer partner to a funder is a credibility catastrophe and is never acceptable, not even as a placeholder or example. When uncertain, name only what is verified and ask Chip or Dannyelle to confirm the rest before it goes anywhere near a funder. A name appearing in an old Drive doc is NOT confirmation it is a current partner. "Engaged with" (a site visit, a conversation, a mentor) is NOT the same as "employer partner" or "placement", and the weaker relationship must never be upgraded in the writing. Pull real placements from LP Internal AI employment data, not from memory or old narratives.
+- **NEVER name a specific entity Claude cannot trace to a confirmed source.** This is the highest rule. Employer partners, funders, placement sites, client names, schools, partner organizations, and people. If Claude cannot point to exactly where a name came from and confirm it is a real, current relationship, the name does not go in the draft. Naming a fake or unverified employer partner to a funder is a credibility catastrophe and is never acceptable, not even as a placeholder or example. When uncertain, name only what is verified and ask Chip, Iman, or Dannyelle to confirm the rest before it goes anywhere near a funder. A name appearing in an old Drive doc is NOT confirmation it is a current partner. "Engaged with" (a site visit, a conversation, a mentor) is NOT the same as "employer partner" or "placement", and the weaker relationship must never be upgraded in the writing. Pull real placements from LP Internal AI employment data, not from memory or old narratives.
 - **Every number sourced.** Tie each figure to the workbook, employment data, or a confirmed grant narrative. Never invent or misattribute. Where a figure isn't available, say so. Reconcile conflicting figures across docs BEFORE drafting (e.g. the stale $550K vs. current $300K wages) and use the most current sourced number. Catch these before Chip does.
 - **Participant and program figures are always fetched live, every time.** Never from the knowledge base, never from a prior filing, never from a figure quoted in a reference file or an example. If an answer carries a count, a rate, a wage, or a dollar figure, a live LP Internal AI call in that drafting session produced it. There is no staleness threshold to judge and no "recent enough" — a stored participant number is simply not a source. Fetching should be fast; **the real work is choosing the cut the question is asking for.** The cut catalogue in `.claude/skills/grant-writing/references/figure-cuts.md` maps question shape to the exact tool, `query_type`, and filters, and it names the cuts that do not exist so a gap gets written as a gap.
 - **The cut is part of the number.** "301 participants" is not an answer; "301 enrollment records across all phases and all time" is. State the population and the window in the same sentence as the figure. A figure without its denominator or its date is not sourced, even if you looked it up. Three specific traps: answering a scoped question with an all-time cut, quoting a rate with an unstated denominator, and summing per-phase counts when participants appear in every phase they touch.
 - **A `[DATA UNAVAILABLE]` that recurs is a bug report about the work order, not a property of the data.** Writing it once, in one application, is correct and honest. Writing the same one again in the next application means the work order is sending callers to a tool that cannot answer, and the fix belongs in `figures.ts`, not in the draft. This is not hypothetical: the finding that `get_finance_brief` carries no income or expense totals was recorded in a run ledger on 2026-08-11 and in three filled applications from that run, framed as the outcome of one run rather than as a defect in the check. Nothing changed, and six days of callers were sent to the same dead tool until it was rediscovered from scratch. When you write `[DATA UNAVAILABLE]`, check whether a previous run already wrote it, and if so raise it as a defect.
 - **Fill the figures first, then fit the length.** `grant_build_draft` gates every length branch behind the figure fill, so an answer arrives as a `figure_template` with `{{token}}` placeholders rather than as prose. Shortening before the figures are in measures the wrong text: the token is not the length of the number that replaces it. Fill, then pass the filled text to `grant_resize_answer`. Two consequences to expect rather than be surprised by: `grant_build_draft` reports far more outstanding model work than it used to (12 of 17 on one real form), and `figure_template` is deliberately not named `answer` because a caller who treats it as one pastes `{{wages_total}}` into a funder's portal.
-- **A scoping question is not a definitional conflict.** When a funder asks for a year, a program, or a phase, they have already told us the definition; run that cut rather than sending it to Chip or Dannyelle as a decision. Escalate only when two *correct* measurements count genuinely different populations and the question does not say which it wants. Spending a staff decision on a question the funder already answered is a cost, not caution.
+- **A scoping question is not a definitional conflict.** When a funder asks for a year, a program, or a phase, they have already told us the definition; run that cut rather than sending it to Chip, Iman, or Dannyelle as a decision. Escalate only when two *correct* measurements count genuinely different populations and the question does not say which it wants. Spending a staff decision on a question the funder already answered is a cost, not caution.
 - **Voice and tone:** data-driven but human; confident, not salesy; specific over general. No nonprofit jargon (transformative, innovative, holistic, leverage, ecosystem, move the needle, at the intersection of, reimagine). **No em dashes — use hyphens.** No defensive or apologetic framing. Honest about evidence weight — distinguish demonstrated outcomes from projected ones.
 - **Word limits:** when a question has a limit, verify the count programmatically before presenting. Never eyeball it.
 - **Two distinct programs:** 101 and LiftOff/Inc are measured differently. 101's north star is AI fluency and a strong next step; LiftOff is the direct job-placement track. Keep their metrics separate.
@@ -78,6 +84,12 @@ Never hand over a first draft. After writing, read the whole thing back against 
 ## When done
 
 Update the Grant Applications record: amount requested, type, deadline, framing, themes, pathway, and the draft link. Move status from Researching to Drafting.
+
+## Review and editing
+
+Iman completes a first pass of the draft (word count, validity of canonical and content facts), then tags Dannyelle (primary driver of program-related content) and Chip (owns all financial questions: budgets, budget narratives, spending/financial reports) on questions that need their input.
+
+After the second round of drafting, Iman pressure-tests the draft with a neutral LLM (e.g. ChatGPT) about a week before the deadline, for an objective read on competitiveness — Claude (Anthropic) is biased toward rating its own output favorably and cannot fill this role for itself. Iman, Dannyelle, and Chip review that feedback and edit as needed; the resulting third-round draft goes back to Iman, who runs it through Claude for clarity, consistency, impact, alignment with grant criteria, and economy of words, reviewing each section carefully. Iman then uploads the final draft for Chip and Dannyelle to review before submission.
 
 **CLAUDE SKILL (as of 7/29/26):**
 

@@ -27,6 +27,24 @@ entry can be verified rather than trusted.
 
 ## 2026-08-21
 
+### Fixed — WP #326: `docs/PLAYBOOK.md` had drifted from the team's Notion Grant Writing Playbook
+
+`packages/grants/docs/PLAYBOOK.md` is a fork of the Notion "Grant Writing Playbook" page
+(teamspace `a3cbc9382180834fbd0e81ab0da2569c`) that Chip/Iman/Dannyelle edit directly, and the two
+had come apart: the repo still named a two-person roster ("Chip or Dannyelle") while Notion had
+added Iman and a whole intake step — **Step 2, Strategic Positioning** (Iman's "Criteria +
+Positioning" section, run before program selection) — that the repo never had, plus a documented
+review workflow (Iman's first pass, a neutral-LLM pressure test about a week before deadline,
+third-round re-review, final upload) the repo omitted entirely. Fixed the roster everywhere it
+appeared, inserted the missing step and renumbered, added the review workflow, and added a
+one-line pointer at the top of the file noting the Notion source and that it should be re-diffed
+when a session surfaces a process change there. `.claude/skills/grant-writing/SKILL.md` already
+defers to this file ("where they disagree, the PLAYBOOK wins") so nothing there needed a change.
+
+Not fixed, flagged to the team instead: the Notion teamspace runs three overlapping application
+trackers (`Grant Pipeline`, `Model Grant Applications`, `Grant Tracker`) — a Notion hygiene call for
+Iman/Dannyelle/Chip, not a repo change.
+
 ### Added — WP #323: `get_grant_document_text`, the Drive text-fetch tool `find_grant_documents` promised
 
 `find_grant_documents` catalogs 1,253 Drive files but only ever returned metadata — its `usage_note`
