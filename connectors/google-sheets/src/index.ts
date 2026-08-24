@@ -10,7 +10,6 @@ import { syncDashboard } from './sync-dashboard.js';
 import { syncPhaseBudgetDashboard } from './sync-phase-budget-dashboard.js';
 import { syncPhaseActualsQ3_2026, syncPhaseActuals2025 } from './sync-phase-dashboard.js';
 import { syncStudentCompetency } from './sync-student-competency.js';
-import { syncAttendance } from './sync-attendance.js';
 import { syncEnrollment } from './sync-enrollment.js';
 import { syncQuotes } from './sync-quotes.js';
 
@@ -42,7 +41,6 @@ export async function sync(): Promise<SyncResult> {
     const pex = await safeRun('pex', syncPex);
     const competency = await safeRun('student competency', syncStudentCompetency);
     const devCrm = await safeRun('development CRM', syncDevelopmentCRM);
-    const attendance = await safeRun('attendance', syncAttendance);
     const enrollment = await safeRun('enrollment', syncEnrollment);
 
     let distanceUpdated = 0;
@@ -73,12 +71,12 @@ export async function sync(): Promise<SyncResult> {
       students + outcomes + employment + postsecondary + certifications +
       dashboard + phaseBudget + phaseQ3 + phase2025 +
       rapid + pex + competency + devCrm +
-      attendance + enrollment + distanceUpdated + quotesSynced;
+      enrollment + distanceUpdated + quotesSynced;
 
     return {
       status: 'ok',
       recordsUpserted: total,
-      notes: `students: ${students}; outcomes: ${outcomes}; employment: ${employment}; postsecondary: ${postsecondary}; certifications: ${certifications}; dashboard: ${dashboard}; phase_budget: ${phaseBudget}; phase_q3_2026: ${phaseQ3}; phase_2025: ${phase2025}; rapid: ${rapid}; pex: ${pex}; competency: ${competency}; dev_crm: ${devCrm}; attendance: ${attendance}; enrollment: ${enrollment}; distances: ${distanceUpdated} updated / ${distanceSkipped} skipped; quotes: ${quotesSynced} synced / ${quotesSeen} seen / ${quotesEmpty} empty`,
+      notes: `students: ${students}; outcomes: ${outcomes}; employment: ${employment}; postsecondary: ${postsecondary}; certifications: ${certifications}; dashboard: ${dashboard}; phase_budget: ${phaseBudget}; phase_q3_2026: ${phaseQ3}; phase_2025: ${phase2025}; rapid: ${rapid}; pex: ${pex}; competency: ${competency}; dev_crm: ${devCrm}; enrollment: ${enrollment}; distances: ${distanceUpdated} updated / ${distanceSkipped} skipped; quotes: ${quotesSynced} synced / ${quotesSeen} seen / ${quotesEmpty} empty`,
     };
   }, {
     tables: [
@@ -88,7 +86,6 @@ export async function sync(): Promise<SyncResult> {
       'student_competencies',
       'student_employment',
       'student_postsecondary',
-      'attendance_records',
       'enrollment_snapshots',
       'finance_snapshots',
       'entity_aliases',

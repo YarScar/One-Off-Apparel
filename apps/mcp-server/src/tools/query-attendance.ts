@@ -155,9 +155,84 @@ function addRow(
     totals.cohort1Count += 1;
     return;
   }
+  // NCNS ("no call, no show") is an unexcused absence with no notice — counts
+  // as absent, same as 'A'. 'MU' ("made up") never reaches here — it's
+  // resolved beforehand by applyMakeups() into a cancelled prior absence.
   if (code === 'P') totals.present += 1;
-  else if (code === 'A') totals.absent += 1;
+  else if (code === 'A' || code === 'NCNS') totals.absent += 1;
   else if (code === 'E') totals.excused += 1;
+}
+
+interface MakeupRow {
+  studentNumber: string;
+  cohort: number;
+  code: string | null;
+  percentage: Prisma.Decimal | number | null;
+  date: Date | null;
+  rowData: Prisma.JsonValue;
+}
+
+function mondayOfWeek(date: Date): string {
+  const d = new Date(date);
+  const daysSinceMonday = (d.getUTCDay() + 6) % 7; // Sun=0..Sat=6 -> days since most recent Monday
+  d.setUTCDate(d.getUTCDate() - daysSinceMonday);
+  return d.toISOString().slice(0, 10);
+}
+
+// The Tuesday-required / Thursday-makeup rule is specific to the Foundations
+// phase. `learning_exp` (from the sheet's "LearningExp" column) is F1/F2 for
+// Foundations terms, O1/O2 for 101, L1 for LiftOff — see docs/data-sources.
+function isFoundationsRow(rowData: Prisma.JsonValue): boolean {
+  if (typeof rowData !== 'object' || rowData === null || Array.isArray(rowData)) return false;
+  const learningExp = (rowData as Record<string, unknown>)['learning_exp'];
+  return typeof learningExp === 'string' && learningExp.trim().toUpperCase().startsWith('F');
+}
+
+// 'MU' ("made up") means a Foundations student attended office hours to make
+// up a missed Tuesday earlier that same week, and should not count as an
+// absence. This cancels the single most recent unresolved 'A'/'NCNS' for that
+// student in the same Mon-Sun week (converting it to present), but only
+// between Foundations rows — an 'MU' with no prior Foundations absence that
+// week is a no-op, and 'MU' rows themselves are never counted as a separate
+// attendance day. Multiple absences before one 'MU' are only resolved one at
+// a time, oldest-unresolved-first — confirmed default pending a firmer answer
+// on how make-ups spanning multiple missed days work.
+function applyMakeups<T extends MakeupRow>(rows: T[]): T[] {
+  const byStudent = new Map<string, T[]>();
+  for (const r of rows) {
+    const list = byStudent.get(r.studentNumber);
+    if (list) list.push(r);
+    else byStudent.set(r.studentNumber, [r]);
+  }
+
+  const result: T[] = [];
+  for (const studentRows of byStudent.values()) {
+    const dated = studentRows.filter((r) => r.date !== null);
+    const undated = studentRows.filter((r) => r.date === null);
+    dated.sort((a, b) => a.date!.getTime() - b.date!.getTime());
+
+    const pendingAbsenceByWeek = new Map<string, T>();
+    for (const row of dated) {
+      const code = row.code?.trim().toUpperCase() ?? null;
+      const week = mondayOfWeek(row.date!);
+      if (code === 'MU') {
+        if (isFoundationsRow(row.rowData)) {
+          const pending = pendingAbsenceByWeek.get(week);
+          if (pending) {
+            pending.code = 'P';
+            pendingAbsenceByWeek.delete(week);
+          }
+        }
+        continue; // 'MU' is a correction, not its own attendance day
+      }
+      if ((code === 'A' || code === 'NCNS') && isFoundationsRow(row.rowData)) {
+        pendingAbsenceByWeek.set(week, row);
+      }
+      result.push(row);
+    }
+    result.push(...undated);
+  }
+  return result;
 }
 
 function rate(totals: AttendanceTotals): number | null {
@@ -261,15 +336,18 @@ export function registerQueryAttendance(server: McpServer): void {
         };
       }
 
-      const rows = await prisma.attendanceRecord.findMany({
+      const fetchedRows = await prisma.attendanceRecord.findMany({
         where,
         select: {
           cohort: true,
           code: true,
           percentage: true,
           studentNumber: true,
+          date: true,
+          rowData: true,
         },
       });
+      const rows = applyMakeups(fetchedRows);
       const students = await loadStudents(rows.map((r) => r.studentNumber));
 
       if (queryType === 'by_student') {

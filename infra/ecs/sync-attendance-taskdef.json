@@ -1,0 +1,47 @@
+{
+  "family": "lp-sync-attendance",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "sync",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/lp-internal/sync:latest",
+      "essential": true,
+      "command": [
+        "/bin/sh", "-c",
+        "cd /workspace/connectors/google-sheets && node dist/cli-attendance.js"
+      ],
+      "environment": [
+        { "name": "NODE_ENV",           "value": "production" },
+        { "name": "USE_AWS_SECRETS",    "value": "true" },
+        { "name": "AWS_REGION",         "value": "us-east-1" },
+        { "name": "AWS_SECRETS_PREFIX", "value": "lp-internal" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL",                "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/db:DATABASE_URL::" },
+        { "name": "GOOGLE_SERVICE_ACCOUNT_JSON", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SERVICE_ACCOUNT_JSON::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_1",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_1::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_2",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_2::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_3",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_3::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_4",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_4::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/lp-sync-attendance",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

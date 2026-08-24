@@ -12,6 +12,7 @@
     "db:down": "docker compose down",
     "db:seed": "pnpm --filter @lp-ai/lib-db seed",
     "sync:sheets": "pnpm --filter @lp-ai/connector-google-sheets sync",
+    "sync:attendance": "pnpm --filter @lp-ai/connector-google-sheets sync:attendance",
     "sync:drive": "pnpm --filter @lp-ai/connector-google-drive sync",
     "sync:aplos": "pnpm --filter @lp-ai/connector-aplos sync",
     "sync:notion": "pnpm --filter @lp-ai/connector-notion sync",
