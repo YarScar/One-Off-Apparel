@@ -4,7 +4,11 @@ export type ToolErrorCode =
   | 'search_failed'
   | 'internal_error'
   | 'not_yet_implemented'
-  | 'cohort_not_supported';
+  | 'cohort_not_supported'
+  // Not a failure — the tool needs a fact or a decision only the caller's conversation has (e.g.
+  // which program, or which fiscal-sponsorship framing). Distinct from `no_records`/`entity_not_found`
+  // because nothing is missing from the data; the caller just hasn't asked the person yet.
+  | 'needs_input';
 
 export interface ToolError {
   error: {

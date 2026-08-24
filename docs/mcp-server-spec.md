@@ -2,7 +2,13 @@
 
 ## Tool Availability
 
-The server currently exposes **16 tools**, all active — backed by Google Sheets, Aplos, and Notion connectors. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+The server currently exposes **27 tools** — 16 data tools, `find_grant_documents`, `get_grant_document_text`, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, `grant_verify_figure`, and 5 `skill_*` tools — backed by Google Sheets, Aplos, Notion, and Google Drive connectors. Counted 2026-08-21 on `writing/dev` after `get_grant_document_text` landed (WP #323); `main` is at 21. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+
+`main`'s 21 do **not** map onto a subset of these 27 in the obvious way, and the difference matters when reasoning about what production can answer. `main` lacks `get_grant_document_text`, the four `grant_*` tools, and the fifth `skill_*` tool, and it *has* `find_grant_documents` — which was deployed to production from `fix/google-drive-discovery` on 2026-08-06, before `main` became the only deploy branch. Merging this branch is what finally makes the repository and production agree on that tool. Verify the count with:
+
+```bash
+grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print s}'
+```
 
 **Active tools (16):**
 - `get_student_info` — Sheets student roster + Drive student info doc
@@ -22,6 +28,15 @@ The server currently exposes **16 tools**, all active — backed by Google Sheet
 - `get_entity_brief` — student profile + phase progression + certifications + recent mentions; **also surfaces donor profile + giving history + pipeline + grants** when the named person matches a donor
 - `get_finance_brief` — Aplos fund balances, chart-of-accounts summary, and recent Aplos transactions
 
+**Grant writing tools (3):** deterministic, and they read seed files in `packages/grants/seed/` rather than the database. No model, no network, no database in any of them.
+- `grant_match_question` — funder question → canonical entry in the question bank
+- `grant_build_draft` — captured funder form → reviewable draft package + figure verification work order
+- `grant_resize_answer` — one stored answer + one stated limit → the measurement, the rewrite rules, and a check on the rewrite the caller sends back
+
+**Grant document discovery (2):** listed apart from the three above because they are *not* one of them — they query the `grant_documents` Postgres catalog and live Drive, not the seed files, so they are data tools that happen to serve grant work.
+- `find_grant_documents` — funder / year / kind filters over the Drive Grants catalog → matching files and their Drive file IDs
+- `get_grant_document_text` — a `drive_file_id` from `find_grant_documents` → the file's extracted text (Google Docs/Slides and .docx/.dotx today; other text-bearing types return `not_yet_implemented`)
+
 **Still pending:**
 - Slack connector for `search_conversations`
 
@@ -29,7 +44,7 @@ Composite tools (`get_entity_brief`, `get_finance_brief`) MUST gracefully omit s
 
 ## Overview
 
-The MCP server exposes 16 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
+The MCP server exposes 27 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
 
 Every tool call is logged to the `usage_logs` Postgres table (tool name, timestamp, duration, caller identity, token usage).
 
@@ -465,11 +480,10 @@ Look up financial data across multiple ingested sheets — Launchpad budgets and
   "type": "object",
   "properties": {
     "query_type": { "type": "string", "enum": ["prior_month", "ytd", "forecast", "monthly", "fund_balances", "annual", "budget_actuals", "phase_budget_dashboard", "phase_budget_monthly_liftoff", "phase_budget_monthly_hs", "q3_2026_actuals_global_pct", "q3_2026_actuals_hc_pct", "q3_2026_actuals", "phase_actuals_2025_global_pct", "phase_actuals_2025_hc_pct", "phase_actuals_2025_actuals", "rapid_dashboard", "rapid_transactions", "pex_dashboard", "pex_transactions", "dev_giving_history", "dev_prospect_pipeline", "dev_denied", "dev_launchpad_pipeline", "dev_grants_tracker", "dev_contacts", "aplos_accounts", "aplos_funds", "aplos_transactions"] },
-    "fund": { "type": "string", "description": "Filter by fund name (partial match). On dev_* types matches across the standard fund/project columns." },
-    "category": { "type": "string", "description": "Filter by account name / category (partial match)." },
-    "row_type": { "type": "string", "enum": ["detail", "summary", "all"], "description": "Default 'all'." },
-    "launchpad_only": { "type": "boolean", "description": "Default true. Applies to dev_* query types only — restricts CRM rows to those whose Fund / Project mentions 'Launchpad'. Set false to see all B21 development data. The Launchpad Pipeline tab is implicitly scoped." },
-    "donor": { "type": "string", "description": "Filter by donor name (partial, case-insensitive). Most useful on dev_giving_history, dev_prospect_pipeline, dev_denied, dev_grants_tracker, dev_launchpad_pipeline, dev_contacts." }
+    "tab_name": { "type": "string", "description": "Override the tab_name match (advanced). Matched case-insensitively, but escaped first." },
+    "period": { "type": "string", "description": "Exact match on the period column." },
+    "contains": { "type": "string", "description": "Substring match against the JSON-serialized rowData." },
+    "limit": { "type": "number", "description": "Default 500, capped at 1000." }
   },
   "required": ["query_type"]
 }
@@ -479,15 +493,58 @@ Look up financial data across multiple ingested sheets — Launchpad budgets and
 ```json
 {
   "query_type": "...",
-  "tabs_queried": ["..."],
-  "launchpad_only": true,
+  "tab_names_matched": ["phase_dashboard:2025 actuals"],
+  "tab_names_returned": ["phase_dashboard:2025 actuals"],
   "record_count": 174,
+  "total_matching": 174,
+  "total_matching_is_lower_bound": true,
+  "truncated": false,
+  "contains_applied": "…",
+  "scan_incomplete": "Searched N of M rows for \"…\" (…). total_matching is a lower bound; …",
   "records": [ /* row_data fields, vary by tab. See connector docs for column names. */ ],
-  "sources": ["google_sheets"]
+  "sources": ["google_sheets", "aplos"]
 }
 ```
 
-**Launchpad scoping:** When `launchpad_only=true` (default) and the query targets a CRM tab listed in `TABS_WITH_LAUNCHPAD_FILTER`, rows are filtered to those whose `fund`, `fund_name`, `fund_s`, `primary_fund`, `project`, `projects`, or `project_s` contains "launchpad" (case-insensitive). The `dev_launchpad_pipeline` tab is excluded from the filter (already Launchpad-scoped by construction).
+`contains_applied` appears only when `contains` was passed. `scan_incomplete` and
+`total_matching_is_lower_bound` appear only when the `contains` scan did not reach every matching
+row — either because the tab exceeds the 5000-row scan cap, or because the scan stopped as soon as it
+had enough matches to fill `limit` and prove truncation.
+
+**`tab_names_matched` vs `tab_names_returned`.** The first is computed over the filter, independent of
+`limit`; the second describes the page. They differ whenever a limit bites, and only the first can be
+read as "which tabs hold data": `budget_actuals` spans tabs whose rows sort under different `period`
+values, so one tab lands entirely ahead of the other and a small limit made the second look empty.
+
+**Why `total_matching` and `truncated` exist.** An empty or short result set used to be
+indistinguishable from a missing tab. That is the specific way this tool misled callers — see
+[the silent-empty-results runbook](runbooks/mcp-silent-empty-results.md). `record_count` is what was
+returned; `total_matching` is what the filter actually matched.
+
+**`total_matching` is a lower bound when `total_matching_is_lower_bound` is set.** With `contains`,
+matching happens in memory over a paged scan that stops early, so the count is a floor, not a total —
+quote it as "at least N" or raise `limit` to search further. Reporting a partial count as final was
+the original defect in these two fields: over the ~16K-row `aplos:transactions` tab,
+`contains: "grant"` returned `total_matching: 3, truncated: false`.
+
+**`budget_actuals` spans two tabs, so it double-counts by construction.** The same account line
+appears once for prior month and once for YTD. Split on each record's `tab_name` before summing or
+differencing.
+
+**Tab matching is exact, and deliberately not case-insensitive.** Prisma compiles
+`mode: 'insensitive'` to `ILIKE` and passes the value through unescaped, so the `%` in
+`q3_2026_actuals:global %` would become a wildcard and claim rows from any tab sharing that prefix.
+The tab names in the table above are copied from the connectors that write them, and
+`finance-tab-map.test.ts` locks the casing. Seed-only aliases (`ytd`, `fund_balances`) are matched
+alongside the live names so seeded databases stay reachable. A caller-supplied `tab_name` override
+stays case-insensitive for convenience, but is escaped before use.
+
+> **Doc drift, corrected 2026-08-12.** This section previously documented `fund`, `category`,
+> `row_type`, `launchpad_only` and `donor` input filters, a `tabs_queried` / `launchpad_only` output
+> pair, and a "Launchpad scoping" rule keyed on `TABS_WITH_LAUNCHPAD_FILTER`. **None of those exist in
+> `query-finances.ts`** — no such symbol appears in the file. Donor-scoped and Launchpad-scoped CRM
+> lookups are served by `query_donors`, which does implement them. Removed rather than recorded,
+> because unlike the tab-name casing below there was no code behaviour to preserve.
 
 ---
 
@@ -495,8 +552,44 @@ Look up financial data across multiple ingested sheets — Launchpad budgets and
 
 Donor lookup against the Building21 Development CRM (Contacts tab + linked records). Three modes:
 - `list` — donors filtered by name / type / status
-- `profile` — full record for one donor + linked Giving History + Prospect Pipeline + Launchpad Pipeline + Grants
-- `summary` — breakdown by donor type, status, lifetime giving total
+- `profile` — full record for one donor + linked Giving History + Prospect Pipeline + Launchpad Pipeline + Grants + prior declines
+- `summary` — donor count and lifetime giving total, by fiscal year
+
+> **Repointed 2026-08-19, work package #306.** This tool, `get_entity_brief`'s donor arm and
+> `get_finance_brief.recent_gifts` read the typed `donor_contacts` / `donor_gifts` / `donor_pipeline`
+> tables. **No connector has ever written them** — `packages/db/src/seed.ts` is their only writer in
+> the repo, and Givebutter, the source `schema.prisma` names, has no connector. All three returned
+> nothing in production while their descriptions promised Development CRM data.
+>
+> They now read the `development:*` tabs in `finance_snapshots` — the same rows `query_finances`'s
+> `dev_*` query types serve — via `apps/mcp-server/src/dev-crm.ts`. Four behaviours follow, and each
+> one changes a number a caller might quote:
+>
+> 1. **`launchpad_only` defaults to `true` and is now actually applied.** The previous implementation
+>    accepted the flag and never read it, so every response was all-Building-21 scope while the
+>    description promised Launchpad-only. Every response carries `scope` and `scope_note`.
+> 2. **Giving totals are summed from individual gift rows**, not read from the Contacts tab's
+>    `lifetime_giving` / `fy25_giving` / `fy26_giving` columns, which are **wrong at source** — William
+>    Penn Foundation reads `$0.00` lifetime against a real `$1,600,000.00`. Summing also makes
+>    `launchpad_only` mean something for a total, which a precomputed all-scope column cannot support.
+> 3. **`giving_summary.by_project` splits Launchpad from the other projects.** This matters: William
+>    Penn gives $500,000/yr of which **$425,000 is Launchpad** and $75,000 is Network Unrestricted.
+>    Quoting $500,000 as the Launchpad grant overstates it by $75,000/yr.
+> 4. **A funder with no Contacts row still resolves.** The Contacts tab is a stewardship roster, not
+>    the set of everyone we have asked, so a name found only on the giving-history, pipeline or denied
+>    tabs returns a profile with `profile: null` and a `profile_note` rather than `no_records`. Without
+>    this, a funder that had *declined* us was invisible — the most framing-relevant record there is.
+>
+> Name matching is confined to the name columns (`donor_name`, `funder`, the split person columns).
+> `query_finances`'s `contains` matches the serialized row, so searching it for "William Penn" also
+> returns Project Based Learning, Inc. — whose `primary_fund` is "William Penn". Reporting one
+> organisation's giving under another's name is worse than returning nothing.
+>
+> `no_records` now distinguishes three cases: out of Launchpad scope (retry with
+> `launchpad_only=false`), absent from Contacts but present on a transaction tab (returns a profile),
+> and absent everywhere. The old undifferentiated `no_records` read as "this funder has not given" when
+> it meant "no donor exists anywhere", which is how a 2026-08-19 drafting run filed
+> `[DATA UNAVAILABLE]` for four funders with live history.
 
 **Description shown to Claude:**
 > Look up Building21 donors and donor relationships from the Development CRM. Use for questions about specific donors ('what has Vanguard given'), donor population breakdowns ('how many active foundations'), or pulling a complete donor profile (gifts, pipeline, grants). Defaults to Launchpad-only data — set `launchpad_only=false` to see all B21 development data. For aggregate finance views (total raised, pipeline value by month, etc.), use `query_finances` with the `dev_*` query types instead.
@@ -548,10 +641,17 @@ If the name resolves to multiple donors, returns `ambiguous: true` with a `candi
 
 ### `get_finance_brief`
 
-Return a comprehensive financial overview — fund balances, YTD revenue vs. expenses, top campaigns, recent transactions.
+Return a high-level financial overview — Aplos fund balances, a chart-of-accounts category summary, recent Aplos transactions, and recent donor gifts.
 
 **Description shown to Claude:**
-> Get a high-level financial overview of the organization: fund balances, year-to-date income and expenses, active fundraising campaigns, and recent Aplos transactions. Use this as a starting point for any general finance question or when asked for a financial summary.
+> Get a high-level financial overview of the organization: Aplos fund balances, chart-of-accounts summary, recent Aplos transactions, and recent donor gifts. Use this as a starting point for any general finance question.
+
+> **This tool carries no income or expense total.** The heading and the Claude-facing description both
+> claimed "YTD revenue vs. expenses" and "top campaigns" until 2026-08-12; neither is computed
+> anywhere in `get-finance-brief.ts`, and `period` only labels the response — it does not aggregate.
+> Grant drafting spent a cycle treating the absence as "the organization has no budget data". For an
+> annual budget total, read the `Combined Funds` tab via `query_finances(fund_balances)`, which holds
+> account-level totals across every fund.
 
 **Input Schema:**
 ```json
@@ -579,12 +679,46 @@ Return a comprehensive financial overview — fund balances, YTD revenue vs. exp
     "by_category": { "asset": 40, "liability": 12, "revenue": 80, "expense": 90, "equity": 10 }
   },
   "recent_transactions": [ /* last 20 Aplos transactions (date, memo, amount) */ ],
-  "sheet_fund_balances": [ /* Google Sheets fund balance rows, if any */ ],
+  "sheet_fund_balances": [ /* Google Sheets fund balance rows from the Combined Funds tab */ ],
+  "recent_gifts": [ /* last 10 development:giving history rows, in SHEET ORDER — see note */ ],
+  "recent_gifts_note": "…",
   "sources_active": ["aplos", "google_sheets"]
 }
 ```
 
 Queries Aplos (`finance_snapshots` with `aplos:*` tab names) and Google Sheets fund balances directly.
+
+**`recent_gifts` was always empty until 2026-08-19 (#306).** It read `donor_gifts`, a table no
+connector writes. It now reads `development:giving history`, **ordered by fiscal year, newest first**.
+
+Read the ordering caveat before quoting anything from it. The tab's `date` cell is a display string
+(`"Aug 2025"`) and does not sort, and **sheet order is not chronological** — rows 523–526 of the
+784-row tab are FY26 while its final rows are FY20, because older gifts were appended after newer
+ones. A first cut of this change took the last ten rows in sheet order and returned gifts from
+December 2019; the ordering is now computed from `fiscal_year`. So the field gives **ten gifts from the
+most recent fiscal years, not the ten most recent gifts**, and order within a fiscal year carries no
+meaning. All-Building-21 scope — use `query_donors` for a Launchpad-scoped view.
+
+Related, and worth knowing for any code reading these tabs: ordering a `finance_snapshots` query by
+`sourceId` is a **lexical** sort, so `development:giving history:99` sorts after `…:784`. `dev-crm.ts`
+sorts numerically on the parsed row number instead.
+
+**`aplos_funds` is pinned to one snapshot date.** The Aplos connector snapshots funds daily, so an
+unbounded "newest 50" spanned two `period` values and truncated the newest one — a caller reading the
+list saw duplicate fund names and an incomplete current picture. The query now resolves the newest
+`period` first and returns only that day's funds (up to 200).
+
+**`sheet_fund_balances` matches `Combined Funds`.** The dashboard sync writes that tab name; the
+seed's name is `fund_balances`. Both are matched **exactly and case-sensitively** — a tab written
+`combined funds` would still be missed, and the fix for that is another entry in the array, not a
+relaxed match. Looking for only the seed name is why this array was empty against real data.
+
+**`sheet_fund_balances` is a page, and says so.** It is ordered by `tab_name` then `source_id`, not by
+`period`: for dashboard tabs `period` is a selector-cell string shared by every row in the tab, so
+ordering by it is arbitrary. The response carries `sheet_fund_balances_total`, and
+`sheet_fund_balances_truncated` when the 500-row cap bites. Do not sum a truncated page — the note
+above points at `query_finances(fund_balances)` for an annual budget total, and that is the call to
+make for any figure that has to add up.
 
 ---
 
@@ -605,39 +739,247 @@ Cohort is not a supported query dimension — passing `cohort` (as a filter or a
 
 `by_student` is the right tool for sliced retention queries (e.g., "101 retention for African American students" → `query_type=by_student`, `phase=101`, `race='Black or African American'`, then tally `phase_101_status` on the result).
 
+**Filters, and how they are reported.** The input schema accepts `phase`, `status`, `current_phase`,
+`enrollment_status`, `start_date` and `end_date` (plus a deprecated `cohort` — see above).
+`phase` and `status` are `student_phase_outcomes` columns; `current_phase` and `enrollment_status`
+are `students` columns. **All four apply to every `query_type`** — student columns reach
+phase-outcome queries through the `student` relation, and `phase` / `status` reach student-level
+queries through `phaseOutcomes: { some: ... }`. `phase` without `status` means "this phase has an
+outcome at all"; `status` without `phase` means "any phase carries this status".
+
+`start_date` / `end_date` are read only by `active_during`.
+
+Every response carries `filters_applied`, and `filters_ignored` when a supplied filter does not apply
+to the chosen `query_type`. This matters because until 2026-08-12 several branches accepted filters
+and silently discarded them — `by_phase` built a student predicate and never used it, and
+`active_during` discarded the student filters and `status` entirely — so a caller who scoped to the
+Lightspeed completers received every student with nothing in the envelope to say so. A silently
+unscoped count is a wrong denominator, which is the specific way this tool can mislead.
+
+Filter presence is tested, not truthiness, so a falsy-but-supplied value is still a filter. A blank
+or whitespace-only string is treated as **absent on every `query_type`** rather than as a literal
+column match, and string filters are trimmed. A blank filter is named in `filters_ignored`: it
+reaches no query, and a caller who believes a blank narrowed their query needs the envelope to say
+otherwise, or "treated as absent" becomes its own silent unscoping.
+
+`active_during` and `by_student` report `student_count` as the number of rows matching the filters,
+counted separately from the page they return. When the page is short of that count they add
+`truncated: true`, `returned` (rows in this response) and `limit`. Reporting the page size as the
+count is the same wrong denominator as a dropped filter, reached from the other direction — and with
+`limit` defaulting to 500, a caller with more matches than that sees a plausible number rather than
+an obviously clipped one.
+
+On `active_during`, `phase` is a predicate and not merely a column selector. That distinction is the
+one thing this section got wrong when it was written: `PHASE_FIELDS[phase]` chose which columns
+`status` and the dates were applied to, while `phase` itself never entered the `WHERE` clause. A call
+supplying dates hid the defect, because a non-null date column implies the phase exists; a dateless
+call — legal, since only `phase` is required — returned every outcome row in scope beside a
+`filters_applied` naming the phase. `active_during` now composes the same predicate as every other
+branch, so `phase: 'LiftOff'` cannot count a student with no LiftOff data.
+
+> **Doc drift, unfixed.** The `by_student` bullet above claims a "full student-info filter set"
+> (race, gender, withdrawal_code, entry/withdrawal date ranges, city, zip, college/workforce fields,
+> income and parental-ed ranges, numeric score ranges) and the `by_program_year` bullet claims
+> grad/retention rates with `liftoff_graduating` / `phase_101_graduating` projections. **Neither is in
+> the code.** `query-enrollment.ts` accepts the seven filters listed above and nothing else, and
+> `by_program_year` is a plain `groupBy` on `hsGraduationYear`. Those filters do exist on
+> `query_students`. Recorded here rather than silently corrected, because closing it is a tool change
+> with its own review.
+
 ---
 
 ### `query_students`
 
-Population-level analytics on the `students` table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table (PII columns like email/phone/street are intentionally excluded at ingest).
+Population-level analytics on the `students` table. Supports numeric stats (avg/min/max/quartiles), categorical breakdowns, and filtered list pulls. Filters cover every queryable column on the students table (PII columns like email/phone/street are intentionally excluded at ingest). Cohort is not tracked — passing `cohort` returns a `cohort_not_supported` error directing callers to `current_phase` and a date range instead.
 
 **Query types:** `numeric_stats`, `breakdown`, `list`.
 
 **Numeric fields:** interview_score, tech_interest_onboarding, interview_passion_score, interview_college_score, hs_gpa, algebra1_grade, geometry_grade, zip, distance_to_office_miles.
 
-**Categorical fields (for breakdown):** college_enroll, university, major, workforce_program_referral, workforce_referral_status, internship_status, parental_ed, income.
+**Categorical fields (for breakdown):** current_phase, enrollment_status, neighborhood, zip, school_name, hs_graduation_year, withdrawal_code, college_enroll, university, major, workforce_program_referral, workforce_referral_status, internship_status, parental_ed, income.
 
-**Filter set (all query types):** race, gender, school (partial), graduation_year, enrollment_status, current_phase, withdrawal_code, entry_date_start/end, withdrawal_date_start/end, city, zip, college_enroll, university (partial), major, workforce_program_referral, workforce_referral_status, internship_status, plus numeric range via `filter_field` + `filter_min` / `filter_max`. `income` and `parental_ed` accept range filters (income → dollar amounts; parental_ed → 0=I don't know, 1=neither, 2=one, 3=both).
+> Note: as of the current implementation, only `current_phase`, `enrollment_status`, `neighborhood`, `zip`, `school_name`, `hs_graduation_year`, and `withdrawal_code` are wired into `BREAKDOWN_FIELDS`. `distance_to_office` and `hs_graduation_year` are wired into the `filter_field` numeric-range filter (`filter_min`/`filter_max`); only `distance_to_office` is wired into `NUMERIC_FIELDS` (the `numeric_stats` aggregate query type). The remaining fields below describe the original design intent but are not yet implemented — treat them as a backlog, not current behavior.
+
+**Filter set (all query types):** enrollment_status, current_phase, school (partial match on school_name), hs_graduation_year (exact match; range via `filter_field=hs_graduation_year`), dob_start / dob_end (ISO date bounds on date of birth), withdrawal_code (exact match), withdrawal_date_start / withdrawal_date_end (ISO date bounds), zip, plus numeric range on distance_to_office via `filter_field` + `filter_min` / `filter_max`. The four exact-match filters — `enrollment_status`, `current_phase`, `hs_graduation_year`, `withdrawal_code` — are domain-checked as of `#210`: a value absent from its column returns a `no_records` error listing the values present, instead of an empty answer. `school` is a substring match and is deliberately not checked that way. See [the silent-empty-results runbook](runbooks/mcp-silent-empty-results.md). Everything else in this line — race, gender, graduation_year (LP program), entry_date_start/end, city, college_enroll, university (partial), major, workforce_program_referral, workforce_referral_status, internship_status, income/parental_ed ranges — is not yet implemented (see note above).
+
+`withdrawal_code`/`withdrawal_date` are designed as join keys for cross-tool analysis: pull a `student_number` list filtered by withdrawal reason or date here, then feed those numbers into `query_certifications`, `query_attendance`, etc. to correlate withdrawal with outcomes in other data sources.
 
 ---
 
 ### `query_certifications`
 
-Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdowns by cert type, LP phase, or date range.
+Certification data (PCEP, future certs) — pass/fail rates, scores, and breakdowns by cert type, LP phase, date range, or student zip code.
 
-**Query types:** `summary`, `by_type`, `by_phase`, `by_result`, `scores`.
+**Query types:** `summary`, `by_type`, `by_phase`, `by_result`, `by_zip`, `scores`.
 
-**Filters:** `type`, `phase`, `result` (Pass / Fail), `start_date`, `end_date`.
+**Filters:** `type`, `phase`, `result` (Pass / Fail), `start_date`, `end_date` — all apply to `by_zip` too.
+
+As of `#210`, `phase` is matched against the distinct values that column holds; an absent
+value returns a `no_records` error listing the phases present, rather than
+`{ total: 0, passed: 0, pass_rate_pct: null }`, which reads as "nobody in that phase has
+certified". `type` is a substring match and is not checked that way; `result` is an enum
+and is rejected before the handler runs.
+
+`by_zip` joins to `students.zip` (zip isn't a column on `student_certifications`) and returns `{ zip, count, avg_score }` per zip, e.g. `query_type=by_zip, type=PCEP` for average PCEP score by zip code. Rows with a null zip are excluded.
+
+---
+
+### Truncation reporting (`query_competency`, `query_students`, `query_enrollment`, `query_finances`)
+
+Every query_type that returns a capped page of rows emits the same four keys:
+
+| Key | Meaning |
+|---|---|
+| `record_count` | Rows in **this response**. Never a population figure. |
+| `total_matching` | Rows matching the filter, counted in the database independently of `limit`. |
+| `truncated` | `record_count < total_matching` — the rows are a sample. |
+| `limit` | The cap applied, so a caller knows what to raise. |
+
+**Quote `total_matching`; never quote `record_count`.** Where a tool also returns a
+domain-specific name — `query_enrollment`'s and `query_students`'s `student_count` — that name
+now carries the true total on every path, matching `query_enrollment({query_type: "total"})`.
+`query_finances` additionally reports `total_matching_is_lower_bound` when a `contains` scan
+stopped early.
 
 ---
 
 ### `query_competency`
 
-Per-student competency data (scores) or the rubric structure (skills + opportunity totals by phase and term).
+Per-student competency data (scores), the rubric structure (skills + opportunity totals by
+phase and term), or an org-wide growth aggregate.
 
-**Query types:** `scores`, `rubric`.
+**Query types:** `scores`, `rubric`, `growth_aggregate`.
 
-**Filters:** `student_number`, `competency` (partial match).
+**Filters:** `student_number`, `competency` (partial match), `limit` (default 500, max 1000;
+`scores` and `rubric` only).
+
+`scores` and `rubric` return a page and report it as one: `record_count`, `total_matching`,
+`truncated` and `limit` (see "Truncation reporting" below). `growth_aggregate` reads every
+matching row and returns scalars — `avg_growth`, `min_growth`, `max_growth`, `avg_baseline`,
+`avg_performance_level`, `avg_progress`, `row_count`, `student_count`, the per-column non-null
+counts that are the real denominators, and a `by_competency` breakdown.
+
+**Quote growth from `growth_aggregate`, never from `scores` rows.** `scores` capped at 1000 of
+~2346 rows and said nothing (#276), so any figure averaged from its response described an
+arbitrary slice of the organization.
+
+---
+
+### `grant_match_question`
+
+Match a funder application question to a canonical entry in the LaunchPad grant question bank (88 questions, 11 categories, 248 recorded funder wordings). Deterministic — no model, no database, no network; it reads seed files in `packages/grants/seed/`.
+
+**Inputs:** `question` (one string) or `questions` (array, max 200); optional `threshold` (defaults to 0.42, the value used for LaunchPad's filed applications).
+
+**Returns:** per-question `matched_id`, `kb_ref`, `answer_type`, `confidence`, `matched_via`, and `is_confident`, plus `integrity_warnings`.
+
+**`is_confident: false` means the question has no reliable stored answer.** Do not route it to the returned `kb_ref`.
+
+---
+
+### `grant_build_draft`
+
+Resolve a captured funder form into a reviewable draft package: match each question, retrieve the mapped knowledge-base answer, measure it against the funder's stated limit, and flag what a person must do. Deterministic, and it reads seed files only.
+
+**Inputs:** either `funder` + `questions[]` (each `{ text, limit?: { unit, max } }`, max 200) or `form_id` for a stored fixture; optional `due`, `threshold`, `include_markdown`. **`program` and `framing` are enforced, not optional** — both fields exist on the schema so a well-formed call can supply them up front, but the tool returns a `needs_input` error naming whichever is missing before it will draft anything, rather than assume. `framing` is one of the three enum values `initiative` / `fiscal_sponsorship` / `silent` (`docs/PLAYBOOK.md` step 3), not a free string.
+
+**Returns:** `results[]` (one answer plan per question), `summary` (including `by_actor`), `your_tasks`, `staff_actions`, `kb_refs_used`, `figure_work_order`, `integrity_warnings`, and the rendered `markdown` draft.
+
+**Every result names an actor — who does the next step:**
+
+| Actor | Statuses | Meaning |
+|---|---|---|
+| `none` | `fits`, `ready` | Text is ready for staff review. |
+| `llm` | `needs_resize`, `needs_expand`, `compression_infeasible`, `derive_from_reference`, `fetch_figure` | **Yours to finish.** See the payload rule below. |
+| `staff` | `needs_attachment`, `per_application`, `needs_review`, `kb_gap`, `kb_placeholder`, `figure_definitional` | Needs a fact or a decision this layer does not hold. |
+
+**Every `llm` result carries exactly one of two payloads**, and a caller that reads only the first
+will silently skip work:
+
+- **`handback`** — the shaping tasks (`needs_resize`, `needs_expand`, `compression_infeasible`,
+  `derive_from_reference`). Carries the source text, the limit, the measurement, and the rules. On a
+  `needs_expand` task it also carries **`anchor_value`**: a confirmed short value that must appear in
+  your answer unchanged, with `source_text` as material to build around it. That task's limit is a
+  **ceiling, not a target** — writing less than the limit is correct when the source supports no more.
+- **`figure_call`** — `fetch_figure` only. The work is running the named `query_*` call under your own
+  identity and writing the live number, not reshaping text, so there is nothing to hand back.
+
+**Three contracts worth knowing before you call it:**
+
+- **The knowledge base is an assist, not a gate.** It exists so you do not rewrite answers LaunchPad has already written and approved. Where a stored answer does not drop straight into a field, you shape it from the `handback` — the tool never calls a model to do that for you, and there is no Anthropic client anywhere in this repository.
+- **It makes no connector call.** `figure_work_order` names the `query_*` calls *you* must run to verify every figure. This is a security boundary, not an oversight — `runTool`'s permission check keys on the inbound tool name, so a grant tool reading the database internally would bypass the ACL on `query_finances` and `query_donors`. See `packages/grants/src/figures.ts`.
+- **Nothing it returns is submittable.** A person always reviews and always submits.
+
+---
+
+### `find_grant_documents`
+
+Find grant documents in the Google Drive "Grants" tree by funder, year, and document kind. Returns a **catalog listing — no document text**. Reads the `grant_documents` table; touches neither Drive nor pgvector.
+
+**Why it exists.** Drive discovery does not work for this tree. Listing a subfolder's children returns an empty set and `title`/`fullText` search never matches inside it, while fetching a *known* file ID returns full content. Only the discovery half is broken, so this tool replaces it: filter here to get Drive file IDs, then fetch those IDs with a Google Drive read tool. That keeps 3.5+ GiB of grant material reachable with nothing embedded.
+
+**Inputs:** all optional — `funder` (case-insensitive substring, so `truist` matches `Truist Foundation`), `year`, `year_min`, `year_max`, `doc_kind`, `collection`, `title_contains`, `include_archive`, `include_external`, `only_fetchable`, `limit` (default 25, max 100).
+
+**Returns:** `total_matching`, `returned`, `facets` (counts by funder and by kind, for narrowing a broad hit list without a second call), `results[]`, and `usage_note`. Each result carries `drive_file_id`, `drive_url`, `fetchable`, `path`, `filename`, `funder`, `year`, `doc_kind`, `collection`, `mime_type`, `archive_only`, `external_reference`, `needs_review`, `size_bytes`, `modified_at`.
+
+| `doc_kind` | Meaning |
+|---|---|
+| `application_response` | Narrative answers submitted to a funder |
+| `budget` | Budgets, financials, invoices, 990s |
+| `report` | Grant reports and performance measures |
+| `letter_of_support` | Letters of support |
+| `loi` | Letters of inquiry / intent |
+| `agreement` | Executed grant agreements |
+| `program_description` | Launchpad describing its own programs — prime drafting context |
+| `template` | Blank templates |
+| `attachment` | Consent forms, signature requests, supporting paperwork |
+| `transcript` | Interview and meeting transcripts |
+| `meeting_notes` | Meeting notes |
+| `external_reference` | **Not written by Launchpad** — funder rules, other grantees' applications |
+| `other` | Not confidently classified; see `needs_review` |
+
+**Three contracts worth knowing before you call it:**
+
+- **Two exclusions are on by default, and they are not the same risk.** `archive_only` hides applications predating the current program (`ARCHIVE_BEFORE_YEAR = 2025`), which describe a program Launchpad no longer runs — the failure is a confidently outdated draft. `external_reference` hides documents Launchpad did not author — the failure there is **plagiarism**, putting another organization's narrative in a Launchpad submission. Pass `include_archive` / `include_external` for research, never for drafting.
+- **`excluded` rows are never returned, on any flag combination.** Those files sit under `Project Management (do not ingest)` or `Ignore` and were marked by an explicit human instruction rather than by inference, so no argument overrides them.
+- **`funder`, `year`, and `doc_kind` are inferred from folder and file names only** — nothing is read from file contents. `needs_review` marks rows where inference was not decisive (no year, or `doc_kind = other`). Treat a filter built on them as a good shortlist, not a guarantee of completeness.
+
+**`fetchable=false` means the row has no Drive file ID recorded yet**, so it can be seen but not read. IDs come from the `google-drive` connector (`pnpm sync:drive`, or `packages/grants/scripts/drive-walk-grants.ts --dry-run` to look first), which needs an identity with shared-drive membership — see [docs/data-sources/google-drive-connector.md](data-sources/google-drive-connector.md).
+
+### `get_grant_document_text`
+
+Fetch the extracted text of one document a `find_grant_documents` call found, by `drive_file_id`. Reads the `grant_documents` catalog to gate on `contentClass`/`driveFileId` (the same `fetchable` flag `find_grant_documents` returns), then reads Drive itself — reusing the `google-drive` connector's client (`clientFromEnv`, `@lp-ai/connector-google-drive`) rather than a second credential path.
+
+**Why this shape.** The Drive connector deliberately never embeds corpus text (cost with no stated need — see `docs/data-sources/google-drive-connector.md`), so `find_grant_documents` only ever returned metadata. This tool is the missing other half: it turns one catalog hit into text on demand, instead of embedding all 1,253 files up front.
+
+**Inputs:** `drive_file_id` (required) — from a `find_grant_documents` result.
+
+**Returns:** `{ drive_file_id, filename, text }` on success. Two extraction paths today: Google-native Docs/Slides export as plain text via the Drive API; uploaded `.docx`/`.dotx` are downloaded raw and their paragraphs extracted from `word/document.xml` (`extractDocxText`, `@lp-ai/lib-grants`) — the same approach `.claude/skills/grant-writing/scripts/corpus_search.py` uses against a local mirror, kept in parity deliberately (WP #323). Other `contentClass: "text"` types (PDF, `.doc`, spreadsheets, `.csv`, `.vtt`, `.html`) are catalogued as fetchable by `find_grant_documents` but return `not_yet_implemented` here — that mismatch is a known gap, not a bug.
+
+**Errors:** `entity_not_found` (no catalog row for that ID), `no_records` (row exists but isn't fetchable), `not_yet_implemented` (fetchable but not yet an extractable type), `internal_error` (Drive call failed — **most likely production's unverified service-account access to the Grants tree**, per `docs/data-sources/google-drive-connector.md`, surfacing here rather than in a sync run).
+
+### `grant_resize_answer`
+
+Fit one stored answer to one funder's stated limit. Deterministic, and it reads seed files only. **You do the rewriting — this tool measures.** There is no model client anywhere in this repository, and an MCP tool is invoked *by* Claude, so the loop is: call it, rewrite, call it again.
+
+**Inputs:** `text` (the SOURCE answer, and on the second call still the source, not your rewrite), `limit` (`{ unit, max }`); optional `rewrite`, `attempt`, `funder`, `framing`, `kb_ref`, `answers`.
+
+**Returns:** `notes` (the verdict), `accepted`, `text` (the accepted rewrite, or `null`), `handback`, `measurement`, `source_measurement`, `figure_check`, `units_before` / `units_after`, `fits_after_resize`, `answer_full`, `answer_truncated_preview`, `trace`, `action`, plus `kb_ref`, `verified`, and `carries_figures`.
+
+| `notes` | Meaning |
+|---|---|
+| `fits` | Nothing owed. Either the source already fits, or your rewrite fits and altered no figure. |
+| `rewrite_owed` | Over the limit. `handback` carries the source, the limit, the measurement, and the rules. |
+| `compression_infeasible` | Over by more than 4x. Still handed back, but facts will have to be dropped and the rewrite must say which. |
+| `still_over_limit` | Your rewrite is still over. `handback` carries the overflow feedback. |
+| `figures_altered` | **Rejected.** Your rewrite states a figure the source does not. |
+
+**Two contracts worth knowing before you call it:**
+
+- **Branch on `accepted`, not on `fits_after_resize`.** They differ in exactly the dangerous case: a rewrite that fits the limit but moved a figure. `fits_after_resize` is length only. A rewrite stating a figure the source does not is rejected however well it fits, because the first guardrail rule calls that output unusable — dropping a figure is allowed, inventing or changing one is not. See `figure_check.invented`.
+- **Passing `kb_ref` makes the answer more honest, not just more convenient.** With it, the tool reads that slot's own grounding flag rather than taking your word for it, so it can carry the "not grounded in a filed application" warning through the resize. Without it, `verified` is `null` — which is not a clean bill of health.
+
+An accepted rewrite is still a draft. The stored figures are a frozen snapshot, so verify each one against live data via `grant_build_draft`'s figure work order before publishing, and a person reviews and submits.
 
 ---
 
@@ -653,7 +995,7 @@ Per-student competency data (scores) or the rubric structure (skills + opportuni
 }
 ```
 
-Error codes: `entity_not_found`, `no_records`, `search_failed`, `internal_error`, `not_yet_implemented`, `cohort_not_supported`
+Error codes: `entity_not_found`, `no_records`, `search_failed`, `internal_error`, `not_yet_implemented`, `cohort_not_supported`, `needs_input`
 
 ### Removal of cohort as a query dimension
 

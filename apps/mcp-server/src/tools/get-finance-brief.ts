@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr } from '../tool-helpers.js';
+import { DEV_TABS, byFiscalYearDesc, cell, donorNameOf, parseMoney, readDevTab } from '../dev-crm.js';
 
 const NAME = 'get_finance_brief';
 
@@ -22,11 +23,33 @@ export function registerGetFinanceBrief(server: McpServer): void {
       const raw = input as Record<string, unknown>;
       const period = parseStr(raw, 'period') ?? 'ytd';
 
+      // aplos:funds is snapshotted daily, so an unbounded "latest 50" mixes two
+      // snapshot dates and truncates the newest one. Pin to the newest period.
+      //
+      // `period` is nullable and Postgres sorts DESC as NULLS FIRST, so without the
+      // `not: null` a single null-period row wins this query, the pin below spreads
+      // to nothing, and the tool silently reverts to the multi-date behaviour this
+      // is here to fix.
+      const latestFundPeriod = await prisma.financeSnapshot.findFirst({
+        where: { tabName: 'aplos:funds', period: { not: null } },
+        orderBy: { period: 'desc' },
+        select: { period: true },
+      });
+
+      const SHEET_FUND_TABS = ['Combined Funds', 'fund_balances'];
+      /** Rows in those tabs, whether or not the page below reaches them. */
+      const sheetFundTotal = await prisma.financeSnapshot.count({
+        where: { tabName: { in: SHEET_FUND_TABS } },
+      });
+
       const [aplosFunds, aplosAccounts, recentTransactions, sheetFundBalances, recentGifts] = await Promise.all([
         prisma.financeSnapshot.findMany({
-          where: { tabName: 'aplos:funds' },
-          orderBy: { period: 'desc' },
-          take: 50,
+          where: {
+            tabName: 'aplos:funds',
+            ...(latestFundPeriod?.period ? { period: latestFundPeriod.period } : {}),
+          },
+          orderBy: { sourceId: 'asc' },
+          take: 200,
         }),
         prisma.financeSnapshot.findMany({
           where: { tabName: 'aplos:accounts' },
@@ -37,16 +60,27 @@ export function registerGetFinanceBrief(server: McpServer): void {
           orderBy: { period: 'desc' },
           take: 20,
         }),
+        // The dashboard sync writes this tab as 'Combined Funds'; 'fund_balances'
+        // is the seed's name. Match either, exactly — `mode: 'insensitive'`
+        // compiles to an unescaped ILIKE, which would make the `_` a wildcard.
+        //
+        // Ordered by `sourceId`, not `period`: for dashboard tabs `period` is a
+        // selector-cell string shared by every row in the tab
+        // (`sync-dashboard.ts:235`), so ordering by it is arbitrary. It used to be
+        // an arbitrary 50 rows with nothing saying so, while the spec points
+        // callers at `Combined Funds` for an annual budget total — a silently
+        // partial sum. The cap is now well past the real tab size, and
+        // `sheet_fund_balances_truncated` reports the case where it still bites.
         prisma.financeSnapshot.findMany({
-          where: { tabName: 'fund_balances' },
-          orderBy: { period: 'desc' },
-          take: 50,
+          where: { tabName: { in: SHEET_FUND_TABS } },
+          orderBy: [{ tabName: 'asc' }, { sourceId: 'asc' }],
+          take: 500,
         }),
-        prisma.donorGift.findMany({
-          orderBy: { giftDate: 'desc' },
-          take: 10,
-          include: { donorContact: true },
-        }),
+        // Repointed at development:giving history, #306. This read `donor_gifts`, a table no
+        // connector writes, so `recent_gifts` was always an empty array while the tool's
+        // description promised recent gifts — and figures.ts named this field as the fallback for
+        // funder history, which made the fallback as dead as the tool it backed up.
+        readDevTab(DEV_TABS.givingHistory),
       ]);
 
       const mapSnapshot = (f: typeof aplosFunds[number]): { source_id: string; period: string | null; row_data: unknown } => ({
@@ -69,18 +103,35 @@ export function registerGetFinanceBrief(server: McpServer): void {
         },
         recent_transactions: recentTransactions.map(mapSnapshot),
         sheet_fund_balances: sheetFundBalances.map(mapSnapshot),
-        recent_gifts: recentGifts.map((g) => ({
-          amount: g.amount,
-          gift_date: g.giftDate,
-          campaign_name: g.campaignName,
-          fund: g.fund,
-          donor:
-            g.donorContact?.organizationName ??
-            ([g.donorContact?.firstName, g.donorContact?.lastName]
-              .filter(Boolean)
-              .join(' ') ||
-              null),
-        })),
+        sheet_fund_balances_total: sheetFundTotal,
+        ...(sheetFundBalances.length < sheetFundTotal
+          ? {
+              sheet_fund_balances_truncated:
+                `Returned ${sheetFundBalances.length} of ${sheetFundTotal} rows. Do not sum this ` +
+                `field; use query_finances(fund_balances) with a limit for the full tab.`,
+            }
+          : {}),
+        // Sorted by fiscal year, newest first. An earlier revision took the last ten rows in sheet
+        // order on the assumption the tab was append-chronological. Production disproved it: those
+        // ten came back FY20 (Dec 2019) on a tab whose row 523 is FY26. Sheet order is not
+        // chronological here, so "recent" has to be computed from the fiscal year.
+        recent_gifts: byFiscalYearDesc(recentGifts)
+          .slice(0, 10)
+          .map((g) => ({
+            amount: parseMoney(g.data['gross_amount']),
+            gift_date: cell(g, 'date'),
+            fiscal_year: cell(g, 'fiscal_year'),
+            fund: cell(g, 'fund_name'),
+            project: cell(g, 'project'),
+            donor: donorNameOf(g),
+          })),
+        recent_gifts_note:
+          'Repointed to development:giving history (#306); previously read the unpopulated donor_gifts ' +
+          'table and was always empty. Ordered by FISCAL YEAR, newest first — the tab’s date cell is a ' +
+          'display string ("Aug 2025") that does not sort, and sheet order is not chronological. So ' +
+          'these are ten gifts from the most recent fiscal years, but not the ten most recent gifts, ' +
+          'and order within a fiscal year carries no meaning. All-Building-21 scope; use query_donors ' +
+          'for a Launchpad-scoped view.',
         sources_active: ['aplos', 'google_sheets'],
       };
     }),

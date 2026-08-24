@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "funder": "Hamilton Family Charitable Trust",
+    "program": "LOI (2025 cycle)",
+    "framing": "initiative",
+    "due": "2025-05-09",
+    "note": "Real filed LOI (5_9_25 Hamilton LOI Response_.docx). Character limits recorded verbatim. Hamilton's program focus: K-12 in under-resourced environments, >70% of participants free/reduced-rate lunch, and youth workforce development with quality career exploration and preparation."
+  },
+  "questions": [
+    { "text": "Project/ Program/ Campaign Name", "limit": { "unit": "characters", "max": 250 } },
+    { "text": "Amount Requested", "limit": { "unit": "characters", "max": 20 } },
+    { "text": "Total Cost", "limit": { "unit": "characters", "max": 20 } },
+    { "text": "Is this a multi-year funding request?" },
+    { "text": "Anticipated Project/ Program/ Campaign Start Date", "limit": { "unit": "characters", "max": 10 } },
+    { "text": "Anticipated Project/ Program/ Campaign End Date", "limit": { "unit": "characters", "max": 10 } },
+    { "text": "Timeframe of Evaluation Results" },
+    { "text": "Type of Funding Requested (Select One)" },
+    { "text": "Investment Area Alignment: Please share how this request clearly connects to the primary investment area selected for the Trust (academic learning, social-emotional learning, career learning, or educational support). You may include additional areas in your response if appropriate.", "limit": { "unit": "characters", "max": 3000 } }
+  ]
+}

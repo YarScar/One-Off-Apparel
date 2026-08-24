@@ -147,7 +147,7 @@ ${args.funder_name ? `- \`query_donors\` with query_type "profile" and donor_nam
 
 ### Program cost data:
 
-- \`query_finances\` with query_type "phase_budget_summary" — budget by program phase
+- \`query_finances\` with query_type "phase_budget_dashboard" — budget by program phase
 - \`query_finances\` with query_type "phase_actuals_2025" — actual spending by phase (2025)
 - \`query_finances\` with query_type "q3_2026_actuals" — Q3 2026 actuals if applicable
 - \`query_enrollment\` with query_type "total" — total students (for cost-per-student)

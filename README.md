@@ -72,7 +72,7 @@ Four logical layers: **data sources → connectors → storage → MCP server + 
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                   MCP SERVER  (16 tools)                            │
+│                   MCP SERVER  (25 tools)                            │
 │                                                                     │
 │  Exposes structured Prisma queries + pgvector semantic search       │
 │  as Model Context Protocol tools.                                   │
@@ -161,7 +161,7 @@ lp-internal-ai-v1/
 │   │   ├── auth.ts                  # NextAuth v5 config + Google provider
 │   │   ├── middleware.ts            # Route guard
 │   │   └── Dockerfile
-│   ├── mcp-server/                  # MCP server — 16 tools
+│   ├── mcp-server/                  # MCP server — 25 tools
 │   │   ├── src/
 │   │   │   ├── index.ts             # Entry: stdio (Claude Desktop)
 │   │   │   ├── serve-http.ts        # Entry: Streamable HTTP (ECS Fargate)
@@ -182,14 +182,15 @@ lp-internal-ai-v1/
 │   ├── givebutter/                  # ✅ Live — REST client, donors/gifts/pipeline
 │   ├── aplos/                       # ✅ Live — RSA auth, 16K+ records
 │   ├── notion/                      # ✅ Live — meeting transcript sync + embeddings
-│   └── google-drive|bigquery|slack|roam/   # skeletons
+│   ├── google-drive/                 # ✅ Grants catalog discovery (no text ingestion)
+│   └── bigquery|slack|roam/          # skeletons
 ├── infra/
 │   ├── postgres-init/               # SQL: CREATE EXTENSION pgvector, pg_trgm
 │   └── iam/                         # AWS IAM policy templates
 ├── docs/
 │   ├── architecture.md              # Detailed system overview
 │   ├── database-schema.md           # All 30 Prisma models with columns + indexes
-│   ├── mcp-server-spec.md           # All 16 tool definitions (input/output schemas)
+│   ├── mcp-server-spec.md           # Tool definitions (input/output schemas)
 │   ├── entity-resolution.md         # Cross-source deduplication strategy
 │   ├── setup/                       # Phase-by-phase AWS setup guides (00–22)
 │   ├── runbooks/                    # local-dev.md, credentials-checklist.md, aws-permissions.md
@@ -218,7 +219,7 @@ pnpm resolves `workspace:*` references to local source at install time — no pu
       ├── @lp-ai/connector-bigquery        → lib-config, lib-db
       ├── @lp-ai/connector-givebutter      → lib-config, lib-db
       ├── @lp-ai/connector-aplos           → lib-config, lib-db
-      ├── @lp-ai/connector-google-drive    → lib-config, lib-db, lib-embedding
+      ├── @lp-ai/connector-google-drive    → lib-config, lib-db, lib-grants, googleapis
       ├── @lp-ai/connector-slack           → lib-config, lib-db, lib-embedding
       ├── @lp-ai/connector-roam            → lib-config, lib-db, lib-embedding
       ├── @lp-ai/connector-notion          → lib-config, lib-db, lib-embedding
@@ -352,7 +353,7 @@ Full input/output schemas: [docs/mcp-server-spec.md](docs/mcp-server-spec.md)
 | Connector | Source | Destination | Status |
 |---|---|---|---|
 | `google-sheets` | Launchpad Dashboard + Outcomes sheets (12 spreadsheets) | Postgres | ✅ Live — all 12 syncs ported; 26K+ records |
-| `google-drive` | Drive docs folder | Postgres + pgvector | Skeleton — creds available, implementation pending |
+| `google-drive` | Drive `Grants` tree | `grant_documents` catalog (no text, no embeddings) | ✅ Live locally — 1253 files catalogued, 1248 fetchable by ID; production auth unverified |
 | `bigquery` | `lp-internal-ai` BigQuery project | Postgres | Skeleton — creds available, implementation pending |
 | `givebutter` | GiveButter donation platform | `donor_contacts`, `donor_gifts`, `donor_pipeline` | ✅ Live — REST client syncing |
 | `aplos` | Aplos nonprofit accounting | Postgres (finance snapshots) | ✅ Live — RSA-decryption auth; 16K+ records |
@@ -379,7 +380,7 @@ Each connector's `sync()` is wrapped by `runSync()`, which writes a success/erro
 | Notion connector | ✅ Meeting transcript sync with embeddings |
 | OpenAI embeddings | ✅ `text-embedding-3-large` verified and live |
 | AWS account | ✅ Account 851725317896, IAM user configured, us-east-1 |
-| Remaining connectors | 🟡 Skeletons — google-drive, bigquery, slack, roam |
+| Remaining connectors | 🟡 Skeletons — bigquery, slack, roam |
 | AWS production | 🟡 Docker images + ECS task defs built; deployment in progress |
 | CI | ✅ GitHub Actions with pgvector service container |
 

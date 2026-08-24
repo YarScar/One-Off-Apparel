@@ -1,0 +1,266 @@
+[
+ {
+  "label": "aug7_gsk Q1",
+  "text": "Launchpad",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q2",
+  "text": "16 to 24. Launchpad 101 serves high school juniors and seniors, roughly 16 to 18. LiftOff and Launchpad Inc. serve 18 to 24.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q3",
+  "text": "Existing. Launchpad launched in 2023 and has enrolled 301 young people to date, with 18 currently in the LiftOff phase.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q4",
+  "text": "Launchpad builds accelerated pathways that connect Philadelphia young adults to high-paying, future-ready tech careers. Through a paid AI-engineering program grounded in real client work, participants who arrive with a high school diploma and little else gain applied AI skills, industry certifications, a portfolio of deployed work, and the paid experience employers now demand, at no cost to them, on a path toward a $50,000 living wage.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q5",
+  "text": "Launchpad runs as four connected phases, each with its own entry point.\n\nFoundations is an entry summer program in core AI and technical skills. 146 students have completed it.\n\nLaunchpad 101 is a yearlong learn-and-earn program for high school juniors and seniors, four afternoons a week with summer intensives. Students earn stipends, complete paid internships, and sit for industry certifications. It runs two pathways, Software Development and Entrepreneurial Leadership, so a student who is not drawn to coding still builds real AI and STEM skills. 38 students have completed it.\n\nLightspeed is an accelerated phase between 101 and LiftOff. 15 students have completed it.\n\nLiftOff is a six-month, full-time, AI-first software development track for participants 18 to 24, with a guaranteed $6,000 stipend floor over six months plus transportation, food, a laptop, and coaching. 12 have completed it and 18 are enrolled now. Its second half runs through Launchpad Inc., a nonprofit social enterprise that places participants on paid client projects for local nonprofits, foundations, and small businesses.\n\nParticipants train against Launchpad's AI Engineer competency framework, six competencies and 24 skills staged from Associate to AI Engineer, with Junior as the graduation bar. Assessment is on deployed work rather than seat time, tracked in Beacon, Building 21's competency and data platform.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q6",
+  "text": "City of Philadelphia, Pennsylvania. Launchpad's hub is at 801 Market Street in Center City.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q7",
+  "text": "Entry-level software work is the rung AI removed first, and the young people Launchpad recruits were reaching for exactly that rung. Launchpad's answer is to stop selling training and start selling delivered work: participants ship AI systems for paying clients before they graduate, so they apply with a portfolio and client references rather than a certificate.\n\nThe main clients are Philadelphia young people 16 to 24 recruited from non-selective high schools across more than 30 ZIP codes, with no prior experience required. 301 have enrolled to date.\n\nThe intervention has three parts. Participants are paid from day one, through a $6,000 stipend floor in LiftOff and hourly wages on client projects through Launchpad Inc., so finishing does not depend on being able to afford six unpaid months. They train against the AI Engineer competency framework, six competencies and 24 skills covering prompting and context engineering, building automations and agents, connecting systems, structuring data, evaluating AI output, and managing cost and risk, each evidenced by a shipped artifact in Beacon rather than a test score. And they sit for industry certifications, currently Certiport Generative AI Foundations and PCEP.\n\nThe results so far are earnings, not enrollment. Launchpad has paid $367,662 directly to 45 participants across 86 jobs since 2023, at an average of $15.52 an hour and 20.3 hours a week. Currently active jobs average $19.28 an hour, which is the direction that matters. Participants have held paid technical roles at Accenture, Seer Interactive, CreateAccess, Bentley Systems, HiTouch Enterprise, Hack Club, AECOM, and Nerd Street.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q8",
+  "text": "Access is the design, not a program add-on. Launchpad recruits from non-selective Philadelphia high schools that do not offer computer science, requires no prior experience, and pays participants, so reaching a high-paying tech career does not depend on which school a student got into or whether their family can absorb six months of unpaid training. Transportation, food, and a laptop are provided, because each of those is a common reason a low-income participant stops attending.\n\nOf the 301 young people enrolled to date, 289 identify as a race or ethnicity other than white alone. \n\nFewer than 10% of recruited students arrive drawn to software engineering. Launchpad built the Entrepreneurial Leadership pathway so the rest reach the same AI skills, paid projects, and credentials without having to want a developer job first. Recruiting young women into the software pathway specifically remains the hardest gap and an active focus.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q9",
+  "text": "No stored answer, and the pipeline routed this to the partnerships narrative, which does not answer it. Expected answer is no, a single request from Building 21 on behalf of Launchpad, but a person must confirm before filing.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q10",
+  "text": "Building 21",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q11",
+  "text": "801 Market Street, Philadelphia, PA 19107 is Launchpad's hub. This field asks for Building 21's registered address, which the knowledge base does not hold separately. Confirm before filing.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q12",
+  "text": "47-2514219",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q13",
+  "text": "The knowledge base holds Building 21's founding year, 2013, and its EIN. It does not hold the determination year, and the two are not the same fact. The pipeline pasted the EIN into this field.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q14",
+  "text": "Dannyelle Austin, Executive Director, dannyelle@launchpadphilly.org.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "aug7_gsk Q15",
+  "text": "No website is stored. The pipeline returned the street address here, because \"Website\" is registered in the question bank as a wording for the mailing address slot.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "hamilton_loi_2025 Q1",
+  "text": "Launchpad",
+  "unit": "characters",
+  "max": 250
+ },
+ {
+  "label": "hamilton_loi_2025 Q2",
+  "text": "Application-specific. No stored answer.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "hamilton_loi_2025 Q3",
+  "text": "The pipeline marked this a live-figure field and named `get_finance_brief(period: ytd)`. That call ran on 2026-08-11 and returned no income or expense total: a 39-fund list with no balances, an account-category summary, and 20 recent transactions. `query_finances(phase_budget_dashboard)` returned zero records. Per the figure rules,  rather than the frozen knowledge base figure of $1.34M.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "hamilton_loi_2025 Q4",
+  "text": "Application-specific. No stored answer.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "hamilton_loi_2025 Q5",
+  "text": "Application-specific. No stored answer.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "hamilton_loi_2025 Q6",
+  "text": "Application-specific. No stored answer.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "hamilton_loi_2025 Q7",
+  "text": "Launchpad assesses participants on deployed work against the AI Engineer competency framework, six competencies and 24 skills, with each skill evidenced by a portfolio artifact such as a shipped integration or a system a client confirmed. Assessment is tracked continuously in Beacon, Building 21's competency platform, rather than by seat time or a single test, so competency results are available at any point in a cohort.\n\nProgram-level results arrive on a fixed schedule. Completion and retention are reported by cohort and phase at the end of each phase. Certifications are reported as cohorts sit for them. The headline outcome, the share of graduates in paid work or training and their average annualized earnings against the $50,000 living-wage target, is measured at six months and again at twelve months after graduation. Twelve-month data for the first LiftOff cohort arrives in fall 2026.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "hamilton_loi_2025 Q8",
+  "text": "Application-specific. No stored answer.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "hamilton_loi_2025 Q9",
+  "text": "Primary investment area: career learning.\n\nLaunchpad is the youth workforce development program of Building 21, and the Trust's career learning criteria describe what it does rather than something adjacent to it. Launchpad recruits from non-selective Philadelphia high schools that do not offer computer science, across more than 30 ZIP codes, and requires no prior experience. 301 young people have enrolled since 2023. Of those, 289 identify as a race or ethnicity other than white alone.\n\nCareer preparation here is not exploration followed by a referral. High school juniors and seniors in Launchpad 101 spend a year in a learn-and-earn program, four afternoons a week with summer intensives, earning stipends and completing paid internships while sitting for industry certifications. 38 students have completed it. Graduates who want to go further enter Lightspeed and then LiftOff, a six-month full-time AI engineering track for 18 to 24 year olds whose second half places participants on paid client projects through Launchpad Inc., a nonprofit social enterprise serving Philadelphia nonprofits and small businesses. 15 students have completed Lightspeed, 12 have completed LiftOff, and 18 are in LiftOff now.\n\nThe mechanism that distinguishes this from career exposure is that participants are paid from the first day and are assessed on work that shipped. Six competencies and 24 skills in the AI Engineer framework are each evidenced by a portfolio artifact tracked in Beacon, so a graduate leaves with deployed systems and client references rather than a certificate of attendance. Since 2023, Launchpad has paid $367,662 directly to 45 participants across 86 jobs, averaging $15.52 an hour, and $19.28 an hour across currently active jobs. Participants have held paid technical roles at Accenture, Seer Interactive, CreateAccess, Bentley Systems, HiTouch Enterprise, Hack Club, AECOM, and Nerd Street.\n\nSecondary alignment: academic learning and educational support. The competency framework was built by Building 21 as a standards-aligned assessment model, and the wraparound supports that keep participants enrolled, transportation, food, a laptop, and coaching that continues through the first year of employment, are the reason completion is possible for a student whose family cannot absorb unpaid training time.",
+  "unit": "characters",
+  "max": 3000
+ },
+ {
+  "label": "jff_ai_pathways_2026 Q1",
+  "text": "AI removed the bottom rung first. The entry-level developer role that a bootcamp graduate could reach in 2021 now asks for shipped work and references, which is precisely what a young person without a network cannot get. Training programs kept optimizing for a placement that no longer exists at the other end.\n\nLaunchpad's answer is to make the paid work part of the program rather than the reward for finishing it. Three parts make it additive.\n\nFirst, the AI Engineer competency framework. Rather than teaching tools that are obsolete within a year, Launchpad defined the durable capabilities of an AI builder as six competencies and 24 skills, staged from Associate to AI Engineer, each assessed against a shipped portfolio artifact rather than a test score. The framework is on its fifth version, reviewed by a standing curriculum committee, and openly licensed for other programs to adopt.\n\nSecond, paid work from day one through Launchpad Inc., a nonprofit social enterprise. Participants deploy AI systems for Philadelphia organizations that could not otherwise afford them. This produces the deployed work and client references early-career technical hiring screens on, and it removes the financial reason a low-income participant would quit. Since 2023 Launchpad has paid $367,662 directly to 45 participants across 86 jobs.\n\nThird, success measured as earning power over time toward a $50,000 living wage, checked at six and twelve months, rather than a job on graduation day. That lets a program serving the hardest-to-place young people show real progress instead of failing against a metric built for a labor market that is gone.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "jff_ai_pathways_2026 Q2",
+  "text": "Milestones follow one full LiftOff and Launchpad Inc. cycle.\n\nRecruitment and enrollment. Classroom-intensive phase, roughly weeks 1 to 12, stipend-supported at a $6,000 floor over the six months. Transition to paid client work through Launchpad Inc. for the second half. Graduation with a Beacon-tracked portfolio and industry certifications. Earnings checks at six and twelve months after graduation.\n\nBy the end of the grant period Launchpad expects to know two things it does not know now: whether the paid-client-work half of LiftOff produces better twelve-month earnings than the classroom half predicts, and which of the 24 competency skills actually correlate with a participant being retained past twelve months. The first twelve-month cohort data arrives in fall 2026.\n\nResponsibilities: the Executive Director owns strategic direction. Program directors, technical instructors, and coaches run delivery. Launchpad Inc. delivery leads supervise client projects. Building 21 provides finance, compliance, and platform support.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "jff_ai_pathways_2026 Q3",
+  "text": "Launchpad is led by Executive Director Dannyelle Austin, the founding ED, with more than 15 years in education and workforce development. The team includes program directors, technical instructors, coaches, a career placement coordinator, and Launchpad Inc. software delivery leadership. Building 21 adds shared services that do not sit in that headcount: instructional design, finance, compliance, and the Beacon platform team. Building 21 is led by Co-CEOs Chip Linehan and Laura Shubilla.\n\nIndustry mentors and advisory board members contribute in-kind time through portfolio reviews, mock interviews, and curriculum input. Several first-cohort alumni have returned to mentor and recruit the next cohort.\n\n  Staff headcount is not filed here. The knowledge base carries two different numbers, 15 and 9, and `search_documents(\"org chart staff roster headcount\")` returned zero results on 2026-08-11. The stored answer asserts 9 full-time plus 1 part-time plus roughly 30 volunteers. A person must confirm that before it goes to JFF.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "jff_ai_pathways_2026 Q4",
+  "text": "Launchpad serves Philadelphia young people 16 to 24: high school juniors and seniors in Launchpad 101, and recent graduates and young adults 18 to 24 in LiftOff and Launchpad Inc. 301 have enrolled since 2023. They come almost entirely from non-selective Philadelphia high schools across more than 30 ZIP codes, and no prior coding experience is required. Of the 301, 289 identify as a race or ethnicity other than white alone. \n\nJob quality is the part most easily skipped. Participants earn $15.52 an hour on average across all jobs held since 2023, and $19.28 an hour across jobs active now, working roughly 20 hours a week. The point of the paid client work is that it pays above the stipend and produces evidence an employer will read, which is what moves a participant from a job to a career.\n\nFor a funder requiring an 18 to 24 band, the LiftOff and Launchpad Inc. profile is the relevant one. Launchpad 101 reaches the 16 to 18 group.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "jff_ai_pathways_2026 Q5",
+  "text": "Launchpad measures earning power over time toward a $50,000 living wage, checked at six and twelve months, rather than a job on graduation day.\n\nResults to date. LiftOff Cohort 1 graduated 12 participants in October 2025. Across all participants since 2023, Launchpad has paid $367,662 directly to 45 people across 86 jobs, at an average of $15.52 an hour and 20.3 hours a week, with currently active jobs averaging $19.28 an hour. Participants have held paid technical roles at Accenture, Seer Interactive, CreateAccess, Bentley Systems, HiTouch Enterprise, Hack Club, AECOM, and Nerd Street. Phase completions: 146 in Foundations, 38 in Launchpad 101, 15 in Lightspeed, and 12 in LiftOff, with 18 currently enrolled in LiftOff.\n\nCertifications: 32 of 59 PCEP attempts have passed, 54.2% all-time. \n\n\n\nTwelve-month retention data for Cohort 1 arrives in fall 2026.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "jff_ai_pathways_2026 Q6",
+  "text": "Three questions drive the work. Does paid client work produce better twelve-month earnings than classroom training of the same length? Which of the 24 competency skills predict retention past twelve months? And can a social enterprise generate enough client revenue to cover a meaningful share of participant wages, which is what would make the model affordable to replicate?\n\nCapture is already built. Every competency assessment, portfolio artifact, enrollment record, and job with its wage and hours is recorded in Beacon and in Launchpad's data platform, so cohort-level reporting is a query rather than a data-collection project. The AI Engineer framework is versioned and openly licensed, and the same is intended for the assessment rubrics and the client-project intake process, which are the two pieces another city would need.\n\nScaling means a second market running LiftOff and a local Launchpad Inc. against the same framework. What that requires is a client pipeline in the new market, delivery supervision capable of shipping client work to a professional standard, and stipend capital for the classroom half, since client revenue only covers the second half.\n\n Prior filings claim $75,000 of Launchpad Inc. client work booked in July 2026 and two clients with hiring intent in writing at $50,000 to $80,000. `get_finance_brief(ytd)` does not return Inc. bookings, and no other tool does either, so neither claim is filed here. Both are strong material for this answer if a person can source them.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "jff_ai_pathways_2026 Q7",
+  "text": "See question 3. Dannyelle Austin, Executive Director and founding ED, more than 15 years in education and workforce development. Chip Linehan and Laura Shubilla, Co-CEOs of Building 21, the fiscal sponsor providing the competency model and the Beacon platform.\n\n Individual bios for program directors, technical instructors, coaches, and Launchpad Inc. delivery leads are not in the knowledge base. Naming them requires a person, and the headcount question in answer 3 applies here too.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "jff_ai_pathways_2026 Q8",
+  "text": "This field wants an attachment, and every budget total is unverified today.\n\nStructural points that are true regardless of the amount: an unusually large share of Launchpad's budget goes directly to participants, through a $6,000 stipend floor per LiftOff participant over six months plus paid client work, with transportation, food, laptops, and coaching on top. Participant wages for Launchpad Inc. client work are covered by client revenue rather than by grant requests.\n\n on all three figure checks that would populate a budget: `get_finance_brief(ytd)` returned no income or expense total, `query_finances(phase_budget_dashboard)` returned zero records, and no tool returns Inc. client bookings. The stored line items from a prior William Penn supportive-services request are a template for the format, not figures to file, and every one of them is stale.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q1",
+  "text": "Yes. Building 21 is the fiscal sponsor.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q2",
+  "text": "Building 21",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q3",
+  "text": "47-2514219",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q4",
+  "text": "801 Market Street, Philadelphia, PA 19107",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q5",
+  "text": "No website is stored in the knowledge base. The pipeline answered this field with the street address, because \"Website\" is registered as a wording for the mailing address slot.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q6",
+  "text": "Launchpad builds accelerated pathways that connect Philadelphia young adults to high-paying, future-ready tech careers. Through a paid AI-engineering program grounded in real client work, participants who arrive with a high school diploma and little else gain applied AI skills, industry certifications, a portfolio of deployed work, and the paid experience employers now demand, at no cost to them, on a path toward a $50,000 living wage.",
+  "unit": "characters",
+  "max": 700
+ },
+ {
+  "label": "wpf_workforce_2026 Q7",
+  "text": "Launchpad Workforce Training Supports",
+  "unit": "characters",
+  "max": 120
+ },
+ {
+  "label": "wpf_workforce_2026 Q8",
+  "text": "Launchpad pays Philadelphia young adults 18 to 24 to train as AI engineers, then puts them on real client projects. 45 participants have earned $367,662 since 2023. This request funds the supports that let low-income participants finish.",
+  "unit": "characters",
+  "max": 250
+ },
+ {
+  "label": "wpf_workforce_2026 Q9",
+  "text": "Application-specific. No stored answer.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q10",
+  "text": "Application-specific. No stored answer.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q11",
+  "text": "Application-specific. No stored answer, and no budget figure could be verified today: `get_finance_brief(ytd)` returned no income or expense total and `query_finances(phase_budget_dashboard)` returned zero records.",
+  "unit": "characters",
+  "max": 1000000
+ },
+ {
+  "label": "wpf_workforce_2026 Q12",
+  "text": "**Activities and location.** Launchpad trains Philadelphia young adults as AI engineers from its hub at 801 Market Street in Center City. The phase this request supports is LiftOff: six months, full time, for participants 18 to 24. The first half is classroom-intensive, five days a week, stipend-supported. The second half moves participants onto paid client projects through Launchpad Inc., a nonprofit social enterprise that builds automations, dashboards, integrations, and agents for Philadelphia nonprofits and small businesses. Participants are in the building daily for the full six months, and Career Success Coaching continues through their first year of employment after graduation.\n\n**What participants are trained against.** Six competencies and 24 skills in the AI Engineer framework: prompting and context engineering, building automations and agents, connecting systems, structuring data, evaluating AI output, and managing cost and risk. Each skill is evidenced by a shipped artifact tracked in Beacon, Building 21's competency platform, rather than by seat time. Participants also sit for Certiport Generative AI Foundations and PCEP.\n\n**Why the supports are the request.** The reason a low-income 20-year-old leaves a training program is rarely the curriculum. It is a missed bus fare, a shift they had to pick up, or a laptop they do not have. Paying participants from day one, at a guaranteed $6,000 floor over six months, removes the choice between finishing the program and earning this month. The paid client work in the second half then does two things at once: it pays better than the stipend and it produces the deployed work and client references that early-career technical hiring screens on.\n\n**Beneficiaries and demographics.** 301 young people have enrolled since 2023. 18 are in LiftOff now, and 12 have completed it. Of the 301, 289 identify as a race or ethnicity other than white alone.  Participants are recruited from non-selective Philadelphia high schools across more than 30 ZIP codes, with no prior experience required.\n\n**Evidence to date.** Launchpad has paid $367,662 directly to 45 participants across 86 jobs since 2023, averaging $15.52 an hour across all jobs and $19.28 an hour across currently active ones. Participants have held paid technical roles at Accenture, Seer Interactive, CreateAccess, Bentley Systems, HiTouch Enterprise, Hack Club, AECOM, and Nerd Street. \n\n**Partners.** Building 21 is the fiscal sponsor and provides the competency model, the Beacon platform, finance, and compliance.",
+  "unit": "characters",
+  "max": 1000000
+ }
+]

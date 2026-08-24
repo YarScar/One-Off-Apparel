@@ -16,14 +16,23 @@ import { registerSearchByPerson } from './tools/search-by-person.js';
 import { registerGetEntityBrief } from './tools/get-entity-brief.js';
 import { registerGetFinanceBrief } from './tools/get-finance-brief.js';
 import { registerSearchDocuments } from './tools/search-documents.js';
+import { registerFindGrantDocuments } from './tools/find-grant-documents.js';
+import { registerGetGrantDocumentText } from './tools/get-grant-document-text.js';
+
+import { registerGrantMatchQuestion } from './tools/grant-match-question.js';
+import { registerGrantBuildDraft } from './tools/grant-build-draft.js';
+import { registerGrantResizeAnswer } from './tools/grant-resize-answer.js';
+import { registerGrantVerifyFigure } from './tools/grant-verify-figure.js';
 
 import { registerSkillGrantWriting } from './tools/skill-grant-writing.js';
 import { registerSkillGrantProspecting } from './tools/skill-grant-prospecting.js';
+import { registerSkillGrantSourcingEvaluation } from './tools/skill-grant-sourcing-evaluation.js';
 import { registerSkillFinanceAudit } from './tools/skill-finance-audit.js';
 import { registerSkillBoardReporting } from './tools/skill-board-reporting.js';
 
 import { registerGrantWritingPrompt } from './prompts/grant-writing.js';
 import { registerGrantProspectingPrompt } from './prompts/grant-prospecting.js';
+import { registerGrantSourcingEvaluationPrompt } from './prompts/grant-sourcing-evaluation.js';
 import { registerFinanceAuditPrompt } from './prompts/finance-audit.js';
 import { registerBoardReportingPrompt } from './prompts/board-reporting.js';
 
@@ -51,15 +60,25 @@ export function makeServer(): McpServer {
   registerGetFinanceBrief(server);
   registerSearchDocuments(server);
 
+  // Grant writing tools (deterministic; they read seed data, never the database)
+  registerFindGrantDocuments(server);
+  registerGetGrantDocumentText(server);
+  registerGrantMatchQuestion(server);
+  registerGrantBuildDraft(server);
+  registerGrantResizeAnswer(server);
+  registerGrantVerifyFigure(server);
+
   // Skill tools (return structured instructions for Claude to follow)
   registerSkillGrantWriting(server);
   registerSkillGrantProspecting(server);
+  registerSkillGrantSourcingEvaluation(server);
   registerSkillFinanceAudit(server);
   registerSkillBoardReporting(server);
 
   // Prompts (same skills, for clients that support MCP prompts)
   registerGrantWritingPrompt(server);
   registerGrantProspectingPrompt(server);
+  registerGrantSourcingEvaluationPrompt(server);
   registerFinanceAuditPrompt(server);
   registerBoardReportingPrompt(server);
 

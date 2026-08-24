@@ -40,7 +40,10 @@ export function AttendanceTrendChart({ data }: Props): JSX.Element {
             tickFormatter={(v) => `${String(v)}%`}
           />
           <Tooltip
-            formatter={(value: unknown) => (value == null ? '—' : `${String(value)}%`)}
+            // Narrowed rather than String()-ed: an object reached this as `[object Object]%`.
+            formatter={(value: unknown) =>
+              typeof value === 'number' || typeof value === 'string' ? `${String(value)}%` : '—'
+            }
             contentStyle={{
               borderRadius: 8,
               border: '1px solid #e2e8f0',

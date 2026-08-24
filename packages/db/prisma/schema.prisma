@@ -570,3 +570,67 @@ model ToolPermission {
 
   @@map("tool_permissions")
 }
+
+// Catalog of grant documents held in the Google Drive "Grants" tree.
+//
+// This table exists because Drive discovery is broken for that tree: listing a
+// subfolder's children or searching by title/fullText returns nothing, while
+// fetching a file by its ID works fine. So the corpus cannot be *found* through
+// Drive, only *read* once you already know the ID.
+//
+// This is a catalog, not a content store — one row per file, no document text.
+// The MCP `find_grant_documents` tool queries these rows to narrow ~1250 files
+// to a handful, then the caller fetches just those from Drive by `driveFileId`.
+// That keeps 3.5+ GiB of grant material reachable without embedding any of it.
+//
+// `funder`, `year`, and `docKind` are inferred from the Drive folder path by
+// packages/grants/scripts/build-grants-index.ts. They are best-effort labels,
+// not authoritative facts — see `needsReview`.
+model GrantDocument {
+  id String @id @default(uuid())
+
+  /// Drive file ID. The join key to actual content, and null until the Drive
+  /// walk backfills it — the local mirror does not record IDs.
+  driveFileId String? @unique @map("drive_file_id")
+  /// Path below the Grants root. Stable identifier before IDs are backfilled.
+  path        String  @unique
+  filename    String
+  driveUrl    String? @map("drive_url")
+  mimeType    String? @map("mime_type")
+
+  /// prospects | current_past | program_descriptions | org_reference | internal_ai_os | unknown
+  collection String
+  funder     String?
+  /// Application year. For a multi-year period this is the year applied, not the
+  /// year the grant ends.
+  year       Int?
+  /// application_response | budget | agreement | report | letter_of_support |
+  /// loi | meeting_notes | template | attachment | program_description |
+  /// external_reference | transcript | other
+  docKind    String  @map("doc_kind")
+
+  /// Sits under an explicit do-not-ingest folder.
+  excluded          Boolean @default(false) @map("excluded")
+  /// Launchpad did not author this (funder rules, other grantees' applications).
+  /// Implies archiveOnly. Quoting it into a submission would be plagiarism.
+  externalReference Boolean @default(false) @map("external_reference")
+  /// Reference only — must not be used as drafting context.
+  archiveOnly       Boolean @default(false) @map("archive_only")
+  /// Classification was not decisive; a human should confirm funder/year/kind.
+  needsReview       Boolean @default(false) @map("needs_review")
+
+  ext          String?
+  /// text | media | unknown — whether text can be extracted today.
+  contentClass String? @map("content_class")
+  sizeBytes    BigInt? @map("size_bytes")
+  modifiedAt   DateTime? @map("modified_at")
+
+  syncedAt DateTime @default(now()) @map("synced_at")
+
+  @@index([funder])
+  @@index([year])
+  @@index([docKind])
+  @@index([archiveOnly, externalReference])
+  @@index([collection, year])
+  @@map("grant_documents")
+}

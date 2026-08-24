@@ -54,3 +54,48 @@ packages/db/generated/
 
 # Sentry
 .sentryclirc
+
+# Local Claude Code config — not shared with the team, EXCEPT the project skills below.
+#
+# `.claude/skills/` holds four skills that are about this repository rather than about one
+# machine: add-mcp-tool (the tool_permissions migration and admin-category steps a new tool
+# needs before any role can reach it), implement-connector (the runSync shape and the
+# never-TRUNCATE rule), and grant-writing / grant-writing-mcp. Ignoring all of `.claude/`
+# meant those could never reach main, so every clone but this one lacked them.
+.claude/*
+!.claude/skills/
+
+# Personal working notes. Real work gets an OpenProject work package instead.
+TODO.local.md
+
+# Raw grant source material (Drive exports). Large, and it holds funder
+# correspondence and unredacted student data — never commit it.
+packages/grants/data/
+
+# Drafted answer packages awaiting staff review. Same disclosure concern as
+# data/, and worse: these pair funder names with operating deficits by fiscal
+# year, wage aggregates, and per-employer placement counts. They are also
+# pre-review by construction, and a drafted answer found in git history reads
+# like approved language. See packages/grants/drafts/README.md.
+# Ignore the contents, not the directory: git does not descend into an excluded
+# directory, so `drafts/` followed by a negation would keep the README out too.
+packages/grants/drafts/*
+!packages/grants/drafts/README.md
+
+# Python bytecode from the parity regeneration scripts in packages/grants/scripts/
+__pycache__/
+
+# Local mirror of the Grants Shared Drive (1,234 files). Same reason as
+# packages/grants/data/ above: funder correspondence, unredacted student data,
+# and — per the H2.5 sweep — portal credentials in 60 of the .docx files.
+#
+# Anchored with a leading slash: unanchored, `data/` matches a directory named
+# `data` at ANY depth, and `git check-ignore` confirmed it swallowing
+# apps/hq/app/data/ and connectors/google-sheets/src/data/. Nothing lived there
+# yet, so nothing was lost — but the next source directory named `data` would
+# have gone uncommitted with no error anywhere.
+/data/
+
+# Local agent tooling, not shared with the team
+.opencode/
+EchoesVault/

@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "funder": "Dolfinger-McMahon Foundation",
+    "program": "Grant application (2023)",
+    "framing": "silent",
+    "note": "Short application form from data/Grants/Prospects and Proposals/Dolfinger-McMahon Foundation/2023 Dolfinger-McMahon Foundation.docx. No limits printed; recorded as no limit."
+  },
+  "questions": [
+    { "text": "Project Title" },
+    { "text": "Project Description/Proposal" },
+    { "text": "Request Amount" },
+    { "text": "Term (12 months minimum)" }
+  ]
+}

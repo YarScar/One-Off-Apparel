@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "funder": "Example Youth & Workforce Foundation",
+    "program": "Youth Tech Pathways Grant (FY26)",
+    "framing": "silent",
+    "note": "Synthetic form built from real recurring question types to exercise the pipeline. Not a real funder."
+  },
+  "questions": [
+    { "text": "Summarize your organization's mission.", "limit": { "unit": "words", "max": 50 } },
+    { "text": "Briefly describe your organization's history and major accomplishments." },
+    { "text": "Describe your core services.", "limit": { "unit": "words", "max": 100 } },
+    { "text": "What problem or community need does this project address?" },
+    { "text": "Describe the project in detail, including timeline and how funds will be used.", "limit": { "unit": "words", "max": 200 } },
+    { "text": "Who is the target population and how many people will you serve?" },
+    { "text": "What is the geographic service area?" },
+    { "text": "What results are you committed to achieving, and how will you know if you succeeded?", "limit": { "unit": "words", "max": 300 } },
+    { "text": "What methods and tools will you use to evaluate success and collect data?" },
+    { "text": "What are your long-term strategies for funding this work beyond the grant period?", "limit": { "unit": "words", "max": 200 } },
+    { "text": "What is your organization's annual operating budget?" },
+    { "text": "Does your organization conduct an annual audit?" },
+    { "text": "How much are you requesting from this grant?" },
+    { "text": "Please attach a copy of your IRS 501(c)(3) determination letter." },
+    { "text": "Certify that your board and executive director approved this submission." },
+    { "text": "What is your organization's policy on merchandise returns?" }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "funder": "JEVS Human Services (C2L-PHL, via Philadelphia Works)",
+    "program": "Career Connected Learning PHL — Fall 2024 / Summer 2025 Provider RFP",
+    "framing": "initiative",
+    "due": "2024-07-15",
+    "note": "Real filed 2024 response (7_15_24 C2L PHL Grant Response.docx). Questions transcribed from the response's Section 1 (field) and Section 2 (narrative). Section 2 has the only stated word limits. Public-source RFP text held in the same archive folder."
+  },
+  "questions": [
+    { "text": "Organization Name." },
+    { "text": "Program Name." },
+    { "text": "Organization Address." },
+    { "text": "Program Address (if different from organization)." },
+    { "text": "Does your program have multiple addresses?" },
+    { "text": "Please include all additional program addresses." },
+    { "text": "Federal Tax ID (Organization or Legal Entity)." },
+    { "text": "Is the organization minority-owned and/or operated?" },
+    { "text": "Does the organization have any connection with JEVS (including its Board of Directors)?" },
+    { "text": "Has the applicant agency and its staff or director ever been barred from entering contracts with City, Federal, or State government agencies?" },
+    { "text": "Contact person (name and title)." },
+    { "text": "Contract signatory (name and title)." },
+    { "text": "Applying For (Select One): Year-round (school-year 2024-2025 and summer 2025) or Summer 2025 only." },
+    { "text": "Proposed Number of Slots." },
+    { "text": "Provide a general organizational description, including but not limited to year established, legal status, governance structure, mission, annual budget, and number of full-time staff.", "limit": { "unit": "words", "max": 250 } },
+    { "text": "Describe the organization's qualifications and history of operating youth workforce and education programs, especially to those identified as priority populations by this RFP. Please include specific types of services provided, dates, locations, partnerships, contract values, and related performance outcomes.", "limit": { "unit": "words", "max": 500 } }
+  ]
+}

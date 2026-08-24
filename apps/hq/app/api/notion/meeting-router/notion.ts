@@ -28,7 +28,7 @@ export async function notionFetch<T>(path: string, opts: NotionFetchOpts = {}): 
   const res = await fetch(`${BASE_URL}${path}`, init);
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Notion ${method} ${path} failed: ${res.status} ${res.statusText} — ${text.slice(0, 300)}`);
+    throw new Error(`Notion ${method} ${path} failed: ${String(res.status)} ${res.statusText} — ${text.slice(0, 300)}`);
   }
   return (await res.json()) as T;
 }

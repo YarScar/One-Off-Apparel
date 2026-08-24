@@ -1,6 +1,37 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Slimmed 2026-08-20 to cut per-request context — how-to detail lives in project skills (`add-mcp-tool`,
+`implement-connector`) and loads only when used.
+
+## Work Tracking — OpenProject is mandatory
+
+**Every piece of work on this project must be associated with an OpenProject work package.** This
+covers work in progress, work planned, and work committed. If a change relates to this project
+directly, it has a work package; if it does not have one, create one before starting.
+
+| | |
+|---|---|
+| Instance | `https://projects.liftofflearning.tech` |
+| Project identifier | `internal-ai-integrations` |
+| API docs | https://www.openproject.org/docs/api/ |
+| Credential | `OPENPROJECT_API_KEY` in `.env` — HTTP Basic, username literal `apikey`, password the key |
+
+What this means in practice:
+
+- **Before starting work**, find the work package that covers it, or create one. Set it to *In
+  progress* when you begin.
+- **Commit messages reference the work package** — `refs #<id>` in the body (OpenProject parses this
+  and links the commit to the work package). Use `closes #<id>` when the commit finishes it.
+- **Discovered work gets its own work package**, related to the one you found it from, rather than
+  being folded silently into the current change.
+- **Close the work package** when the work is done and verified, with a comment saying what landed.
+- **Exception:** incidental local housekeeping that touches nothing in the repo — scratch files,
+  local tooling, environment setup on your own machine. Everything that produces a commit here is in
+  scope.
+
+Never read, print, or otherwise ingest `.env` itself. Reference `OPENPROJECT_API_KEY` through the
+environment.
 
 ## What This Is
 
@@ -32,7 +63,7 @@ An internal AI intelligence layer for Launchpad that lets team members query Cla
 | Connector | Source | Destination | Status |
 |---|---|---|---|
 | `google-sheets` | Launchpad Dashboard + Outcomes sheets (12 spreadsheets) | Postgres | ✅ Live — all 12 sheet syncs ported; 27K+ records ingested |
-| `google-drive` | Drive docs folder | Postgres + pgvector | Skeleton — creds available, implementation pending |
+| `google-drive` | Drive `Grants` tree | `grant_documents` catalog (no text, no embeddings) | ✅ Live locally — 1253 files catalogued, 1248 with a Drive ID; verified end to end against real Drive. **Production auth unverified** (the service account has no access to the tree) |
 | `aplos` | Aplos nonprofit accounting | `finance_snapshots` (accounts, funds, transactions) | ✅ Live — RSA-decryption auth; 16K+ records; synced daily in production via EventBridge |
 | `notion` | Notion meeting transcripts database | `document_chunks` (pgvector) | ✅ Live — meeting transcript sync with embeddings |
 | `slack` | Designated Slack channels | pgvector | Skeleton — awaiting `SLACK_BOT_TOKEN` |
@@ -74,7 +105,7 @@ pnpm --filter @lp-ai/mcp-server start:http # HTTP at :8080 (for ECS / local test
 pnpm sync:sheets                # google-sheets (live)
 pnpm sync:aplos                 # aplos (live)
 pnpm sync:notion                # notion meeting transcripts (live)
-pnpm sync:drive                 # google-drive (skeleton)
+pnpm sync:drive                 # google-drive (Grants catalog discovery)
 pnpm sync:slack                 # slack (skeleton — awaiting SLACK_BOT_TOKEN)
 pnpm sync:all                   # all connectors in parallel
 
@@ -85,10 +116,9 @@ pnpm sync:all                   # all connectors in parallel
 #   AWS_PROFILE=lp-internal aws ecs run-task --cluster lp-internal \
 #     --task-definition lp-sync-google-sheets:1 --launch-type FARGATE ...
 
-# Deploy: GitHub Actions builds the image (Buildx) and ships via the lp-github-deploy
-# OIDC role — NO local Docker needed. See .github/workflows/deploy.yml.
-#   - Auto-deploys on push to master (CI-gated; only changed services deploy)
-#   - Manual: gh workflow run deploy.yml -f services=hq   (or all|mcp-server|aws-mcp-server|sync)
+# Deploy: GitHub Actions builds the image (Buildx) and ships via the lp-github-deploy OIDC rule.
+# See .github/workflows/deploy.yml. Auto-deploys on push to main (CI-gated); manual:
+#   gh workflow run deploy.yml -f services=hq   (or all|mcp-server|aws-mcp-server|sync)
 # Task definitions live in infra/ecs/*-taskdef.json; the workflow pins the image to the commit SHA.
 
 # Database tools
@@ -98,19 +128,27 @@ pnpm --filter @lp-ai/lib-db migrate:dev  # create new migration file (dev)
 pnpm db:down                    # stop the local Postgres container
 ```
 
+**Migrations — do not touch the deploy ordering.** Since 2026-08-18 the workflow's `migrate` job runs
+a one-off task pinned to the image the `build-mcp-server` job just registered (commit-SHA-pinned
+`--task-definition`), and fails unless the image's applied-migration count matches the repo's.
+**Do not unpin `--task-definition`, do not move `build-mcp-server` after `migrate`.** Before that fix,
+`migrate` ran unpinned against the *previous* release's image and migrations lagged exactly one deploy
+(#295). Any green `migrate` job from before 2026-08-18 does not prove that commit's migration ran.
+
 ## Architecture
 
 ### Package graph
 
 ```
 apps/hq              → @lp-ai/lib-db, @lp-ai/lib-config
-apps/mcp-server      → @lp-ai/lib-db, @lp-ai/lib-config, @lp-ai/lib-embedding
+apps/mcp-server      → @lp-ai/lib-db, @lp-ai/lib-config, @lp-ai/lib-embedding, @lp-ai/lib-grants
 apps/aws-mcp-server  → @lp-ai/lib-db, @lp-ai/lib-config
 apps/sync            → connectors/* (one-off Fargate task runner for scheduled syncs)
 connectors/*         → @lp-ai/lib-db, @lp-ai/lib-config
 packages/db          → Prisma client, entity resolution, sync-runs helper, seed
 packages/embedding   → OpenAI embedding batch/retry helpers
 packages/config      → Zod env schema, AWS Secrets Manager loader
+packages/grants      → zod; deterministic grant-writing logic + seed (question bank, KB, form fixtures)
 ```
 
 ### Key files
@@ -119,7 +157,7 @@ packages/config      → Zod env schema, AWS Secrets Manager loader
 - `prisma.config.ts` (repo root) — Prisma config pointing at the schema and migrations
 - `packages/db/src/entity-resolution.ts` — fuzzy name matching across all data sources; called by `get_student_info` and `search_by_person`
 - `packages/db/src/sync-runs.ts` — `runSync()` wrapper used by every connector
-- `apps/mcp-server/src/make-server.ts` — registers all tools (16 data + 4 skill); edit here to add/remove tools
+- `apps/mcp-server/src/make-server.ts` — registers all tools; edit here to add/remove tools. Verify with `grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print s}'` rather than trusting a number
 - `apps/mcp-server/src/tool-helpers.ts` — `runTool()` wrapper (error capture + usage logging), `parseStr()`, `parseNum()`
 - `apps/mcp-server/src/errors.ts` — `toolError()` and `notImplemented()` for structured error envelopes
 - `apps/mcp-server/src/usage-log.ts` — writes every tool call to `usage_logs` table; surfaced in HQ `/tools`
@@ -139,54 +177,18 @@ packages/config      → Zod env schema, AWS Secrets Manager loader
 | `/api/health` | Unauthenticated health check |
 | `/auth/signin` | Google OAuth sign-in (whitelisted from auth middleware) |
 
-### Adding a new MCP tool
+### How-tos live in skills
 
-1. Create `apps/mcp-server/src/tools/<tool-name>.ts` — export `registerXxx(server: McpServer): void`
-2. Inside, call `server.registerTool(NAME, { description, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) => runTool(NAME, input, async () => { ... }))` — annotations are required on all tools to avoid per-call approval prompts in Claude
-3. Use `toolError(code, message)` or `notImplemented(NAME)` for structured error returns
-4. Import and call `registerXxx(server)` in `apps/mcp-server/src/make-server.ts`
-5. Update the count in `apps/mcp-server/src/__tests__/tools.test.ts` and add the tool name to the expected list
-6. **Add a `tool_permissions` migration** so the tool is accessible to users. Without this, the tool will be blocked for all roles. Create a migration at `packages/db/prisma/migrations/<timestamp>_add_<name>_permission/migration.sql`:
-   ```sql
-   INSERT INTO "tool_permissions" ("tool_name", "allowed_roles", "category", "description", "updated_at")
-   VALUES (
-     '<tool_name>',
-     ARRAY['<role1>', '<role2>', 'leadership', 'admin'],
-     '<category>',
-     '<human-readable description>',
-     NOW()
-   )
-   ON CONFLICT ("tool_name") DO NOTHING;
-   ```
-   Categories: `students`, `donor_finance`, `search`, `skills`, `future`. Roles: `pending`, `program_staff`, `development`, `sales`, `finance`, `software_dev`, `leadership`, `admin`. The tool will appear on the HQ `/admin` page where admins can adjust role access without code changes.
-7. **If using a new category**, add it to `CATEGORY_ORDER` and `CATEGORY_LABELS` in `apps/hq/app/admin/PermissionsMatrix.tsx`. Existing categories (`students`, `donor_finance`, `search`, `skills`, `future`, `other`) don't need this step — only new ones. Without this, tools in the new category won't render on the admin page.
-8. Apply the migration locally (`pnpm db:migrate`) and to production (via ECS one-off task or bastion — RDS is not publicly accessible)
+- **Adding / renaming / removing an MCP tool** → invoke the `add-mcp-tool` skill. It covers the
+  `registerTool` call + annotations, `make-server.ts` wiring, the tool-count test, and the
+  `tool_permissions` migration + admin-page category step (including the **`DO UPDATE`, never
+  `DO NOTHING`** rule and the new-category step).
+- **Implementing or changing a connector** → invoke the `implement-connector` skill. It covers the
+  `sync()` + `runSync()` wrapper shape, the noop-when-key-missing pattern, and declaring tables for
+  the 5% integrity guard.
 
-### Implementing a connector
-
-All connectors follow the same pattern:
-
-```ts
-export async function sync(): Promise<SyncRunRecord> {
-  return runSync('connector-name', async () => {
-    const env = await loadEnv();
-    if (!env.REQUIRED_KEY) return { status: 'noop', notes: 'key not set' };
-    // ... upsert records into Prisma ...
-    return { status: 'ok', recordsUpserted: n };
-  });
-}
-```
-
-The `runSync` wrapper creates the `sync_runs` row, captures errors, records duration, and runs a **5% integrity guard** — if any declared table drops more than 5% in row count during a sync, an `INTEGRITY WARNING` is appended to the `sync_runs.notes` field.
-
-Pass the `tables` option to declare which tables a connector writes to:
-```ts
-return runSync('connector-name', async () => { ... }, {
-  tables: ['students', 'student_phase_outcomes'],
-});
-```
-
-**Critical sync safety rule:** NEVER use `deleteMany({})` or `TRUNCATE` before inserting data. If the sync crashes midway, the table is left empty with no recovery. Instead:
+**The critical sync safety rule, which applies regardless:** NEVER use `deleteMany({})` or `TRUNCATE`
+before inserting data. If the sync crashes midway, the table is left empty with no recovery. Instead:
 1. **Upsert** every row using a stable `sourceId` (platform ID or composite natural key — never row numbers)
 2. **Track** which sourceIds were seen during this run
 3. **After all upserts succeed**, delete only rows whose sourceId was NOT seen
@@ -218,9 +220,16 @@ Before modifying any component, read the relevant spec:
 
 - [Architecture](docs/architecture.md) — system overview and data flow
 - [Database Schema](docs/database-schema.md) — all Postgres tables
-- [MCP Server Spec](docs/mcp-server-spec.md) — all 16 tool definitions with input/output schemas
+- [MCP Server Spec](docs/mcp-server-spec.md) — tool definitions with input/output schemas
 - [Entity Resolution](docs/entity-resolution.md) — how students/staff are resolved across sources
 - Per-connector specs in `docs/data-sources/`
+
+The grant writing layer keeps its own document set, scoped to that workstream — start at
+[`packages/grants/README.md`](packages/grants/README.md). Two of its files are worth knowing about
+from outside it, because the grant work landed platform-wide changes and recorded them there:
+
+- [Changelog](packages/grants/CHANGELOG.md) — material changes that workstream landed, including schema, tool surface, and corrections to documented procedures
+- [Documentation conventions](packages/grants/CLAUDE.md) — sources of truth, current verified state, and documentation debt (detail lives in [`packages/grants/docs/STATE.md`](packages/grants/docs/STATE.md))
 
 ## Setup
 

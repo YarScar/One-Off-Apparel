@@ -1,0 +1,377 @@
+Work package,Type,Subject,Description,Parent,Status,Priority,Assignee,Start date,Finish date,Estimated time,Follows,Category,Version,Accountable
+#49,Phase,Phase A — Environment and G1 close-out,"Close release gate G1. `SPEC.md` section 1 marks G1 ""code complete"", but the pass condition in the same table is that the loader reports zero warnings and the three tools resolve in the ACL. The second half is unproven.
+
+The first work here is the environment, not the next feature. The ACL path, the usage-log entry, and the HQ `/admin` Grants section are all untested, and each one is a place where the tool works in isolation and fails in the product.
+
+**Blocks** — Phase D. Nothing in D can be proven until a tool call reaches the ACL.
+
+**Source** — Assessment 1. `HANDOFF.md`, ""Not verified, and why"".
+
+**Owner** — Demitri. Dates and total work derive from the children.",,New,High,Demitri,2026-08-03,2026-08-10,13,,,,Demitri
+#50,Task,A1 — Restore a working local environment,"Load `.env` from the credentials checklist. Start Postgres with `pnpm db:up`. Run `pnpm db:generate`.
+
+**Acceptance**
+- The database-gated tests in `packages/grants` run rather than skip.
+- `pnpm exec vitest run packages/grants` reports zero skips for database reasons.
+
+**Source** — Assessment 1. `HANDOFF.md`, ""Not verified, and why"". `NEXT-SESSION.md` item 3 records the current blockers: `DATABASE_URL` is absent from `.env` entirely, and `/var/run/docker.sock` does not exist. Prisma client generation and the `packages/db` build are already cleared.
+
+**Owner** — Demitri. **Estimate** — 3h.",Phase A — Environment and G1 close-out,New,High,Demitri,2026-08-03,2026-08-03,3,,Build,G1,Demitri
+#51,Task,A2 — Fix the repository lint break,"`@eslint/js` is not installed, so `pnpm lint` fails everywhere. This is not our defect and it blocks our gate check.
+
+**Acceptance**
+- `pnpm lint` completes on `packages/grants` with no configuration error.
+
+**Already done, ahead of this pass** — `@eslint/js` and `typescript-eslint` are installed at the root, `packages/grants` has a `lint` script, and it reports clean. Twelve errors were found and all twelve fixed; two were real bugs of a quiet kind in the matcher and in two tests. `NEXT-SESSION.md` asks that this be closed and a separate repo-wide rollout package opened, carrying the 415-problem baseline and the caveat that any type-aware lint run is meaningless unless `pnpm db:generate && pnpm --filter @lp-ai/lib-db build` has run first. Status is left at New by instruction.
+
+**Source** — Assessment 1. `NEXT-SESSION.md` item 2.
+
+**Owner** — Demitri. **Estimate** — 2h. No predecessor: the lint break is independent of the database.",Phase A — Environment and G1 close-out,New,Normal,Demitri,2026-08-04,2026-08-04,2,,Build,G1,Demitri
+#52,Task,A3 — Apply the tool_permissions migration,"The migration at `packages/db/prisma/migrations/20260729000000_add_grant_tool_permissions/` is written and unapplied. Apply it locally with `pnpm db:migrate`. Apply it to production with a one-off ECS task or the bastion, because RDS is not publicly reachable.
+
+**Acceptance**
+- The `tool_permissions` row exists in both environments.
+- The roles are leadership and administrator, per `TAD.md` section 2.4, pending E5.
+
+**Open question** — the production half has no named owner. `NEXT-SESSION.md` question 4 asks who can apply a migration to production given the same access constraint.
+
+**Source** — Assessment 1. `TAD.md` section 2.4.
+
+**Owner** — Demitri. **Estimate** — 3h. **Follows** — A1.",Phase A — Environment and G1 close-out,New,High,Demitri,2026-08-04,2026-08-05,3,A1 — Restore a working local environment,Build,G1,Demitri
+#53,Task,A4 — Add the grants category to the HQ admin page,"`grants` is a new category. Add it to `CATEGORY_ORDER` and `CATEGORY_LABELS` in `apps/hq/app/admin/PermissionsMatrix.tsx`. The file is already modified in the working tree — verify and finish.
+
+**Acceptance**
+- The grant tools render in a Grants section on HQ `/admin`.
+- An administrator can change the roles there without a code change.
+
+**Source** — Assessment 1. Commit `ced45f8` carries the first half.
+
+**Owner** — Demitri. **Estimate** — 2h. **Follows** — A3.",Phase A — Environment and G1 close-out,New,High,Demitri,2026-08-06,2026-08-07,2,A3 — Apply the tool_permissions migration,Build,G1,Demitri
+#54,Task,A5 — Invoke grant_match_question through the running server,"The unit tests do not exercise the ACL path or the usage log. Start the server and make a real call.
+
+**Acceptance**
+- The call appears on HQ `/tools` with the caller identity.
+- A call from a role outside the permission record is refused.
+
+**Source** — Assessment 1. This is the unproven half of the G1 pass condition.
+
+**Owner** — Demitri. **Estimate** — 3h. **Follows** — A3. It needs the permission row, not the admin page.",Phase A — Environment and G1 close-out,New,High,Demitri,2026-08-06,2026-08-07,3,A3 — Apply the tool_permissions migration,Build,G1,Demitri
+#55,Milestone,A6 — Milestone: G1 passed,"**Pass condition**, verbatim from `SPEC.md` section 1 — ""The loader reports zero warnings. The three tools resolve in the ACL.""
+
+The first half holds. The second half is what A3 to A5 prove. Until then the board must not show G1 as complete.
+
+**Follows** — A4 and A5. The gate covers the admin page as well as the server call.
+
+**Board date** — 2026-08-10, derived from the relations.",Phase A — Environment and G1 close-out,New,High,Demitri,2026-08-10,2026-08-10,,A4 — Add the grants category to the HQ admin page; A5 — Invoke grant_match_question through the running server,,G1,Demitri
+#56,Phase,Phase B — Model-grant content analysis,"The direct ask from 2026-07-31: *""Where is your analysis of the efficacy of the content we have used in the past? What examples are you using from our past grants to improve our future grants?""*
+
+The same notes set the method: identify the best language manually, focus on six model grants, define the categories to fill, and extract the best in each category from the six models.
+
+The remaining risk on this package is content, not code. G2 closed the one technical risk on the best of the three outcomes in `SPEC.md` section 5.3 — 28,690 of 28,690 recorded `difflib` ratios reproduce exactly, and all 337 recorded matcher results reproduce field for field. What is unproven is the knowledge base: it holds 29 answers, four are `verified:false`, and one content gap is confirmed open. The draft builder can only return what the knowledge base holds, so its quality ceiling is the content.
+
+**Blocked by** — nothing. Runs in parallel with Phase A; it needs no environment.
+
+**Source** — Assessment 2.
+
+**Owner** — Sean.",,New,High,Sean,2026-08-03,2026-08-28,51,,,,Sean
+#57,Task,B1 — Define the answer categories the drafts must fill,"Reconcile the 11 categories and 29 knowledge base slots in `seed/questions.json` against what the six model grants actually contain.
+
+**Acceptance**
+- A category matrix. Every slot is marked strongly sourced, weakly sourced, or unsourced.
+- Every unsourced slot names the grant most likely to hold the language.
+
+**Source** — Assessment 2. `SPEC.md` section 3.1 records four answers at `verified:false`.
+
+**Owner** — Sean. **Estimate** — 8h.",Phase B — Model-grant content analysis,New,High,Sean,2026-08-03,2026-08-07,8,,Content,,Sean
+#58,Task,B2 — Extract best-in-category language from the six model grants,"The six, from the ""Key LaunchPad Development Files"" folder and the 2026-07-21 session: Upwork, Connelly, Google Foundation, Hummingbird, Linehan Family Foundation, and United Way.
+
+Their stated strengths, from the same session:
+- Upwork and Connelly best reflect the current AI engineer, LiftOff, and Inc. framing.
+- Google Foundation carries the structural-shift language on AI and the economy.
+- Hummingbird focuses on Launchpad 101 and enrichment.
+- Linehan covers all programs.
+- United Way is the recommended addition for 101.
+
+Manual extraction, per the 2026-07-31 note.
+
+**Acceptance**
+- One candidate passage per category, each carrying its source grant and the reason it was chosen.
+
+**Owner** — Sean. **Estimate** — 16h. **Follows** — B1.",Phase B — Model-grant content analysis,New,High,Sean,2026-08-10,2026-08-14,16,B1 — Define the answer categories the drafts must fill,Content,,Sean
+#59,Task,B3 — Write the efficacy analysis,"The 2026-07-31 question, answered in writing. What worked. What is stale. What must never re-enter a draft.
+
+One item is already known and is not optional: the retired 12-month full-stack model. `PROPOSAL.md` section 6 rule 4 and `TAD.md` section 3.5 both state that text describing a retired program model must never enter a new draft. The 2026-07-21 session confirms the shift to a shorter AI engineering focus.
+
+**Acceptance**
+- A short document in the `admin/` register, naming the retired framings and the passages that carry them.
+
+**Owner** — Sean. **Estimate** — 8h. **Follows** — B2.",Phase B — Model-grant content analysis,New,High,Sean,2026-08-17,2026-08-21,8,B2 — Extract best-in-category language from the six model grants,Content,,Sean
+#60,Task,B4 — Fold approved language into the knowledge base,"Candidate answers land in `seed/kb_launchpad.json` as `verified:false` until Chip or Iman approves them. `verified:false` is a true unknown and is never presented as confirmed, per `README.md` rule 1.
+
+**Acceptance**
+- The loader integrity report stays empty. `data.test.ts` asserts this, so a bad entry fails the suite.
+
+**Owner** — Sean, with Demitri on the schema. **Estimate** — 8h. **Follows** — B3.",Phase B — Model-grant content analysis,New,Normal,Sean,2026-08-24,2026-08-28,8,B3 — Write the efficacy analysis,Content,,Sean
+#61,Task,B5 — Close the Lightspeed content gap,"No answer in the knowledge base mentions Lightspeed. `SPEC.md` section 3.1 records this as a content task for the Data team, not a code task. It is tracked here because a draft that omits it is incomplete.
+
+**Acceptance**
+- An owner is named, and the gap is either filled or formally accepted.
+
+**Unassigned on purpose** — this belongs to the Data team, not to this lane. `OPENPROJECT-TASKS.md` intake note 2.
+
+**Owner** — External, Data team. **Estimate** — 2h to hand off.",Phase B — Model-grant content analysis,New,Normal,External,2026-08-10,2026-08-14,2,,External,,
+#62,Task,B6 — Matcher quality review,"Two ordinary questions score below the 0.42 threshold in the Python original and in the TypeScript port: *""How will you measure whether the program succeeded?""* and *""Upload your IRS letter of determination.""* They route to human review, which is the safe outcome.
+
+Add variants per the growth rules in `seed/QUESTIONS-SCHEMA.md`. Then regenerate the fixtures in `src/__fixtures__/` from the snippet in each fixture's `note` field.
+
+**Acceptance**
+- Both questions match confidently.
+- All existing parity tests still pass against the regenerated fixtures.
+
+**Source** — `HANDOFF.md` flag 5 records this as prototype behaviour and not a port defect, and asks for this review to be scheduled separately from parity.
+
+**Owner** — Demitri. **Estimate** — 6h. **Follows** — A1. The review runs vitest, so it needs a runnable suite, not a resolved ACL.",Phase B — Model-grant content analysis,New,Normal,Demitri,2026-08-04,2026-08-10,6,A1 — Restore a working local environment,Build,,Demitri
+#63,Task,B7 — Escalate the wage-figure conflict,"Take the conflict to Chip and Iman. Ask for one number, with the population it counts and the date it was measured.
+
+The conflict: `docs/PLAYBOOK.md` reconciles the participant wage claim as $550K stale against $300K current. `TAD.md` section 3.2 documents the same claim as $350,268 in a filed application narrative against $362,361.82 in live platform data on 2026-07-28. Those are not the same reconciliation, and a person reading the Playbook and a person reading the TAD would file different numbers.
+
+`PROPOSAL.md` section 6 rule 3 says this case must never resolve automatically: two figures that count different things do not resolve by recency. Do not let the next editor harmonise them by choosing.
+
+**Acceptance**
+- One sourced figure is recorded, with a stated population and a stated date.
+- `docs/PLAYBOOK.md` and `TAD.md` section 3.2 are corrected in the same change.
+
+**Source** — Assessment 4.
+
+**Owner** — Demitri, with Iman. **Estimate** — 3h.",Phase B — Model-grant content analysis,New,High,Demitri,2026-08-10,2026-08-14,3,,Decision,,Demitri
+#64,Phase,"Phase C — Playbook, ownership, and tests","The other two asks from 2026-07-31: *""What changes are you proposing to the grant writing playbook? How are you coordinating updates with Iman?""* and *""How are you handling updates to the playbook/skill over time?""*
+
+`C1 → C2 → C3 → C4` is a genuine chain — each one is input to the next — and that chain is what sets the length of this phase.
+
+**Blocks** — D5. The skill carries the drafting craft, absorbed from the Playbook at authoring time rather than read per draft.
+
+**Source** — Assessments 3 and 5.
+
+**Owner** — Demitri, with Iman on ownership and content approval.",,New,High,Demitri,2026-08-13,2026-09-09,31,,,,Demitri
+#65,Task,C1 — Resolve the Playbook write-path conflict,"Two options. Drop the create and update steps from the Playbook, and have a person maintain the Grant Applications record. Or sanction a write tool in `TAD.md`, with its own permission record, its own audit line, and `readOnlyHint: false`.
+
+The conflict: `docs/PLAYBOOK.md` opens by having Claude *create* a record in the Grant Applications database with status Researching, and closes by *updating* that record with the amount requested, the framing, and the draft link. That is a write path. It runs against control 6 in `TAD.md` section 2.2 and against `readOnlyHint: true` on all three planned tools.
+
+The Playbook also carries two rules stronger than anything in `TAD.md` section 3 — never name an entity that cannot be traced to a confirmed current source, and ask the fiscal-sponsorship framing every time. Both are correct, and both should move up into `TAD.md` rather than be weakened to match it.
+
+**Acceptance**
+- A decision, with the reasoning recorded in `TAD.md` section 5.
+- `HANDOFF.md` flag 4 is closed.
+
+**Source** — Assessment 3.
+
+**Owner** — Demitri, with the VP of Technology. **Estimate** — 4h. No predecessor: this is a decision, and G2 already closed the deferral it was waiting on.","Phase C — Playbook, ownership, and tests",New,High,Demitri,2026-08-13,2026-08-19,4,,Decision,,Demitri
+#66,Task,C2 — Write the Playbook change proposal,"The 2026-07-31 question, answered in writing. Covers C1. Covers B7. Covers the two rules the Playbook carries that are stronger than `TAD.md` section 3, and recommends promoting both rather than weakening either.
+
+Also carries the 2026-07-29 feedback on the earlier playbook: *""Likes non negotiables. Not enough information per step.""*
+
+**Acceptance**
+- A document Iman can review in one sitting, with each proposed change marked as a correction, an addition, or a promotion.
+
+**Owner** — Demitri and Sean. **Estimate** — 8h. **Follows** — C1.","Phase C — Playbook, ownership, and tests",New,High,Demitri,2026-08-20,2026-08-26,8,C1 — Resolve the Playbook write-path conflict,Decision,,Demitri
+#67,Task,C3 — Run the Iman working session,"The 2026-07-31 note says to schedule time with her next week. Agenda: C2, the ownership handoff, and the update cadence.
+
+**Acceptance**
+- The session happens.
+- The decisions are written up the same day.
+
+**Unassigned on purpose** — Iman has no account on this instance, so the session she owns cannot be assigned to her. Invite her, or this task has no owner on the board. `OPENPROJECT-TASKS.md` intake note 1.
+
+**Source** — Assessment 5.
+
+**Owner** — Demitri, with Iman. **Estimate** — 3h. **Follows** — C2.","Phase C — Playbook, ownership, and tests",New,High,Iman,2026-08-27,2026-09-02,3,C2 — Write the Playbook change proposal,Decision,,Demitri
+#68,Task,C4 — Define the Playbook update process,"Name the source of truth. Name the sync direction. Name who re-authors the skill when the Playbook changes. Name the review cadence.
+
+The drift condition: the Playbook lives in this repository at `docs/PLAYBOOK.md`, and Iman will edit in Notion. The skill is authored from the Playbook at build time, so a Notion edit that never reaches the repository changes nothing in the product, and a repository edit that never reaches Notion is invisible to the owner.
+
+Constraint: `TAD.md` section 4.2 argues the guidance belongs in the platform under version control, not fetched per draft. Whatever process is agreed must keep that true.
+
+**Acceptance**
+- A governance section in `TAD.md` or `README.md`.
+- Iman confirms she can work within it.
+
+**Source** — Assessment 5.
+
+**Owner** — Demitri, with Iman. **Estimate** — 4h. **Follows** — C3.","Phase C — Playbook, ownership, and tests",New,High,Demitri,2026-09-03,2026-09-09,4,C3 — Run the Iman working session,Decision,,Demitri
+#69,Task,C5 — Build the Playbook test set,"Chip and Iman asked for tests on the handbook. A fixed set of prompts whose drafts are graded against the Playbook style rules and non-negotiables, so a Playbook edit can be regression-checked instead of trusted.
+
+Grade against the rules the Playbook already states: no em dashes, no nonprofit jargon, no throat-clearing openers, no setup-and-pivot, every number sourced, no entity named without a traceable current source, and word limits verified programmatically.
+
+**Acceptance**
+- The set runs against a Playbook change and reports which rules a draft broke.
+
+**Owner** — Sean. **Estimate** — 12h. **Follows** — C2. It grades against the style rules, which C2 settles; it does not need the governance process.","Phase C — Playbook, ownership, and tests",New,Normal,Sean,2026-08-27,2026-09-02,12,C2 — Write the Playbook change proposal,Build,,Sean
+#70,Phase,Phase D — Build gates G3 to G5,"From `SPEC.md` section 1 and section 2.2. No scope changes here — this phase restates the gates as work packages so they appear on the board.
+
+The largest part of the value lands at D2, the G3 gate. `PROPOSAL.md` section 7 says the same about G3 being the main benefit; the weeks after it add the length handling, the drafting quality, and the release.
+
+**Blocked by** — Phase A, through A6 into D1. Phase C, through C5 into D5.
+
+**Owner** — Demitri.",,New,High,Demitri,2026-08-11,2026-09-16,88,,,,Demitri
+#71,Task,D1 — Build grant_build_draft (G3),"`apps/mcp-server/src/tools/grant-build-draft.ts`, plus the pipeline modules it consumes. Ports `count_units`, `truncate_preview`, `build_answer`, `run`, and `render_markdown`.
+
+The path is form, then match, then knowledge base retrieve, then limit check, then Markdown. `render_markdown` emits question, answer, provenance footline, and human-action flags.
+
+The tool returns the figure work order and makes no connector call. `TAD.md` section 2.3 holds the security reason. Do not optimise this by having the tool make the call.
+
+Resize stays off for this gate. Emit the deterministic overflow report and the truncation preview.
+
+**Acceptance**
+- 25 pipeline parity tests pass.
+- A full form fixture returns a draft package and a figure work order.
+- `readOnlyHint: true`.
+
+**Owner** — Demitri. **Estimate** — 40h. **Follows** — A6.",Phase D — Build gates G3 to G5,New,High,Demitri,2026-08-11,2026-08-31,40,A6 — Milestone: G1 passed,Build,G3,Demitri
+#72,Milestone,D2 — Milestone: G3 passed,"**Pass condition** — 25 pipeline parity tests pass, and a full form fixture returns a draft package.
+
+`PROPOSAL.md` section 7 calls this the main benefit of the package. This is where the largest part of the value lands.
+
+**Follows** — D1. **Board date** — 2026-09-01, derived from the relations.",Phase D — Build gates G3 to G5,New,High,Demitri,2026-09-01,2026-09-01,,D1 — Build grant_build_draft (G3),,G3,Demitri
+#73,Task,D3 — Build grant_resize_answer (G4),"No SDK. No network. No client. The tool returns `{ source_text, limit, measurement, instructions }`. The calling Claude rewrites and calls back to re-measure.
+
+**What ports** — `_SYSTEM_PROMPT` verbatim, including the guardrail against inventing any fact, figure, statistic, name, date, program detail, or outcome. Also the context assembly from `_build_user_prompt`, and the `ResizeResult` shape.
+
+**What does not port** — `ClaudeResizer`, `make_resizer`, `MAX_ATTEMPTS`, and the retry-with-feedback loop.
+
+`MAX_COMPRESSION_RATIO` is 4. Above that the verdict is `compression_infeasible`. `TAD.md` section 3.6 holds the case.
+
+**Acceptance**
+- 7 resize parity tests pass with no network.
+
+**Owner** — Demitri. **Estimate** — 20h. **Follows** — D2.",Phase D — Build gates G3 to G5,New,High,Demitri,2026-09-02,2026-09-08,20,D2 — Milestone: G3 passed,Build,G4,Demitri
+#74,Task,"D4 — Port the reframe seam, unconnected","The prototype has a reframe hook that re-emphasises an answer for a specific funder. Port the seam. Do not wire it. Connecting it now would add an untested Claude call to the path.
+
+**Acceptance**
+- The seam exists and is unreachable from any registered tool.
+- A test asserts it is not called.
+
+**Source** — `SPEC.md` section 8. `TAD.md` decision 7.
+
+**Owner** — Demitri. **Estimate** — 4h. **Follows** — D3. Nothing in D5 depends on this: the relation audit dropped ""D5 follows D4"" because the seam must stay unwired.",Phase D — Build gates G3 to G5,New,Low,Demitri,2026-09-09,2026-09-15,4,D3 — Build grant_resize_answer (G4),Build,,Demitri
+#75,Task,D5 — Rewrite skill_grant_writing (G5),"`apps/mcp-server/src/prompts/grant-writing.ts`. The skill calls the three new tools first, then verifies every figure through the existing `query_*` tools, then drafts.
+
+Keep the prototype skill's argument names and step structure. It was derived from this platform's boilerplate, so it ports back mechanically.
+
+The skill also carries the drafting craft, absorbed from the Playbook at authoring time rather than read per draft. `TAD.md` section 4.2 states the rule. This half depends on Phase C.
+
+**Acceptance**
+- A draft produced from the skill alone is judged at least as good as a prototype draft. The judge is Chip or Iman, not the lane.
+
+**Owner** — Demitri and Sean. **Estimate** — 24h. **Follows** — D3 and C5.",Phase D — Build gates G3 to G5,New,High,Demitri,2026-09-09,2026-09-15,24,C5 — Build the Playbook test set; D3 — Build grant_resize_answer (G4),Build,G5,Demitri
+#76,Milestone,"D6 — Milestone: G5 passed, release and pilot","**Pass condition** — staff use the layer on the platform and confirm the result. `PROPOSAL.md` deliverable 6.
+
+**Follows** — D5. **Board date** — 2026-09-16, derived from the relations.",Phase D — Build gates G3 to G5,New,High,Demitri,2026-09-16,2026-09-16,,D5 — Rewrite skill_grant_writing (G5),,G5,Demitri
+#77,Phase,Phase E — External dependencies and decisions,"None of this is Grant Writing work. It is here because the design depends on it, and because an untracked dependency is a dependency that arrives late.
+
+Four of the six rows are unassigned on purpose: they belong to another team or to the approval chain, and they need the owner `PROPOSAL.md` section 8.1 asks for.
+
+**Source** — Assessments 6 and 8.
+
+**Owner** — Demitri on the two build rows. External on the rest.",,New,Normal,Demitri,2026-08-03,2026-08-28,19,,,,Demitri
+#78,Task,E1 — Add the two Notion databases to the copy list,"`connectors/notion/src/sync-databases.ts` reads `NOTION_SYNC_DATABASE_IDS`, formatted `id:Name, id:Name`. Add two entries and re-run the sync.
+
+- Grant Applications — `e696f630-919c-48ff-998a-993a1ebdada5`
+- Research Wiki — `33779abd-443f-8075-8a47-000b973f8eba`
+
+The Grant Writing Playbook is not part of this ask. It is a page and not a database, and `syncDatabases()` posts to `/databases/{id}/query`, which fails on a page id. The Playbook is in this repository instead, which is where `TAD.md` section 4.2 wanted it.
+
+Verify with the query in `SPEC.md` section 7. A semantic search cannot prove absence.
+
+**Acceptance**
+- Both database names appear in the `document_chunks` distinct-source query.
+
+**Unassigned on purpose** — configuration, not code. Needs the owner `PROPOSAL.md` section 8.1 asks for.
+
+**Owner** — External. **Estimate** — 4h.",Phase E — External dependencies and decisions,New,High,External,2026-08-10,2026-08-14,4,,External,,
+#79,Task,E2 — Confirm the ingest captures application rows,"A database view may behave differently from a page. Confirm the ingest captures the application rows and not only the view container.
+
+**Acceptance**
+- A named application row is retrievable through `search_documents`.
+
+**Unassigned on purpose** — Data team.
+
+**Source** — `SPEC.md` section 7, follow-up 1.
+
+**Owner** — External, Data team. **Estimate** — 3h. **Follows** — E1.",Phase E — External dependencies and decisions,New,Normal,External,2026-08-17,2026-08-21,3,E1 — Add the two Notion databases to the copy list,External,,
+#80,Task,E3 — Tune min_similarity at the search_documents call site,"Observed similarity scores sit near 0.30 to 0.44. The default threshold filtered every realistic grant query to zero results. Without this change, G5 reads as an empty result rather than as a missing page, which is the harder failure to diagnose.
+
+**Acceptance**
+- A realistic grant query returns the expected passages.
+- The chosen threshold is recorded with the evidence.
+
+**Constraint** — this cannot be done usefully against a seeded local database. It needs real Notion content embedded in `document_chunks`, and the observed band came from real data. `NEXT-SESSION.md` item 3.
+
+**Owner** — Demitri. **Estimate** — 4h. **Follows** — E2.",Phase E — External dependencies and decisions,New,Normal,Demitri,2026-08-24,2026-08-28,4,E2 — Confirm the ingest captures application rows,Build,,Demitri
+#81,Task,E4 — Align Canonical Facts with the figure work order,"One artifact, not two. `src/figures.ts` supplies the 15 checks and the exact queries. HQ supplies the live view. Agree this with Chip before he rebuilds the Notion page.
+
+On 2026-07-29 Chip described Canonical Facts as follows: latency will be an issue; each data point should be the language with a query or skill for Claude to run; consider including the language to paste in to rerun on demand, and a dashboard showing them live. That description is already built. `src/figures.ts` names the claim as it appears in the knowledge base, the slots that carry it, the exact connector tool, the exact arguments, the conflict kind, and the severity.
+
+Two artifacts would diverge on the first figure that changes.
+
+**Acceptance**
+- Chip agrees the work order is the source.
+- The Notion page either links to it or holds the paste-in language generated from it.
+
+**Source** — Assessment 6.
+
+**Owner** — Demitri, with Chip. **Estimate** — 4h.",Phase E — External dependencies and decisions,New,Normal,Demitri,2026-08-24,2026-08-28,4,,Decision,,Demitri
+#82,Task,E5 — Close the three open decisions,"`PROPOSAL.md` section 8. Three decisions:
+
+1. Approve the Notion configuration change and name an owner. Configuration, not code.
+2. Approve who may use the three grant tools. Recommendation: leadership and administrator. Mandatory, because the platform refuses any tool without a permission record. Decide at the same time whether a background job may run them — the default already refuses, so a ""no"" changes nothing.
+3. Confirm that the question bank and the knowledge base stay in files for now. Recommendation: keep files until the tools pass their test bar, then review.
+
+**Acceptance**
+- All three are recorded with a date and a decision-maker.
+
+**Unassigned on purpose** — project manager and VP of Technology.
+
+**Source** — Assessment 8.
+
+**Owner** — Project manager and VP of Technology. **Estimate** — 2h.",Phase E — External dependencies and decisions,New,High,External,2026-08-03,2026-08-07,2,,Decision,,
+#83,Task,E6 — Reconcile the timeline with reality,"Replace ""six weeks from approval"" in `PROPOSAL.md` section 7 with dated milestones, or record the approval date and count from it.
+
+`PROPOSAL.md` still reads ""Status: For review. Not yet approved"" while the build is two gates in. `HANDOFF.md` records that this was deliberate: the documents stay open and get corrected as the work turns things up. It leaves the schedule unmeasurable, because a six-week plan counted from an event that has not happened cannot be tracked on a board.
+
+**Acceptance**
+- Every milestone in `PROPOSAL.md` section 7 carries a date that matches this board.
+
+**Source** — Assessment 8.
+
+**Owner** — Demitri, with the project manager. **Estimate** — 2h. **Follows** — E5.",Phase E — External dependencies and decisions,New,Normal,Demitri,2026-08-10,2026-08-14,2,E5 — Close the three open decisions,Decision,,Demitri
+#84,Phase,Phase F — Operating procedures,"From the new operating procedures in the 2026-07-31 notes. These are standing obligations, not deliverables. Where OpenProject supports a recurring work package, make them recurring.
+
+Context from the same notes: 85 hours across the team, with no code, no documentation, and no recommendations, and only two people logging hours outside the check-ins.
+
+**Owner** — All lane members. Unassigned on purpose: these apply to everyone, not to one person.",,New,Normal,Demitri,2026-08-03,2026-09-11,4,,,,
+#85,Task,F1 — Log hours by category in the shared sheet,"Log the specific hours for each category in the Google sheet.
+
+Temporary, per the 2026-07-31 note. F4 retires it.
+
+**Owner** — All lane members. **Recurring** — daily.",Phase F — Operating procedures,New,Normal,,2026-08-03,2026-09-11,,,Recurring,,
+#86,Task,F2 — Daily report-out to Slack,"Three lines, in addition to the hour log.
+
+- What you finished today.
+- What you are prioritising tomorrow.
+- Blockers, if any.
+
+**Source** — 2026-07-31 notes.
+
+**Owner** — All lane members. **Recurring** — daily.",Phase F — Operating procedures,New,Normal,,2026-08-03,2026-09-11,,,Recurring,,
+#87,Task,F3 — Work in the pit,"Work in the pit, not wherever you want. A location requirement, not a remote-by-default arrangement.
+
+**Source** — 2026-07-31 notes.
+
+**Owner** — All lane members. **Recurring** — daily.",Phase F — Operating procedures,New,Normal,,2026-08-03,2026-09-11,,,Recurring,,
+#88,Task,F4 — Migrate hour logging into OpenProject,"The 2026-07-31 note marks the shared sheet as temporary and says logging will move to OpenProject. Do the migration and retire F1.
+
+**Acceptance**
+- Hours are logged against work packages.
+- The sheet is closed.
+
+**Owner** — Project manager. **Estimate** — 4h.",Phase F — Operating procedures,New,Normal,External,2026-08-10,2026-08-14,4,,Build,,

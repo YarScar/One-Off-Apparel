@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "funder": "Truist Foundation Inspire Awards (via MIT Solve)",
+    "program": "Truist Foundation Inspire Awards 2026",
+    "framing": "fiscal_sponsorship",
+    "due": "2026-08-07",
+    "note": "Real Aug-7 pilot form (Priority 0). Questions + limits transcribed from sources/aug7-pilot-forms.md#form-2. Rich word/character limits — the primary resize test case. Run with --resize to exercise pipeline/resize.py."
+  },
+  "questions": [
+    { "text": "What is the name of your solution?", "limit": { "unit": "characters", "max": 30 } },
+    { "text": "Provide a one-line summary or tagline for your solution.", "limit": { "unit": "characters", "max": 150 } },
+    { "text": "Describe your solution in 10-20 words.", "limit": { "unit": "words", "max": 20 } },
+    { "text": "What specific problem are you solving? What is the scale of the problem in the communities you are working in?", "limit": { "unit": "words", "max": 200 } },
+    { "text": "What is your solution and how does it work?", "limit": { "unit": "words", "max": 200 } },
+    { "text": "Who does your solution serve, and in what ways will the solution impact their lives?", "limit": { "unit": "words", "max": 200 } },
+    { "text": "What have you built and tested so far? Please share why you selected your stage of development.", "limit": { "unit": "words", "max": 200 } },
+    { "text": "What makes your solution innovative? How is it distinct from others using a similar approach?", "limit": { "unit": "words", "max": 300 } },
+    { "text": "Describe in simple terms how and why you expect your solution to have an impact on the problem (your theory of change).", "limit": { "unit": "words", "max": 300 } },
+    { "text": "How are you and your team well-positioned to deliver this solution?", "limit": { "unit": "words", "max": 300 } },
+    { "text": "Why are you applying to the Truist Foundation Inspire Awards?", "limit": { "unit": "words", "max": 200 } },
+    { "text": "How many people work on your solution team (full-time, part-time, contractors)?", "limit": { "unit": "words", "max": 100 } },
+    { "text": "How long have you been working on your solution?", "limit": { "unit": "words", "max": 100 } },
+    { "text": "What is your business model?", "limit": { "unit": "words", "max": 300 } },
+    { "text": "What is your plan for becoming financially sustainable, and what evidence supports it?", "limit": { "unit": "words", "max": 300 } },
+    { "text": "What was your organizational budget for fiscal year 2025 and 2026?", "limit": { "unit": "words", "max": 150 } },
+    { "text": "How is your current budget allocated?", "limit": { "unit": "words", "max": 150 } }
+  ]
+}

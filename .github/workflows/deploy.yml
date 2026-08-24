@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
     inputs:
       services:
@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Detect changed services
         id: detect
@@ -65,7 +65,17 @@ jobs:
             exit 0
           fi
 
-          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          # Diff against the push event's actual "before" SHA (not HEAD~1) so
+          # multi-commit pushes and merge commits are diffed correctly — HEAD~1
+          # only walks the first parent and previously missed changes brought
+          # in by a merge, or by earlier commits in a multi-commit push.
+          BEFORE="${{ github.event.before }}"
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "No usable 'before' commit (new branch or force-push) — treating all services as changed."
+            CHANGED=$(git ls-files)
+          else
+            CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          fi
 
           # Shared packages trigger all services
           SHARED=false
@@ -86,88 +96,31 @@ jobs:
             echo "sync=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # ─── Run database migrations ─────────────────────────────────────
-  # Runs before any service deploy. Uses an ECS one-off task because
-  # the GitHub Actions runner cannot reach RDS (private subnet).
-  migrate:
+  # ─── Build the MCP server image, register its task definition ────
+  # Runs BEFORE `migrate`, and this ordering is the entire point of the job.
+  #
+  # HISTORY, so this is not "simplified" back: until 2026-08-18 the `migrate`
+  # job launched its one-off task against `--task-definition
+  # lp-internal-mcp-server` with NO revision. ECS resolves that to the latest
+  # REGISTERED revision, which pins the image from the PREVIOUS deploy — and
+  # `migrate` ran before any image was built, because every build lived inside
+  # a deploy job that itself `needs: migrate`. So the migration set the job
+  # could see was always one release behind, a migration added by the commit
+  # under deploy was invisible to the job meant to apply it, and the job
+  # reported success anyway. Run 32047334123 logged "12 migrations found"
+  # while the deployed commit fc2a43d carried 19. Work package #295.
+  #
+  # This job runs whenever ANY of the three DB-backed services is deploying,
+  # not just mcp-server, because the migration task needs an image built from
+  # THIS commit regardless of which service changed. That costs one image
+  # build on an hq-only deploy; correctness is worth it.
+  build-mcp-server:
     needs: [changes]
-    if: always() && (needs.changes.outputs.mcp-server == 'true' || needs.changes.outputs.hq == 'true' || needs.changes.outputs.aws-mcp-server == 'true')
+    if: always() && needs.changes.result == 'success' && (needs.changes.outputs.mcp-server == 'true' || needs.changes.outputs.hq == 'true' || needs.changes.outputs.aws-mcp-server == 'true')
     runs-on: ubuntu-latest
     environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get network config from MCP server service
-        id: network
-        run: |
-          SUBNET=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} \
-            --services lp-internal-mcp-server \
-            --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets[0]' \
-            --output text)
-          SG=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} \
-            --services lp-internal-mcp-server \
-            --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups[0]' \
-            --output text)
-          echo "subnet=$SUBNET" >> "$GITHUB_OUTPUT"
-          echo "sg=$SG" >> "$GITHUB_OUTPUT"
-
-      - name: Run migrations via ECS one-off task
-        id: run
-        run: |
-          # Read migration SQL files that need to be applied and combine them.
-          # We use a node script that connects via pg (available in the container)
-          # and runs each pending migration's SQL.
-          #
-          # The ECS task uses the mcp-server task definition which already has
-          # DATABASE_URL injected from Secrets Manager.
-
-          TASK_ARN=$(aws ecs run-task \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --task-definition lp-internal-mcp-server \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ steps.network.outputs.subnet }}],securityGroups=[${{ steps.network.outputs.sg }}],assignPublicIp=ENABLED}" \
-            --overrides '{
-              "containerOverrides": [{
-                "name": "mcp-server",
-                "command": ["node", "-e", "const pg=require(\"/workspace/node_modules/.pnpm/pg@8.21.0/node_modules/pg\");const p=new pg.Pool({connectionString:process.env.DATABASE_URL});p.query(\"SELECT migration_name FROM _prisma_migrations ORDER BY finished_at\").then(r=>{console.log(\"Applied migrations:\",r.rows.length);r.rows.forEach(row=>console.log(\" \",row.migration_name));p.end();process.exit(0)}).catch(e=>{console.error(String(e));p.end();process.exit(1)})"]
-              }]
-            }' \
-            --query 'tasks[0].taskArn' --output text)
-
-          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
-          TASK_ID=$(echo "$TASK_ARN" | rev | cut -d/ -f1 | rev)
-          echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
-
-          echo "Waiting for migration task to complete..."
-          aws ecs wait tasks-stopped --cluster ${{ env.ECS_CLUSTER }} --tasks "$TASK_ARN"
-
-          EXIT_CODE=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} \
-            --tasks "$TASK_ARN" \
-            --query 'tasks[0].containers[0].exitCode' --output text)
-
-          echo "Migration task exit code: $EXIT_CODE"
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "::error::Migration task failed with exit code $EXIT_CODE"
-            # Fetch logs for debugging
-            aws logs get-log-events \
-              --log-group-name /ecs/lp-internal-mcp-server \
-              --log-stream-name "ecs/mcp-server/$TASK_ID" \
-              --query 'events[*].message' --output text || true
-            exit 1
-          fi
-
-  # ─── Deploy MCP Server ─────────────────────────────────────────
-  deploy-mcp-server:
-    needs: [changes, migrate]
-    if: always() && needs.changes.result == 'success' && needs.migrate.result == 'success' && needs.changes.outputs.mcp-server == 'true'
-    runs-on: ubuntu-latest
-    environment: production
+    outputs:
+      taskdef-arn: ${{ steps.taskdef.outputs.arn }}
     steps:
       - uses: actions/checkout@v4
 
@@ -214,12 +167,162 @@ jobs:
           echo "arn=$ARN" >> "$GITHUB_OUTPUT"
           echo "Registered: $ARN"
 
+  # ─── Run database migrations ─────────────────────────────────────
+  # Runs after the image is built and before any service deploy. Uses an ECS
+  # one-off task because the GitHub Actions runner cannot reach RDS (private
+  # subnet), pinned to the revision `build-mcp-server` just registered so the
+  # migrations it applies are the ones in the commit under deploy.
+  migrate:
+    needs: [changes, build-mcp-server]
+    if: always() && needs.build-mcp-server.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get network config from MCP server service
+        id: network
+        run: |
+          SUBNET=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} \
+            --services lp-internal-mcp-server \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets[0]' \
+            --output text)
+          SG=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} \
+            --services lp-internal-mcp-server \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups[0]' \
+            --output text)
+          echo "subnet=$SUBNET" >> "$GITHUB_OUTPUT"
+          echo "sg=$SG" >> "$GITHUB_OUTPUT"
+
+      - name: Run migrations via ECS one-off task
+        id: run
+        run: |
+          # Applies pending migrations with `prisma migrate deploy`, run inside the
+          # mcp-server image because the GitHub runner cannot reach RDS (private subnet).
+          #
+          # The image carries everything this needs: the prisma CLI (a devDependency of
+          # @lp-ai/lib-db, and the runner stage copies node_modules from the builder),
+          # packages/db/prisma/migrations, and prisma.config.ts at /workspace. The task
+          # definition already injects DATABASE_URL from Secrets Manager.
+          #
+          # prisma.config.ts resolves its `schema` and `migrations.path` relative to
+          # ITSELF, not to the process cwd, so `--config prisma.config.ts` from
+          # /workspace is correct regardless of the image's WORKDIR.
+          #
+          # HISTORY, so this is not "simplified" back: until 2026-08-17 this step ran a
+          # read-only `SELECT migration_name FROM _prisma_migrations` and exited 0. It
+          # applied nothing, while being named `migrate`, titled "Run migrations", and
+          # gated by all three deploy jobs. Work package #220. Then until 2026-08-18 it
+          # ran against an unpinned task definition, so it applied the PREVIOUS
+          # release's migration set — #295. The `--task-definition` below MUST stay
+          # pinned to the revision built from this commit.
+
+          cat > /tmp/overrides.json <<'JSON'
+          {
+            "containerOverrides": [{
+              "name": "mcp-server",
+              "command": [
+                "sh", "-c",
+                "cd /workspace && node_modules/.bin/prisma migrate deploy --config prisma.config.ts && node_modules/.bin/prisma migrate status --config prisma.config.ts"
+              ]
+            }]
+          }
+          JSON
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --task-definition ${{ needs.build-mcp-server.outputs.taskdef-arn }} \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ steps.network.outputs.subnet }}],securityGroups=[${{ steps.network.outputs.sg }}],assignPublicIp=ENABLED}" \
+            --overrides file:///tmp/overrides.json \
+            --query 'tasks[0].taskArn' --output text)
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+          TASK_ID=$(echo "$TASK_ARN" | rev | cut -d/ -f1 | rev)
+          echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
+
+          echo "Waiting for migration task to complete..."
+          aws ecs wait tasks-stopped --cluster ${{ env.ECS_CLUSTER }} --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+
+          # Unconditionally. The applied-migration list is the whole point of the job and
+          # fetching it only on failure is why nobody noticed the step applied nothing —
+          # a successful run left no record anywhere outside CloudWatch.
+          LOGS=$(aws logs get-log-events \
+            --log-group-name /ecs/lp-internal-mcp-server \
+            --log-stream-name "ecs/mcp-server/$TASK_ID" \
+            --query 'events[*].message' --output text) || {
+              echo "::warning::could not fetch migration task logs"
+              LOGS=""
+            }
+          echo "--- migration task output ---"
+          echo "$LOGS"
+          echo "--- end migration task output ---"
+          printf '%s' "$LOGS" > /tmp/migrate-logs.txt
+
+          echo "Migration task exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Migration task failed with exit code $EXIT_CODE — no service was deployed"
+            exit 1
+          fi
+
+      - name: Assert the image's migration set matches this commit
+        run: |
+          # The tripwire for #295. `prisma migrate deploy` prints "N migrations found
+          # in prisma/migrations", where N is the count of migration directories in
+          # the IMAGE. If that disagrees with the count in the checked-out commit, the
+          # task ran an image built from some other commit and its success means
+          # nothing. Cheap, and it catches this whole class permanently.
+          EXPECTED=$(find packages/db/prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+
+          REPORTED=$(grep -oE '[0-9]+ migrations? found in prisma/migrations' /tmp/migrate-logs.txt \
+            | head -1 | grep -oE '^[0-9]+' || true)
+
+          if [ -z "$REPORTED" ]; then
+            echo "::error::Could not read a migration count from the task log — cannot prove which image ran. Expected $EXPECTED migrations for ${{ github.sha }}."
+            exit 1
+          fi
+
+          echo "Migrations in commit ${{ github.sha }}: $EXPECTED"
+          echo "Migrations reported by the task image:  $REPORTED"
+
+          if [ "$REPORTED" != "$EXPECTED" ]; then
+            echo "::error::Migration set mismatch — the task image carries $REPORTED migrations but commit ${{ github.sha }} has $EXPECTED. The migrate job ran the wrong image (see #295); migrations from this commit were NOT applied."
+            exit 1
+          fi
+          echo "Migration sets match — the task ran this commit's image."
+
+  # ─── Deploy MCP Server ─────────────────────────────────────────
+  # The image and task definition were built by `build-mcp-server`; this job
+  # only rolls the service onto the revision that `migrate` has already
+  # migrated the database for.
+  deploy-mcp-server:
+    needs: [changes, build-mcp-server, migrate]
+    if: always() && needs.changes.result == 'success' && needs.migrate.result == 'success' && needs.changes.outputs.mcp-server == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Deploy to ECS
         run: |
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service lp-internal-mcp-server \
-            --task-definition ${{ steps.taskdef.outputs.arn }} \
+            --task-definition ${{ needs.build-mcp-server.outputs.taskdef-arn }} \
             --force-new-deployment
 
       - name: Wait for stability

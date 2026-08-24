@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "funder": "Allen Hiles Fund (Hilles Fund)",
+    "program": "Grant application (2024 cycle)",
+    "framing": "silent",
+    "due": "2024-09-15",
+    "note": "Blank Grant Response Template from data/Grants/Prospects and Proposals/Allen Hiles/2024/. Funding range $4k-$10k. No word limits printed on the template; recorded as no limit."
+  },
+  "questions": [
+    { "text": "Description of your organization: Mission" },
+    { "text": "Description of your organization: Organizational background and history (if a first time applicant)" },
+    { "text": "Description of your organization: Services provided" },
+    { "text": "What are your organization's goals and objectives for the year and how will this grant help you implement these goals?" },
+    { "text": "Geographic area served by the project." },
+    { "text": "How does your organization include the people it serves in its decision-making process?" },
+    { "text": "How does your organization's leadership reflect its constituency?" },
+    { "text": "What is the need for the project? Who will benefit from it, including number of people served? How will the project help those served? What do you expect to be its impact?" },
+    { "text": "Describe how the project will operate. Include hours, days and months of operation, full- and part-time staff and their qualifications. If volunteers are used, describe how they are recruited and trained." },
+    { "text": "Who will be in charge of the project? What are their qualifications?" },
+    { "text": "How will you measure the impact of this project?" }
+  ]
+}

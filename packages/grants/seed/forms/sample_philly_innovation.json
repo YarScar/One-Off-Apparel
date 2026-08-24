@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "funder": "Example Philadelphia Innovation & Workforce Fund",
+    "program": "Youth Tech Pathways (FY26)",
+    "framing": "silent",
+    "note": "Synthetic form built from real recurring question types captured in sources/philadelphia-regional-and-sector-forms.md (Seybert, Barra, PAsmart, SF-424, corporate eligibility quizzes). Not a real funder. Exercises the v0.2 question-bank additions."
+  },
+  "questions": [
+    { "text": "Are you a 501(c)(3) public charity? Note that schools and educational institutions are ineligible." },
+    { "text": "Is your organization located in or serving our required geography?" },
+    { "text": "What is your organization's total annual operating budget or expenses?" },
+    { "text": "Does your target population meet our age and low-income thresholds?" },
+    { "text": "Mission statement.", "limit": { "unit": "characters", "max": 1000 } },
+    { "text": "How is your approach new and different from existing solutions, and why is it more effective?", "limit": { "unit": "characters", "max": 3000 } },
+    { "text": "Why is now the right time to do this work?" },
+    { "text": "What is the potential to catalyze change over the next 3, 5, and 10 years?", "limit": { "unit": "characters", "max": 2000 } },
+    { "text": "Please share an example that illustrates your theory of change and impact.", "limit": { "unit": "words", "max": 300 } },
+    { "text": "Which underrepresented population do you target, what barriers do they face, and how do you remove them?", "limit": { "unit": "words", "max": 300 } },
+    { "text": "Describe your employer engagement strategy and connections to jobs, apprenticeship, or career pathways." },
+    { "text": "What measurable outcomes will demonstrate progress?" },
+    { "text": "What risks or limitations do you anticipate, and how will you manage them?", "limit": { "unit": "characters", "max": 2000 } },
+    { "text": "Why is your organization the right one to do this, and what is its capacity and past performance?", "limit": { "unit": "characters", "max": 2000 } },
+    { "text": "How do your leadership and staff reflect the lived experience of the people you serve?", "limit": { "unit": "words", "max": 250 } },
+    { "text": "What is your Unique Entity Identifier (UEI) and SAM.gov status?" },
+    { "text": "What are the congressional and state legislative districts for the project?" },
+    { "text": "How many participants will you serve and how many jobs will be created?" },
+    { "text": "What is your indirect cost rate, and do you have a NICRA?" },
+    { "text": "Attach your most recent audited financials or IRS Form 990." },
+    { "text": "What steps will you take to ensure equitable access and participation for those facing barriers?" }
+  ]
+}

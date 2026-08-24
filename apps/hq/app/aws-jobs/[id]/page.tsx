@@ -3,23 +3,43 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { z } from 'zod';
 
-interface AwsJob {
-  id: string;
-  developer: string;
-  actionType: string;
-  resourceType: string;
-  parameters: { terraformCode: string };
-  planOutput: string | null;
-  status: string;
-  error: string | null;
-  approver: string | null;
-  createdAt: string;
-  updatedAt: string;
+/**
+ * The job shape, as a schema rather than a bare interface.
+ *
+ * This page previously read `await res.json()` — an `any` — straight into `setJob`, so
+ * every field below was an assumption the code never checked. A response missing
+ * `parameters` rendered `job.parameters.terraformCode` and crashed the page with no
+ * indication that the API was at fault. Parsing at the boundary is the convention in this
+ * repo for external data (CLAUDE.md: "Zod schemas for all external data"), and it is what
+ * lets the `any`-propagation lint errors go away by being *fixed* rather than silenced.
+ */
+const AwsJobSchema = z.object({
+  id: z.string(),
+  developer: z.string(),
+  actionType: z.string(),
+  resourceType: z.string(),
+  parameters: z.object({ terraformCode: z.string() }),
+  planOutput: z.string().nullable(),
+  status: z.string(),
+  error: z.string().nullable(),
+  approver: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+type AwsJob = z.infer<typeof AwsJobSchema>;
+
+/** The API's own error envelope, for the non-ok path. */
+const ErrorEnvelopeSchema = z.object({ error: z.string() });
+
+function messageOf(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
 }
 
 export default function AwsJobReviewPage() {
-  const { id } = useParams() as { id: string };
+  const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<AwsJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -28,21 +48,21 @@ export default function AwsJobReviewPage() {
 
   useEffect(() => {
     fetch(`/api/aws-jobs/${id}`)
-      .then((res) => {
+      .then(async (res) => {
         if (!res.ok) throw new Error('Failed to load job');
-        return res.json();
+        return AwsJobSchema.parse(await res.json());
       })
       .then((data) => {
         setJob(data);
         setLoading(false);
       })
-      .catch((err) => {
-        setError(err.message);
+      .catch((err: unknown) => {
+        setError(messageOf(err, 'Failed to load job'));
         setLoading(false);
       });
   }, [id]);
 
-  const handleAction = async (action: 'approve' | 'reject') => {
+  const handleAction = async (action: 'approve' | 'reject'): Promise<void> => {
     setActionLoading(true);
     setError(null);
     setMessage(null);
@@ -52,12 +72,17 @@ export default function AwsJobReviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, approver: 'security-admin@launchpadphilly.org' }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Action failed');
-      setJob(data);
+      const body: unknown = await res.json();
+      if (!res.ok) {
+        // The API's message when it supplies one, the generic when it does not — the old
+        // `data.error ?? 'Action failed'` read a field off an unvalidated `any`.
+        const envelope = ErrorEnvelopeSchema.safeParse(body);
+        throw new Error(envelope.success ? envelope.data.error : 'Action failed');
+      }
+      setJob(AwsJobSchema.parse(body));
       setMessage(`Job successfully ${action === 'approve' ? 'approved' : 'rejected'}!`);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(messageOf(err, 'Action failed'));
     } finally {
       setActionLoading(false);
     }
@@ -185,14 +210,14 @@ export default function AwsJobReviewPage() {
                 <div className="flex gap-3">
                   <button
                     disabled={actionLoading}
-                    onClick={() => handleAction('approve')}
+                    onClick={() => { void handleAction('approve'); }}
                     className="flex-1 rounded-lg bg-green-600 px-4 py-2.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 disabled:opacity-50 transition"
                   >
                     {actionLoading ? 'Processing...' : 'Approve Plan'}
                   </button>
                   <button
                     disabled={actionLoading}
-                    onClick={() => handleAction('reject')}
+                    onClick={() => { void handleAction('reject'); }}
                     className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:opacity-50 transition"
                   >
                     Reject

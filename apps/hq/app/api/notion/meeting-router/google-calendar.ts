@@ -65,7 +65,7 @@ async function getAccessTokenForUser(userEmail: string): Promise<string> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Google token exchange failed for ${userEmail}: ${res.status} — ${text.slice(0, 200)}`);
+    throw new Error(`Google token exchange failed for ${userEmail}: ${String(res.status)} — ${text.slice(0, 200)}`);
   }
   const data = (await res.json()) as { access_token?: string };
   if (!data.access_token) throw new Error(`No access_token returned for ${userEmail}`);
@@ -109,7 +109,7 @@ export async function listEventsForUser(
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Calendar events.list failed for ${userEmail}: ${res.status} — ${text.slice(0, 200)}`);
+    throw new Error(`Calendar events.list failed for ${userEmail}: ${String(res.status)} — ${text.slice(0, 200)}`);
   }
   const data = (await res.json()) as { items?: CalendarEvent[] };
   return data.items ?? [];

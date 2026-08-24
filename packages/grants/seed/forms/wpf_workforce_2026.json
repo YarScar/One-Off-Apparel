@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "funder": "William Penn Foundation",
+    "program": "Workforce Training Supports RFP (2026-2028)",
+    "framing": "fiscal_sponsorship",
+    "due": "2026-07-30",
+    "note": "Real working draft (WPF_Workforce_Supports_Draft.docx). Character counts (with spaces) noted under each narrative field. Transcribed the field-level and narrative questions with their stated character caps. The 'Suggested Character Count 5,000-10,000' is a range, not a hard cap — recorded as the upper bound with a note."
+  },
+  "questions": [
+    { "text": "Will a Fiscal Sponsor be used for this grant?" },
+    { "text": "Legal Name of Organization" },
+    { "text": "EIN" },
+    { "text": "Address" },
+    { "text": "Website" },
+    { "text": "Mission Statement", "limit": { "unit": "characters", "max": 700 } },
+    { "text": "Proposed Project Title", "limit": { "unit": "characters", "max": 120 } },
+    { "text": "Project description", "limit": { "unit": "characters", "max": 250 } },
+    { "text": "Anticipated Start Date for Project Funded by WPF" },
+    { "text": "Duration of Funding (months)" },
+    { "text": "Request Amount" },
+    { "text": "Describe the proposed project. Include a detailed description of the proposed activities, including location of the work, frequency, and duration of interaction with proposed beneficiaries, the timeline for the entire project, and the number and demographics of beneficiaries/participants expected to be served. If the proposed project involves a partnership with other organizations, describe how the organizations will collaborate and the complementary roles each partner will play." }
+  ]
+}

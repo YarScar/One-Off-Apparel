@@ -258,7 +258,7 @@ ${args.program_area ? `- \`query_enrollment\` with query_type "by_phase" filtere
 **Financials:**
 - \`get_finance_brief\`${args.time_period ? ` with period matching "${args.time_period}"` : ''} — fund balances, recent gifts, revenue snapshot.
 - \`query_finances\` with query_type "budget_actuals" — budget vs. actual for demonstrating fiscal discipline.
-${isProposal ? `- \`query_finances\` with query_type "phase_budget_summary" — per-phase cost breakdowns for budget narrative.` : `- \`query_finances\` with query_type "ytd" — year-to-date financial performance.`}
+${isProposal ? `- \`query_finances\` with query_type "phase_budget_dashboard" — per-phase cost breakdowns for budget narrative.` : `- \`query_finances\` with query_type "ytd" — year-to-date financial performance.`}
 
 ### Pull if relevant to the funder's requirements:
 

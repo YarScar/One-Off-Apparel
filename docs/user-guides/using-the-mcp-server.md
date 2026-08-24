@@ -88,7 +88,8 @@ These don't return raw data. Instead, they give Claude a structured workflow to 
 |---|---|
 | `skill_board_reporting` | Generates board packets, KPI scorecards, program updates, fundraising reports |
 | `skill_finance_audit` | Produces audit-ready financials — monthly close, funder spend reports, reconciliation |
-| `skill_grant_prospecting` | Finds and ranks potential funders based on giving history and alignment |
+| `skill_grant_prospecting` | Finds and ranks potential funders based on giving history and alignment (interactive, checkpoint-based) |
+| `skill_grant_sourcing_evaluation` | Sources and scores grant opportunities against a fixed weighted rubric, immediately, in a table plus a downloadable spreadsheet and PDF (non-interactive) |
 | `skill_grant_writing` | Assembles grant proposals or funder reports using live data and your org's voice |
 
 ### Clarifying What Data Is Available

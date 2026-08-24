@@ -138,3 +138,26 @@ export function parseStr(raw: Record<string, unknown>, key: string): string | un
 export function parseNum(raw: Record<string, unknown>, key: string): number | undefined {
   return typeof raw[key] === 'number' ? (raw[key] as number) : undefined;
 }
+
+/**
+ * A string filter, with blank treated as absent, and trimmed.
+ *
+ * Lives beside `parseStr` because every tool that domain-checks a filter needs it, not
+ * just `query_enrollment` where it started. `parseStr` alone returns `''` for a blank
+ * value present in the payload, and a blank must not reach either the query or the
+ * domain check: as a query predicate it is a literal column match on the branches that
+ * read the value directly and a `{ not: null }` on the branches that test truthiness —
+ * one payload, two answers — and as a domain check it errors on the empty string, which
+ * is not a value the caller asked to match.
+ *
+ * Trimming is part of the same thing: ` 'Completed' ` is the value with the same intent,
+ * and an untrimmed one matches nothing while reporting itself applied.
+ *
+ * Treating blank as absent still has to be *reported* where a tool echoes its filters —
+ * see `blankFilters` in `tools/query-enrollment.ts`. Silently dropping it is the same
+ * unscoping from the other direction.
+ */
+export function filterStr(raw: Record<string, unknown>, key: string): string | undefined {
+  const trimmed = parseStr(raw, key)?.trim();
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
+}

@@ -28,7 +28,9 @@ export function TokenUsageDateFilter(): JSX.Element {
     params.set('tokens_preset', id);
     params.delete('tokens_from');
     params.delete('tokens_to');
-    startTransition(() => router.push(`/?${params.toString()}#token-usage`));
+    startTransition(() => {
+      router.push(`/?${params.toString()}#token-usage`);
+    });
   };
 
   const applyCustom = (from: string, to: string): void => {
@@ -38,7 +40,9 @@ export function TokenUsageDateFilter(): JSX.Element {
     else params.delete('tokens_from');
     if (to) params.set('tokens_to', to);
     else params.delete('tokens_to');
-    startTransition(() => router.push(`/?${params.toString()}#token-usage`));
+    startTransition(() => {
+      router.push(`/?${params.toString()}#token-usage`);
+    });
   };
 
   const today = isoDate(new Date());
@@ -54,7 +58,7 @@ export function TokenUsageDateFilter(): JSX.Element {
             <button
               key={p.id}
               type="button"
-              onClick={() => applyPreset(p.id)}
+              onClick={() => { applyPreset(p.id); }}
               disabled={isPending}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                 active

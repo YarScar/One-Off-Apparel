@@ -17,20 +17,44 @@ pnpm install
 # 2. Bring up local Postgres + pgvector
 pnpm db:up
 
-# 3. Create the local .env from the template (already exists if you cloned the repo)
+# 3. Create the local .env from the template
 cp .env.example .env   # only if .env is missing
 
-# 4. Apply the schema to the local DB (uses prisma db push, non-interactive)
-pnpm db:generate
-pnpm --filter @lp-ai/lib-db push
+# .env.example ships DATABASE_URL blank, and a blank value fails with no useful error.
+# Set it to the docker-compose credentials (note port 5433, not 5432):
+#   DATABASE_URL=postgresql://lpapp:lpapp@localhost:5433/lpinternal?sslmode=disable
 
-# 5. Seed sample data (3 students, donors, certifications, finance)
+# 4. Build the schema with the MIGRATION path — not `db push`. See the warning below.
+pnpm db:generate
+pnpm db:migrate
+
+# 5. Seed sample data (3 students, 11 aliases, 2 donors, 3 gifts, 4 finance snapshots)
 pnpm db:seed
 
-# 6. Verify
+# 6. Build the MCP server — REQUIRED before `pnpm test`, not just for running the server.
+#    The integration suite spawns `apps/mcp-server/dist/index.js`; without it you get
+#    the unhelpful failure `RPC initialize timed out`.
+pnpm --filter @lp-ai/mcp-server build
+
+# 7. Verify — expect 131 passed, 0 skipped, 10 files
 pnpm -r typecheck
-pnpm test                   # 42 tests; entity-resolution + MCP integration suites need step 2 running
+pnpm test
 ```
+
+> **Use `pnpm db:migrate`, never `pnpm --filter @lp-ai/lib-db push`.**
+>
+> This runbook previously said to use `db push`. Two reasons that was wrong:
+>
+> 1. **`db push` runs no migration SQL**, so none of the `tool_permissions` seed rows land. The ACL
+>    registry (`apps/mcp-server/src/permissions.ts`) **fails closed** — a tool with no row is denied
+>    to everyone, including admin. A `db push` environment therefore returns `permission_denied` for
+>    every tool call, which looks like a broken server rather than an empty table.
+> 2. **`db push` hides schema/migration drift.** It diff-syncs from `schema.prisma` and writes no
+>    migration file, which is exactly how two tables ended up in `schema.prisma` with no migration
+>    creating them. See `packages/grants/CHANGELOG.md`, 2026-08-03.
+>
+> `db:migrate` is also how production builds its schema, so a local environment built this way is
+> production-equivalent. Reserve `db push` for throwaway experiments you intend to delete.
 
 ## Running the apps
 
@@ -89,7 +113,7 @@ Each connector exposes a CLI:
 pnpm sync:sheets       # google-sheets (live — 12 syncs)
 pnpm sync:aplos        # aplos (live)
 pnpm sync:notion       # notion meeting transcripts (live)
-pnpm sync:drive        # google-drive (skeleton)
+pnpm sync:drive        # google-drive (Grants catalog discovery)
 pnpm sync:slack        # slack (skeleton)
 ```
 
@@ -114,17 +138,27 @@ psql "$DATABASE_URL" -c "SELECT tool_name, duration_ms, called_at FROM usage_log
 
 ## Building & deploying the app images
 
-Production images are built and deployed by **GitHub Actions** (`.github/workflows/deploy.yml`) — auto on push to `master`, or manually with `gh workflow run deploy.yml -f services=hq`. You do not build or push images by hand for local development; `pnpm dev` runs the apps directly against the local Postgres.
+Production images are built and deployed by **GitHub Actions** (`.github/workflows/deploy.yml`) — auto on push to `main`, or manually with `gh workflow run deploy.yml -f services=hq`. You do not build or push images by hand for local development; `pnpm dev` runs the apps directly against the local Postgres.
 
 ## Common operations
 
 | Task | Command |
 |---|---|
-| Reset local DB | `pnpm db:down && pnpm db:up && pnpm --filter @lp-ai/lib-db push && pnpm db:seed` |
+| Reset local DB | `pnpm db:down && pnpm db:up && pnpm db:migrate && pnpm db:seed` |
+| Re-seed a DB that already has rows | `cd packages/db && SEED_FORCE=true node --env-file=../../.env dist/seed-cli.js` |
 | Open Prisma Studio (GUI) | `pnpm db:studio` |
 | Tail Postgres logs | `docker logs -f lp-internal-postgres` |
-| Run a single test file | `pnpm test --run packages/db/src/entity-resolution.test.ts` |
-| Rebuild Prisma client after schema change | `pnpm db:generate` then `pnpm --filter @lp-ai/lib-db push` |
+| Run a single test file | `pnpm exec vitest run packages/db/src/entity-resolution.test.ts` |
+| Rebuild Prisma client after schema change | `pnpm db:generate` then `pnpm db:migrate` |
+| Check migration state | `pnpm exec prisma migrate status --config ./prisma.config.ts` |
+
+**On re-seeding.** `pnpm db:seed` is guarded: if `students` or `donor_contacts` already hold rows it
+no-ops and reports `{"studentsInserted":0,"donorsInserted":0}`. That is the guard working, not a
+failure. Use `SEED_FORCE=true` to wipe and rebuild the sample data.
+
+**A full `pnpm test` run leaves `students` empty.** `packages/db/src/entity-resolution.test.ts` wipes
+students, staff, and aliases in a `beforeEach` for isolation and does not re-seed afterwards. This is
+expected. Re-seed with `SEED_FORCE=true` if you want the sample data back for manual poking.
 
 ## Known things that won't work without credentials
 

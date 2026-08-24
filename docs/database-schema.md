@@ -4,7 +4,7 @@ ORM: **Prisma**. The schema lives in `packages/db/prisma/schema.prisma`. The gen
 
 Extensions: `pgvector` (vector similarity), `pg_trgm` (trigram fuzzy matching).
 
-## Tables (30 models)
+## Tables (31 models)
 
 ### Student & Staff Core
 

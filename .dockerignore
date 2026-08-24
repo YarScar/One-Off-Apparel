@@ -15,3 +15,7 @@
 .env.*.local
 docker-compose.yml
 infra/postgres-init
+
+# Dev-only grant tooling and raw source material — never part of a runtime image
+packages/grants/scripts
+packages/grants/data

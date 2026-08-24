@@ -45,8 +45,9 @@ export function CompetencyAttendanceHeatmap({ data }: Props): JSX.Element {
   // Build a lookup: competency → bucket → cell
   const lookup = new Map<string, Map<string, HeatmapCell>>();
   for (const cell of data) {
-    if (!lookup.has(cell.competency)) lookup.set(cell.competency, new Map());
-    lookup.get(cell.competency)!.set(cell.bucket, cell);
+    const existing = lookup.get(cell.competency);
+    if (existing) existing.set(cell.bucket, cell);
+    else lookup.set(cell.competency, new Map([[cell.bucket, cell]]));
   }
 
   const values = data.map((d) => d.avg_growth).filter((v): v is number => v != null);

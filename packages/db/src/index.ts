@@ -1,7 +1,7 @@
 export { prisma } from './client.js';
 
-export { PrismaClient } from '../generated/prisma/index.js';
-export type { Prisma, StudentEmployment } from '../generated/prisma/index.js';
+export { PrismaClient, Prisma } from '../generated/prisma/index.js';
+export type { StudentEmployment } from '../generated/prisma/index.js';
 
 export {
   resolveEntity,

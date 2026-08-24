@@ -14,9 +14,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@lp-ai/connector-google-drive": "workspace:*",
     "@lp-ai/lib-config": "workspace:*",
     "@lp-ai/lib-db": "workspace:*",
     "@lp-ai/lib-embedding": "workspace:*",
+    "@lp-ai/lib-grants": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@sentry/node": "^10.57.0",
     "jose": "^6.2.3",
