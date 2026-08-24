@@ -52,6 +52,7 @@ export const envSchema = z.object({
   GOOGLE_SHEETS_ATTENDANCE_COHORT_1_LIFTOFF: optional,
   GOOGLE_SHEETS_ATTENDANCE_COHORT_2: optional,
   GOOGLE_SHEETS_ATTENDANCE_COHORT_3: optional,
+  GOOGLE_SHEETS_ATTENDANCE_COHORT_4: optional,
   GOOGLE_SHEETS_FINANCE_WORKBOOK: optional,
   /** Quote Bank spreadsheet ID. Rows are embedded into document_chunks (source='sheets', subtype='quote'). */
   GOOGLE_SHEETS_QUOTE_BANK_ID: optional,

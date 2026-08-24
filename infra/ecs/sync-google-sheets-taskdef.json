@@ -42,6 +42,7 @@
         { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_1",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_1::" },
         { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_2",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_2::" },
         { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_3",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_3::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_4",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_4::" },
         { "name": "GOOGLE_SHEETS_FINANCE_WORKBOOK",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_FINANCE_WORKBOOK::" },
         { "name": "GOOGLE_SHEETS_QUOTE_BANK_ID",        "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_QUOTE_BANK_ID::" },
         { "name": "OPENAI_API_KEY",                     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/openai:OPENAI_API_KEY::" }
