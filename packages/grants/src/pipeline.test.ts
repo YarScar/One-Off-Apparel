@@ -460,6 +460,32 @@ describe('structured values — a stored short value is the answer, keyed by que
     expect(none.answer).toBe('default value');
   });
 
+  it('attaches the compression-infeasible warning to a structured value too, not just narrative text', () => {
+    // Before resolveTextAnswer unified the two branches, only the narrative branch attached
+    // infeasibleRule's warning to handback.extraRules — the structured branch dropped it silently.
+    const out = buildAnswer(
+      match({ answer_type: 'field', kb_ref: 'kb.program_desc', matched_id: 'cover.project_title' }),
+      WORDS(1),
+      {
+        ...kbWith('kb.program_desc', 'long narrative', true),
+        answers: {
+          'kb.program_desc': {
+            label: 'L',
+            verified: true,
+            text: 'long narrative',
+            structured: { 'cover.project_title': { value: 'one two three four five six', verified: true } },
+          },
+        },
+      },
+    );
+    expect(out.status).toBe<AnswerStatus>('compression_infeasible');
+    expect(out.actor).toBe('llm');
+    expect(out.action).toContain('which facts you dropped');
+    expect(out.handback?.rules.length).toBeGreaterThan(RESIZE_RULES.length);
+    expect(out.handback?.rules[0]).toContain('Facts WILL have to be dropped');
+    expect(out.handback?.rules).toEqual(expect.arrayContaining([...RESIZE_RULES]));
+  });
+
   it('lets a per-value verified flag override the entry-level one', () => {
     const out = buildAnswer(
       match({ answer_type: 'field', kb_ref: 'kb.profile.identity', matched_id: 'cover.fiscal_year' }),

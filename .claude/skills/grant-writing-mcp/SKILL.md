@@ -148,7 +148,9 @@ an empty result is a gap to report, never a licence to write the section from me
 Then apply these rules, which are where drafts actually go wrong.
 
 **Stamp every figure with its source tool and an `asOf` date.** Re-check anything measured more than
-three days before submission.
+three days before submission. If `grant_verify_figure` is available on this deployment, call it on the
+finished text with the drafted answer, the `query_*` call, and its result before finalizing — it
+catches a figure that was typed wrong or drifted between the call and the draft.
 
 **Any wage total containing an active job is not reproducible.** `query_employment` computes
 `current_earned` for active jobs as weeks-since-start times weekly hours times wage, against today. Two

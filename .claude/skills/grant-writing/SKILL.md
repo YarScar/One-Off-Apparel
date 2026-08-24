@@ -28,11 +28,11 @@ Write `{ "meta": { "funder", "program", "due" }, "questions": [{ "text", "limit"
 to the scratchpad. `unit` is `"words"` or `"characters"`. Record limits **verbatim** from the funder;
 never infer one. Seven real fixtures live in `packages/grants/seed/forms/` and can be passed by id.
 
-Prior filed responses are reachable through the **Drive MCP → `search_documents` chain**
-(`source` filter scoped to the grants corpus once ingested), never through a local mirror — the
-server has no `data/Grants` tree and none of its 1,234 files are in git. Many filings hold the real
-filed response alongside the questions — read the prior response for reusable material, but re-verify
-every figure in it.
+Prior filed responses are reachable through the **`find_grant_documents` → `get_grant_document_text`
+chain** (`search_documents`/`document_chunks` are empty for every grant source — see
+`packages/grants/docs/STATE.md`), never through a local mirror — the server has no `data/Grants` tree
+and none of its 1,234 files are in git. Many filings hold the real filed response alongside the
+questions — read the prior response for reusable material, but re-verify every figure in it.
 
 ## Step 1 — Run the work order
 
@@ -86,8 +86,8 @@ node .claude/skills/grant-writing/scripts/gapfill.mjs --validate candidates.json
 Work the source ladder in order, stopping when a rung settles it: live platform data → internal docs
 and conversations → **prior filed applications** → the Notion research wiki → the funder's own
 material → ask staff. Rung 3 is the highest-yield and the most often skipped, because for most
-questions someone has already written a good answer for another funder. Reach it through the same
-MCP chain as rung 2 — `search_documents` scoped to the grants corpus — not a local grep. The
+questions someone has already written a good answer for another funder. Reach it through
+`find_grant_documents` → `get_grant_document_text` (see Step 0), not a local grep. The
 `corpus_search.py` script is a dev-only fallback for when the Drive corpus is not yet ingested:
 
 ```bash
@@ -184,6 +184,9 @@ Then, per `references/figures.md`:
   populations and the question does not say which it wants.
 - **Stamp every confirmed figure** with its source tool and `asOf` date. Re-check anything measured
   more than three days before submission.
+- **Call `grant_verify_figure`** on the finished text before finalizing any answer that quotes a live
+  figure — it diffs the drafted number against the actual `query_*` result, so a figure that got typed
+  wrong or drifted between the call and the draft is caught here rather than by a funder.
 - **ACL denial is not permission to quote the frozen figure.** Write `[DATA UNAVAILABLE]`. Neither is a
   tool that returns something other than what you asked for: `get_finance_brief` carries no income or
   expense totals, so it cannot answer a budget question no matter how successfully it returns.

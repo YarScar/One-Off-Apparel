@@ -25,6 +25,55 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-24
+
+### Fixed — WP #330: `verify.ts` false-alarmed on every magnitude-suffixed figure it was supposed to catch
+
+`verifyFigureAnswer` ran both the drafted figure and the live query result through
+`extractNumericClaims`, whose regex has no `[MKB]` suffix arm — `'$1.34M'` normalized to `'1.34'`,
+which a live raw number like `1340000` never produces. The check reliably flagged the exact figure
+shape (e.g. `annual_budget`) it exists to verify. Added `expandMagnitudeSuffix` (`figures.ts`) and a
+fallback comparison in `verify.ts` that expands the suffix and rounds the live number to the
+mantissa's own decimal precision before comparing. Deliberately did not widen `extractNumericClaims`
+itself — `resize.ts` relies on its suffix-blindness for a source-vs-rewrite comparison where it's
+benign. Two regression cases added to `verify.test.ts`.
+
+### Fixed — WP #330: `pipeline.ts`'s structured-value branch silently dropped the compression-infeasible warning
+
+`buildAnswer`'s structured-value branch and narrative branch hand-duplicated the same
+gate→measure→`needs_expand`/`fits`/`needs_resize` sequence (`pipeline.ts`), and only the narrative copy
+attached `infeasibleRule`'s "facts will have to be dropped" warning to `handback.extraRules` on
+`compression_infeasible` — the structured copy dropped it. Extracted the shared sequence into
+`resolveTextAnswer()`, so both branches now route through the same code and both attach the warning.
+Also exported `infeasibleRule` from `resize.ts` (previously private) so `pipeline.ts` calls it instead
+of hand-duplicating the sentence, and hoisted a duplicate `measureAgainst` call inside the
+`derive_from_reference` branch into a single `const`. Added a structured-value `compression_infeasible`
+test case to `pipeline.test.ts` (none existed) to pin the fix. No behaviour change to any passing case
+— all 74 existing `pipeline.test.ts` cases plus the new one pass.
+
+### Changed — WP #330: moved `pipeline.ts`'s Markdown rendering to its own file
+
+`pipeline.ts` had crossed 1000 lines, most of it a presentation block (`STATUS_NOTE`, `BANNER`,
+`renderMarkdown`, `handbackLabel`, `provenance`) with zero coupling back into the resolution logic —
+it only reads `AnswerPlan`/`AnswerStatus`/`DraftPackage` as data. Moved verbatim to
+`packages/grants/src/render-markdown.ts`. `pipeline.ts` re-exports `renderMarkdown` and `STATUS_NOTE`
+from there, so no import elsewhere in the repo needed to change.
+
+### Fixed — WP #330: two grant-writing docs pointed at dead or incomplete paths
+
+`.claude/skills/grant-writing/SKILL.md`'s Step 0 told the reader to reach prior filed responses
+through `search_documents`/`document_chunks`, which is empty for every grant source
+(`packages/grants/docs/STATE.md`); replaced with the `find_grant_documents` → `get_grant_document_text`
+chain the same file's own `references/gap-fill.md` already documents correctly one step later.
+Neither `.claude/skills/grant-writing/SKILL.md` nor `.claude/skills/grant-writing-mcp/SKILL.md`
+mentioned `grant_verify_figure`, despite `grant_build_draft`'s own output telling a caller to run it
+before finalizing a live-figure answer; added a sentence to each file's figure-handling step. Also
+made tool precedence explicit in the tool descriptions themselves: `skill_grant_writing`'s description
+now says to prefer the deterministic `grant_build_draft`/`grant_match_question`/`grant_resize_answer`/
+`grant_verify_figure` pipeline when registered and use itself only as a fallback; `grant_build_draft`'s
+description states plainly that it, not `skill_grant_writing`'s freehand drafting, is the canonical
+fabrication-preventing path.
+
 ## 2026-08-21
 
 ### Fixed — WP #327: `.claude/skills/grant-writing/SKILL.md` had not caught up to WP #326's PLAYBOOK fix

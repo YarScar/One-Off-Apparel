@@ -529,6 +529,33 @@ export function extractNumericClaims(text: string): string[] {
   return matches.map((m) => m.replace(/[$%,\s]/g, ''));
 }
 
+const MAGNITUDE_SUFFIX = /^\$?\s?(\d[\d,]*(?:\.\d+)?)\s?([MKB])$/i;
+const MAGNITUDE_SCALE: Readonly<Record<string, number>> = { K: 1e3, M: 1e6, B: 1e9 };
+
+/**
+ * Expands a magnitude-suffixed currency token (`$1.34M`) to the raw value it stands for, at the
+ * mantissa's own decimal precision — `1.34` and `2` decimal places, not a scaled float.
+ *
+ * Exists for `verify.ts`, which has to compare a drafted figure that may be written either way
+ * (`$1,340,000` or `$1.34M`) against a live query result that is always a raw number. Returns
+ * `undefined` for a token with no suffix — callers fall back to plain string comparison for those.
+ * Deliberately not folded into {@link extractNumericClaims}: that function is also relied on by
+ * `resize.ts` for a same-shaped source-vs-rewrite comparison where the suffix-blindness is
+ * documented as acceptable, and widening it there would change that check's semantics unasked.
+ */
+export function expandMagnitudeSuffix(
+  token: string,
+): { readonly mantissa: number; readonly decimals: number; readonly scale: number } | undefined {
+  const m = token.match(MAGNITUDE_SUFFIX);
+  if (!m || !m[1] || !m[2]) return undefined;
+  const mantissaStr = m[1].replace(/,/g, '');
+  const mantissa = Number(mantissaStr);
+  const decimals = mantissaStr.includes('.') ? (mantissaStr.split('.')[1]?.length ?? 0) : 0;
+  const scale = MAGNITUDE_SCALE[m[2].toUpperCase()];
+  if (scale === undefined) return undefined;
+  return { mantissa, decimals, scale };
+}
+
 /**
  * Currency amounts inside a {@link FigureCheck.claim}, with their magnitude suffix attached.
  *

@@ -14,7 +14,7 @@
  */
 
 import { literalFigures } from './slots.js';
-import { extractNumericClaims } from './figures.js';
+import { expandMagnitudeSuffix, extractNumericClaims } from './figures.js';
 
 export interface FigureCall {
   readonly tool: string;
@@ -61,10 +61,20 @@ export function verifyFigureAnswer(
   numericLeaves(queryResult, liveLeaves);
   const liveValues = [...new Set(liveLeaves)];
   const liveSet = new Set(liveValues);
+  const liveNumbers = liveValues.map(Number).filter(Number.isFinite);
 
-  const unmatched = draftedFigures.filter(
-    (figure) => !extractNumericClaims(figure).every((token) => liveSet.has(token)),
-  );
+  const unmatched = draftedFigures.filter((figure) => {
+    if (extractNumericClaims(figure).every((token) => liveSet.has(token))) return false;
+    // extractNumericClaims strips a magnitude suffix ($1.34M -> "1.34"), which the live side (a raw
+    // number, stringified) never contains — see figures.ts's own docstring on that gap. Fall back to
+    // expanding the suffix and rounding a live number to the mantissa's own precision, so a
+    // suffixed figure isn't flagged as wrong just because it wasn't spelled out in full.
+    const expanded = expandMagnitudeSuffix(figure);
+    if (expanded === undefined) return true;
+    return !liveNumbers.some(
+      (n) => Number((n / expanded.scale).toFixed(expanded.decimals)) === expanded.mantissa,
+    );
+  });
 
   return {
     matched: unmatched.length === 0,
