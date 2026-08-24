@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseStr, parseNum, READ_ONLY_ANNOTATIONS, flattenMessages } from '../tool-helpers.js';
 import {
   grantSourcingEvaluationArgsSchema,
   buildGrantSourcingEvaluationMessages,
@@ -22,7 +22,7 @@ const DESCRIPTION =
 export function registerSkillGrantSourcingEvaluation(server: McpServer): void {
   server.registerTool(
     NAME,
-    { description: DESCRIPTION, inputSchema: grantSourcingEvaluationArgsSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+    { description: DESCRIPTION, inputSchema: grantSourcingEvaluationArgsSchema, annotations: READ_ONLY_ANNOTATIONS },
     (input) =>
       runTool(NAME, input, async () => {
         const raw = input as Record<string, unknown>;
@@ -40,17 +40,7 @@ export function registerSkillGrantSourcingEvaluation(server: McpServer): void {
         };
 
         const result = buildGrantSourcingEvaluationMessages(args);
-        const instructions = result.messages
-          .map((m) => {
-            const text =
-              typeof m.content === 'string'
-                ? m.content
-                : m.content.type === 'text'
-                  ? m.content.text
-                  : '';
-            return `[${m.role.toUpperCase()}]\n${text}`;
-          })
-          .join('\n\n---\n\n');
+        const instructions = flattenMessages(result.messages);
 
         return {
           skill: NAME,

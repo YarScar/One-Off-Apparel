@@ -31,7 +31,14 @@
  * Pure: no database, no network. The sync applies what this returns.
  */
 
-import { looseKey, normalizePath, scopedNameKey } from '@lp-ai/lib-grants';
+import {
+  looseKey,
+  normalizePath,
+  scopedNameKey,
+  type LooseKey,
+  type NormalizedPath,
+  type ScopedNameKey,
+} from '@lp-ai/lib-grants';
 
 import type { DriveFile } from './drive-client.js';
 
@@ -68,9 +75,9 @@ export interface ReconcileResult {
 export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResult {
   const byDriveId = new Map<string, string>();
   const byExactPath = new Map<string, string>();
-  const byNormalizedPath = new Map<string, string[]>();
-  const byLoosePath = new Map<string, string[]>();
-  const byScopedName = new Map<string, string[]>();
+  const byNormalizedPath = new Map<NormalizedPath, string[]>();
+  const byLoosePath = new Map<LooseKey, string[]>();
+  const byScopedName = new Map<ScopedNameKey, string[]>();
 
   for (const row of rows) {
     if (row.driveFileId !== null) byDriveId.set(row.driveFileId, row.id);
@@ -85,7 +92,7 @@ export function reconcile(files: DriveFile[], rows: CatalogRow[]): ReconcileResu
 
   // The Drive side has to be unique too: two files of the same name in one funder's
   // subtree would otherwise both claim the single row that matches either.
-  const driveScopedCounts = new Map<string, number>();
+  const driveScopedCounts = new Map<ScopedNameKey, number>();
   for (const file of files) {
     const key = scopedNameKey(file.path);
     driveScopedCounts.set(key, (driveScopedCounts.get(key) ?? 0) + 1);

@@ -22,7 +22,7 @@ A working prototype proves the method and runs today. This package moves that me
 | Where the project stands, and the OpenProject work packages | [`admin/OPENPROJECT-TASKS.md`](./admin/OPENPROJECT-TASKS.md) |
 | What to pick up next, and the three open items | [`admin/NEXT-SESSION.md`](./admin/NEXT-SESSION.md) |
 | How we actually draft: the intake steps, the style rules, the non-negotiables | [`docs/PLAYBOOK.md`](./docs/PLAYBOOK.md) |
-| The skill authored from the playbook, and the two scripts that drive this package from the command line | [`.claude/skills/grant-writing/`](../../.claude/skills/grant-writing/SKILL.md) |
+| The skill authored from the playbook, and the four scripts that drive this package from the command line (`prep.mjs`, `gapfill.mjs`, `count.mjs`, `corpus_search.py`) | [`.claude/skills/grant-writing/`](../../.claude/skills/grant-writing/SKILL.md) |
 | The documentation rules, the sources of truth, and the verified state of the system | [`CLAUDE.md`](./CLAUDE.md) |
 | What this workstream changed, and when | [`CHANGELOG.md`](./CHANGELOG.md) |
 

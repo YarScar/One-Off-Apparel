@@ -172,6 +172,14 @@ Specific funder guidelines or priorities
 Additional student stories beyond what's in the knowledge base
 Staffing details or organizational structure
 
+*(2026-08-24 pipeline note, not a Notion edit: the first and third gaps above are now partly filled.
+"Org overview or mission language" — the "Launchpad Programming MASTER" doc is now in
+`kb_launchpad.json`'s `meta.source_recency` and reconciled into `kb.mission`. "Additional student
+stories" — 23 testimonials/quotes now live in `packages/grants/seed/testimonials.json`
+(student rows de-identified; see that file's schema doc). This note lives here only because this file
+mirrors the Notion page above — flag to Chip/Iman/Dannyelle whether the Notion gap list should update
+too.)*
+
 Word Count Accuracy - CRITICAL
 When working on applications with word limits, Claude MUST verify word counts programmatically using a bash tool call before presenting any draft to the user. Do not estimate or count words mentally - Claude's in-conversation word counting is unreliable and has repeatedly produced counts that are 10-30 words off, wasting significant revision time.
 Rules:

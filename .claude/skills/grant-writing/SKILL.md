@@ -31,7 +31,7 @@ never infer one. Seven real fixtures live in `packages/grants/seed/forms/` and c
 Prior filed responses are reachable through the **`find_grant_documents` → `get_grant_document_text`
 chain** (`search_documents`/`document_chunks` are empty for every grant source — see
 `packages/grants/docs/STATE.md`), never through a local mirror — the server has no `data/Grants` tree
-and none of its 1,234 files are in git. Many filings hold the real filed response alongside the
+and none of its 1248 files (with a resolvable Drive ID) are in git. Many filings hold the real filed response alongside the
 questions — read the prior response for reusable material, but re-verify every figure in it.
 
 ## Step 1 — Run the work order
@@ -250,6 +250,9 @@ pass, then Iman uploads the final draft for Chip and Dannyelle's submission revi
 ## References
 
 - `references/style.md` — voice, banned words, the non-negotiables, the self-edit checklist
+- `packages/grants/seed/testimonials.json` — the quotes bank: 23 student/employer/other testimonials,
+  filtered by role/school/cohort. Student rows are de-identified (no name); quote by role/school, never
+  invent a name. Employer/client rows carry a real, professional attribution.
 - `references/figure-cuts.md` — **the cut catalogue: question shape to tool, `query_type` and filters.**
   Read this whenever a question asks for a number
 - `references/figures.md` — drift in stored claims, conflict resolution, ACL denial

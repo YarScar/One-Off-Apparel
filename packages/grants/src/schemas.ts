@@ -243,3 +243,109 @@ export const incomingFormSchema = z
 export type IncomingForm = z.infer<typeof incomingFormSchema>;
 export type FormQuestion = z.infer<typeof formQuestionSchema>;
 export type FormLimit = NonNullable<FormQuestion['limit']>;
+
+// --------------------------------------------------------------------------- figure_checks.json
+
+/**
+ * Added under #8 (WP #333): `FIGURE_CHECKS` moved from a hand-edited TS array literal in `figures.ts`
+ * to schema-validated seed JSON, so a figure correction is a data diff instead of a code diff — the
+ * same reasoning that put `questions.json`/`kb_launchpad.json` here rather than in source.
+ *
+ * Kept as an independent schema rather than re-exporting `figures.ts`'s `FigureCheck` interface: the
+ * loader lives in `figures.ts` itself (see that file's header comment on why, and `seed-io.ts`'s on
+ * the cycle this avoids), so this only needs to describe the JSON shape, not share a type identity
+ * with it. The two are kept in sync by hand; a mismatch fails loudly at import time via
+ * `figureChecksArraySchema.parse`, not silently.
+ */
+export const FIGURE_CONFLICT_KINDS = ['drift', 'definitional', 'content_gap', 'unknown'] as const;
+export const figureConflictKindSchema = z.enum(FIGURE_CONFLICT_KINDS);
+
+export const FIGURE_SEVERITIES = ['high', 'medium', 'low'] as const;
+export const figureSeveritySchema = z.enum(FIGURE_SEVERITIES);
+
+export const figureCheckSchema = z
+  .object({
+    key: z.string().min(1),
+    /** The claim as it appears in the KB, so a reviewer can find it in the text. */
+    claim: z.string().min(1),
+    /** KB slots whose text carries this claim. */
+    appears_in: z.array(z.string()),
+    /** The MCP tool to call. */
+    tool: z.string().min(1),
+    /** The tool call's arguments, verbatim — not all string; e.g. `launchpad_only` is boolean. */
+    args: z.record(z.union([z.string(), z.number(), z.boolean()])),
+    /** The population {@link args} actually returns — see `figures.ts`'s `FigureCheck.population` doc. */
+    population: z.string().min(1),
+    conflict_kind: figureConflictKindSchema,
+    severity: figureSeveritySchema,
+    note: z.string(),
+    /**
+     * History/rationale that lived as an inline `//` comment beside the entry in the old TS array —
+     * why a slot was added to `appears_in`, or what a past correction fixed. JSON has no comment
+     * syntax, so this carries what a comment used to; unlike `note`, it is not guidance for the
+     * drafting agent, and most entries have none.
+     */
+    _provenance: z.string().optional(),
+  })
+  .passthrough();
+
+export const figureChecksArraySchema = z.array(figureCheckSchema).min(1);
+export type SeedFigureCheck = z.infer<typeof figureCheckSchema>;
+
+// --------------------------------------------------------------------------- testimonials.json
+
+/**
+ * Added for the "Testimonials spreadsheet" ingest (2026-08-24, see
+ * `/home/mili/.claude/plans/there-is-new-content-lexical-wilkes.md`): the first quotes/testimonials
+ * source in the pipeline, filling the "additional student stories" gap `docs/PLAYBOOK.md` lists under
+ * "What's Missing (and What to Ask Us For)".
+ *
+ * `client` is Launchpad Inc.'s own naming for the businesses it does paid work for — distinct from
+ * `employer`, which is a hiring partner.
+ */
+export const TESTIMONIAL_ROLES = ['student', 'employer', 'other', 'client'] as const;
+export const testimonialRoleSchema = z.enum(TESTIMONIAL_ROLES);
+export type TestimonialRole = z.infer<typeof testimonialRoleSchema>;
+
+export const testimonialSchema = z
+  .object({
+    id: z.string().min(1),
+    role: testimonialRoleSchema,
+    cohort: z.string().nullable(),
+    school: z.string().nullable(),
+    company: z.string().nullable(),
+    title: z.string().nullable(),
+    source: z.string().nullable(),
+    quote: z.string().min(1),
+    /**
+     * Who said it. `null` for a de-identified student row — the de-identification rule this schema
+     * exists to make machine-enforced, not just documented: see `checkTestimonialDeidentification`
+     * in `data.ts`.
+     */
+    attribution: z.string().nullable(),
+    /** Whether a name is on file to restore if `attribution` is currently null. */
+    consent_on_file: z.boolean(),
+    /**
+     * `true` when `quote` was edited from the source spreadsheet to remove a THIRD PARTY's name
+     * (a student named inline by an employer, not the quote's own attributed speaker) with no
+     * consent on file for that person. Optional: most rows are unedited.
+     */
+    redacted: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const testimonialsBankSchema = z
+  .object({
+    meta: z
+      .object({
+        source: z.string(),
+        fetched: z.string(),
+        row_count: z.number().int().nonnegative(),
+      })
+      .passthrough(),
+    quotes: z.array(testimonialSchema),
+  })
+  .passthrough();
+
+export type Testimonial = z.infer<typeof testimonialSchema>;
+export type TestimonialsBank = z.infer<typeof testimonialsBankSchema>;

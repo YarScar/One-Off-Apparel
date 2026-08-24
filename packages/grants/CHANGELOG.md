@@ -27,6 +27,225 @@ entry can be verified rather than trusted.
 
 ## 2026-08-24
 
+### Changed — WP #335: `kb.mission` reconciled against the "Launchpad Programming MASTER" doc; `meta.source_recency` updated
+
+Doc `1YYEsi0PWm0oCtKAG_8jyQuP2PFEOhovnFroxkVeJ-WI`, handed to this workstream 2026-08-24, is now the
+newest program-language/messaging source in `kb_launchpad.json`'s `meta.source_recency` — it wins on
+wording and terminology, not on numeric claims (those still come from the live connector or a filed
+application). `kb.mission`'s text changed narrowly: "future-ready tech careers" -> "AI-enabled
+careers", "young adults" -> "young people", matching the MASTER doc's consistent phrasing on both. This
+was **not** a full-sentence rewrite: two WebFetch passes over the doc agreed on those phrases but
+disagreed on full sentence structure, and neither is a verbatim capture (WebFetch summarizes rather
+than returning raw text) — see the `_provenance` field on `kb.mission` for the caveat and a
+`[STAFF CONFIRM]` flag on the doc's exact mission sentence. `.claude/skills/grant-writing/references/style.md`
+and `packages/grants/docs/PLAYBOOK.md` now point at the MASTER doc as the canonical wording source.
+CAPM was considered for addition to the certification list and **not added**: `query_certifications`
+shows zero live CAPM records, and `docs/grant-data-triage/H2.4-outcome-reconciliation.md` (a prior,
+independent 2026-08-11 triage) corroborates why — CAPM is tied to the not-yet-launched Entrepreneurial
+Leadership pathway pilot (Fall 2026). Two conflicts the MASTER doc raised were deliberately **not**
+resolved here and are escalated to staff instead (OpenProject #336): the `$8,200` vs `$12,500`
+baseline-earnings figure, and "Junior AI Builder" vs "Junior AI Engineer" terminology. A third,
+unrelated conflict surfaced by the same grep sweep — six vs seven competencies (EOG vs Connelly
+Foundation, May 2026) — is tracked separately as OpenProject #337 and recorded in `docs/STATE.md` §4
+item 20, since it isn't something the MASTER doc raised and doesn't belong folded into #336.
+
+### Added — WP #334: `packages/grants/seed/testimonials.json`, a 23-quote de-identified testimonials bank
+
+Ingested from the Google Sheet named in the ticket (23 rows: student, employer, client, and other
+roles). Schema (`testimonialSchema`/`testimonialsBankSchema` in `schemas.ts`) and loader
+(`loadTestimonials()` in `data.ts`, memoized like the other seed banks) added; `index.ts` re-exports it
+via its existing `export *`. **Student rows are de-identified on ingest** — role, school, cohort, and
+quote are kept, the student's name is dropped — per prior staff direction (quoted in the source ticket)
+that this bank is a drafting-time quotes helper, not an automated KB slot, and therefore carries no
+`kb_ref`/question-bank routing. Employer/client rows keep their real attribution (name, company, title)
+as professional attribution, not student PII. A `consent_on_file` boolean carries through per quote so
+a name can be restored later once consent is on file, without re-ingesting the sheet. Four quotes
+(`q-009`, `q-010`, `q-011`, `q-020`) had a *third party's* name embedded inline in the quote text
+itself (not the quote's own byline) redacted and flagged `"redacted": true` — this extends the
+existing consent-gate principle in `grant-writing-mcp/SKILL.md` Step 5 to third-party names inside a
+quote, not just the quote's own attribution; that extension was this workstream's judgment call, not
+an explicit instruction, and is worth a staff sanity-check if it comes up. A new integrity check,
+`checkTestimonialDeidentification`, fails `high` if any student-role quote carries a name without
+`consent_on_file: true`. `.claude/skills/grant-writing/references/style.md`,
+`.claude/skills/grant-writing/SKILL.md`, and `.claude/skills/grant-writing-mcp/SKILL.md` (self-contained,
+so restated inline rather than linked) now point drafters at this bank for story-led answers.
+
+### Changed — WP #333: `computeIntegrityReport` decomposed into 17 named check functions
+
+`data.ts`'s `computeIntegrityReport` was one 438-line function running what `8-24-26 Findings.md`
+finding #9 called "13" independent checks — exploration during this batch confirmed the real count
+is **17**, each already reading only `bank`/`kb`/a few module constants and pushing into a shared
+accumulator with no ordering dependency on any other check. Each check is now its own function,
+named after the `code` it emits (e.g. `checkKbEntryWithoutAnswer`, `checkFigureClaimUncovered`), with
+`kbKeys` computed once and threaded in as a parameter; `computeIntegrityReport` itself is now
+`CHECKS.flatMap(check => check(bank, kb, kbKeys))`. No output shape or `code` changed — `data.test.ts`
+passed unmodified. This also closes finding #20 (the file-size complaint against `data.ts`/`figures.ts`),
+which was a side effect of this fix plus the `FIGURE_CHECKS` move below.
+
+### Added — WP #333: 4 regression tests pin previously-unverified branch-order pairs in `buildAnswer`
+
+Finding #13: `pipeline.ts`'s `buildAnswer` prose asserts branch order is load-bearing in three
+places, but only 4 of the 8 branch-adjacencies had test coverage of their interaction — a reorder of
+the other 4 pairs would have passed the suite silently. Added 4 tests to `pipeline.test.ts`, each
+constructing a fixture that satisfies two adjacent branches' predicates simultaneously and asserting
+which one wins, matching the style of the 4 pairs already pinned at `pipeline.test.ts:289-297`,
+`393-406`, `531-538`, `864-888`. No production code changed — the existing precedence was already
+correct; this only makes it verifiable. Covers: `!is_confident` vs. `kb_ref === null`; branches 1–3
+vs. the placeholder-text branch; placeholder vs. `answer_type === 'attachment'`; attachment vs.
+`fetch_figure`.
+
+### Changed — WP #333: `READ_ONLY_ANNOTATIONS` / `READ_ONLY_OPEN_WORLD_ANNOTATIONS` replace 8 copies of the same tool-annotations literal
+
+Finding #24: the `{ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint:
+false }` object was copy-pasted verbatim across 8 of the 9 grant tool registrations.
+`apps/mcp-server/src/tool-helpers.ts` now exports `READ_ONLY_ANNOTATIONS` and, for the one
+legitimate outlier that calls the Drive API (`get-grant-document-text.ts`, `openWorldHint: true`),
+`READ_ONLY_OPEN_WORLD_ANNOTATIONS`. All 9 grant tool files reference the constant instead of an
+inline literal; the other 18 non-grant tool files were left untouched — same scoping discipline as
+prior batches. `tools.test.ts` only asserts the sorted tool-name list, unaffected.
+
+### Changed — WP #333: `flattenMessages()` replaces 5 copies of prompt-message-flattening boilerplate
+
+Finding #11: `skill-grant-writing.ts`, `skill-grant-prospecting.ts`, and
+`skill-grant-sourcing-evaluation.ts` hand-duplicated identical logic to flatten a prompt result's
+`messages` into a single `instructions` string; exploration found the same pattern in
+`skill-board-reporting.ts` and `skill-finance-audit.ts` too, so all 5 were collapsed rather than just
+the 3 named in the finding. `tool-helpers.ts` now exports `flattenMessages(messages)`; each wrapper
+keeps its own `registerTool` call, raw-args mapping, and `build<X>Messages` call — only the map/join
+block was replaced. Output is unchanged, verified by inspection (no test pins the exact string).
+
+### Changed — WP #333: `FIGURE_CHECKS` moved from a hand-edited TS array literal to schema-validated seed JSON
+
+Finding #8: `figures.ts`'s `FIGURE_CHECKS` (~355 lines, 18 entries) was the one content registry in
+the package still living as TS source instead of validated seed JSON like `kb_launchpad.json` /
+`questions.json` — every figure correction was a code diff instead of a data diff. Added
+`figureCheckSchema`/`figureChecksArraySchema` to `schemas.ts` and `packages/grants/seed/figure_checks.json`
+holding all 18 entries; inline `//` comments that carried history/rationale with no JSON home became
+a `_provenance` field (11 of the 18 entries have one). `figures.ts` now loads `FIGURE_CHECKS` via
+`parseSeed(join(SEED_DIR, 'figure_checks.json'), figureChecksArraySchema)`.
+
+Deviated from this fix's original plan wording in one respect: rather than adding a
+`loadFigureChecks()` function to `data.ts` that `figures.ts` would call at module-evaluation time,
+the shared file-reading primitives (`SEED_DIR`, `FORMS_DIR`, `readJson`, `parseSeed`) were extracted
+to a new leaf module, `packages/grants/src/seed-io.ts`, with zero imports from either `data.ts` or
+`figures.ts`. `data.ts` already imports `FIGURE_CHECKS` from `figures.ts` at module-eval time (safe
+today only because that read was function-scoped); having `figures.ts` call back into a `data.ts`
+function eagerly at its own module-eval time would have made correctness depend on which module a
+given entry point imports first — a real TDZ hazard, not the kind of cycle the package already
+tolerates. `seed-io.ts`'s header comment carries the full reasoning. `data.ts` re-exports `SEED_DIR`/
+`FORMS_DIR` from `seed-io.ts` for backward compatibility; no call site outside `data.ts` needed to
+change. Added a test to `data.test.ts` that re-parses `figure_checks.json` directly against the
+schema, independent of `figures.ts`'s own load-at-import call.
+
+### Fixed — WP #332: `gapfill.mjs` collapsed overlapping gap classes into a lossy single value
+
+`prep.mjs`'s `report.gaps` already models `unmatched`/`low_confidence`/`no_kb_answer`/`kb_unverified`
+as four independent, possibly-overlapping checks — a question can be both `low_confidence` and
+`kb_unverified` at once. `gapfill.mjs` instead ran an if/else chain (first match wins), so an
+overlapping row silently lost one of its two fix instructions — e.g. picking `kb_unverified` over
+`low_confidence` even though `references/gap-fill.md`'s own guidance says re-routing must happen
+first. `gapfill.mjs` now checks all four predicates independently and emits `gap_classes` (an array,
+was `gap_class`), merging and deduping `research_ladder` rungs across every class present; the
+`--out` summary tally counts once per class present. `references/gap-fill.md` corrected: the "clean
+partition" framing at the old line 12 is replaced with the independent/overlapping model, the false
+"carried through from `prep.mjs`" attribution for the single-valued field is corrected, and a note on
+resolution order (re-route first) is added for multi-class rows. Neither script had test coverage;
+none exists yet for either.
+
+### Fixed — WP #332: banned-jargon list disagreed across `count.mjs`, `gapfill.mjs`, and both skill docs
+
+`count.mjs` checked 9 words (adding `survivable`), `gapfill.mjs` checked 8, and
+`grant-writing-mcp/SKILL.md` documented 17 matching neither. `docs/PLAYBOOK.md` — which
+`references/style.md` explicitly defers to on any conflict — names the same 8-word list in three
+places and separately calls `survivable` an emotional-reach word, never jargon; `count.mjs`'s 9th
+word was the actual outlier, not `style.md`'s list. Added `export const BANNED_JARGON` (8 words) to
+a new `packages/grants/src/banned-jargon.ts`, re-exported from the package entrypoint; `count.mjs`
+and `gapfill.mjs` now both import it instead of hand-copying the list, so the two enforcement
+scripts and the doc can no longer drift from each other. `grant-writing-mcp/SKILL.md`'s list —
+which cannot import the shared constant, being explicitly self-contained — is now labelled as an
+intentional superset of the canonical 8, so a future change to the canonical list is a documented
+recheck rather than silent drift.
+
+### Fixed — WP #332: `catalog.ts`'s `application_response` override was an anonymous, partly-untested patch
+
+The override letting a specific filename kind (`template`/`loi`/`report`) win over a generic
+container folder kind (`application_response`) was inlined as a bare `if (doc_kind ===
+'application_response')` with no named concept, and only the `report` branch had a regression test.
+Extracted `GENERIC_CONTAINER_KINDS`/`OVERRIDES_GENERIC_CONTAINER` (`ReadonlySet<DocKind>`, each with
+a doc comment stating the rule) and rewrote the `if` to check membership in these sets — pure
+rename, no behaviour change. Added the two missing regression tests (`template`, `loi`) to
+`catalog.test.ts`.
+
+### Changed — WP #332: `catalog.ts`'s three path-comparison keys are now branded types
+
+`looseKey`, `scopedNameKey`, and `normalizePath` all returned plain `string`, so nothing stopped a
+caller from putting a `LooseKey` into the map meant for `NormalizedPath` values — a swap that would
+typecheck cleanly and only fail at runtime as wrong or missing matches. Added zero-runtime-cost
+branded types `NormalizedPath`/`LooseKey`/`ScopedNameKey`; each function's return type is now its
+brand, asserted once at its own return statement. `connectors/google-drive/src/reconcile.ts`'s four
+`Map` declarations (`byNormalizedPath`, `byLoosePath`, `byScopedName`, `driveScopedCounts`) updated
+to the matching branded key types — no call-site logic changes needed, since every existing call
+already passed a function's own output into its matching map.
+
+### Fixed — WP #332: two stale facts in grant-writing docs
+
+`packages/grants/README.md` said "the two scripts that drive this package"; there are four
+(`prep.mjs`, `gapfill.mjs`, `count.mjs`, `corpus_search.py`) — now named. `.claude/skills/grant-
+writing/SKILL.md` cited a stale "1,234 files" figure against the current 1248 (files with a
+resolvable Drive ID, per `CLAUDE.md`/`docs/STATE.md`) — corrected.
+
+### Fixed — WP #331: `find_grant_documents` had no lower-bound limit guard and a non-conforming result shape
+
+`Math.min(params.limit ?? DEFAULT_LIMIT, MAX_LIMIT)` clamped the upper end but let `0`, a negative
+number, or a non-finite value (`NaN`) reach Prisma's `take` unguarded. The tool also hand-rolled a
+`{ total_matching, returned }` shape instead of the shared `{ record_count, total_matching, truncated,
+limit }` envelope (`result-envelope.ts`, work packages #195/#276) — no `truncated` flag, and
+`returned` instead of `record_count`. `clampLimit()` gained optional `defaultLimit`/`maxLimit`
+parameters (default unchanged) so a tool with its own tighter page-size constants — this one uses 25/100,
+not the shared 500/1000 — can still reuse the one guard. `find-grant-documents.ts` now calls
+`clampLimit(params.limit, DEFAULT_LIMIT, MAX_LIMIT)` and returns `...resultEnvelope(rows.length, total,
+limit)`. Regression test added in `apps/mcp-server/src/__tests__/tools.test.ts` for a `0`/negative
+limit.
+
+### Fixed — WP #331: `catalog.ts`'s extension-based and MIME-based classifiers disagreed on `.gslides`
+
+`TEXT_EXTRACTABLE` omitted `.gslides` while `KNOWN_EXTENSIONS`, `MIME_BY_EXT`, and `COMPARABLE_EXT`
+all already treated it as a Google-native text-extractable format alongside `.gdoc`/`.gsheet` — so
+`contentClassForExt('.gslides')` returned `'unknown'` while `contentClassForMime(...presentation)`
+returned `'text'` for the same file. This is exactly the "two callers disagree" defect the module's
+own header (`catalog.ts:9-13`) says it exists to prevent, just internal to the module instead of
+across `scripts/build-grants-index.ts` and `connectors/google-drive`. Added `.gslides` to
+`TEXT_EXTRACTABLE`. Added a cross-path parity test in `catalog.test.ts` asserting
+`contentClassForExt`/`contentClassForMime` agree for all three Google-native extensions.
+
+### Fixed — WP #331: `grant-verify-figure.ts` cast `figure_call` instead of re-parsing it
+
+`raw['figure_call'] as FigureCall` skipped runtime validation at the handler boundary, unlike its
+sibling `grant-resize-answer.ts`'s `limitSchema.parse(raw['limit'])`. Extracted the tool's inline
+Zod shape into a named `figureCallSchema` and switched the handler to `figureCallSchema.parse(...)`.
+No behaviour change for well-formed input; a malformed `figure_call` now throws a clear Zod error
+instead of flowing into `verifyFigureAnswer` unchecked.
+
+### Changed — WP #331: `figureGate` builds its `AnswerPlan` return value without a cast
+
+`figureGate` (`pipeline.ts`) took `withEntry` as an untyped `Record<string, unknown>` and built its
+shared return fields via `as unknown as AnswerPlan` — a double-erasure that held the module's
+documented "every `llm` result carries exactly one of `handback` or `figure_call`" invariant open at
+compile time, relying only on `apps/mcp-server/src/__tests__/tools.test.ts` and `pipeline.test.ts` to
+catch a violation. Added `FigureGateBase = Omit<AnswerPlan, 'status' | 'actor' | 'action'>` — what
+both call sites (`withEntry`, `withStructured`) already provide — and typed `withEntry`/`shared`
+against it directly, so each return site's `{ ...shared, status, actor, action }` type-checks as a
+complete `AnswerPlan` with no cast. `AnswerPlan` itself stays a flat interface, not a discriminated
+union — that larger restructuring is tracked separately.
+
+### Changed — WP #331: `buildFigureWorkOrder` takes `kb` as a parameter instead of loading it itself
+
+The one inconsistency with `computeIntegrityReport(bank, kb)`'s pattern (`data.ts`): `figures.ts`'s
+`buildFigureWorkOrder` called `loadKnowledgeBase()` internally rather than accepting `kb` from its
+caller, even though `runPipeline` (its only production call site) already has one loaded. Signature
+is now `buildFigureWorkOrder(kbRefs, kb)`; `pipeline.ts:807` and the `pipeline.test.ts` fixture
+updated to pass `kb` through. No other call sites existed.
+
 ### Fixed — WP #330: `verify.ts` false-alarmed on every magnitude-suffixed figure it was supposed to catch
 
 `verifyFigureAnswer` ran both the drafted figure and the live query result through

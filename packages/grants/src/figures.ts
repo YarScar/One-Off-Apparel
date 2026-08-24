@@ -40,8 +40,11 @@
  * different denominators. Picking one silently would be the most damaging thing this layer could do.
  */
 
-import { loadKnowledgeBase } from './data.js';
+import { join } from 'node:path';
+
 import type { KnowledgeBase } from './schemas.js';
+import { figureChecksArraySchema } from './schemas.js';
+import { SEED_DIR, parseSeed } from './seed-io.js';
 
 export type FigureSeverity = 'high' | 'medium' | 'low';
 export type ConflictKind = 'drift' | 'definitional' | 'content_gap' | 'unknown';
@@ -89,10 +92,18 @@ export interface FigureCheck {
   readonly conflict_kind: ConflictKind;
   readonly severity: FigureSeverity;
   readonly note: string;
+  /**
+   * History/rationale for this entry — why a slot was added to {@link appears_in}, or what a past
+   * correction fixed. Lived as an inline `//` comment beside the entry when this array was hand-edited
+   * TS source; moved to a data field under #8 (WP #333) when it became `seed/figure_checks.json`,
+   * since JSON has no comment syntax. Unlike {@link note}, this is not guidance for the drafting
+   * agent — most entries have none.
+   */
+  readonly _provenance?: string | undefined;
 }
 
 /**
- * Every `tool` and `query_type` below is checked against the live enums in
+ * Every `tool` and `query_type` in `seed/figure_checks.json` is checked against the live enums in
  * `apps/mcp-server/src/tools/`. `phase_budget_dashboard` is the real value; `phase_budget_summary` is
  * not in the enum.
  *
@@ -104,363 +115,17 @@ export interface FigureCheck {
  * inverts the risk. "Silently returns zero rows" describes a figure quietly reported as zero, which is
  * the dangerous failure; a loud rejection is the safe one, and what it actually broke was a board report
  * or finance audit erroring out at the phase-cost step. Not re-verified here — the peer ran the call.
+ *
+ * Moved from a hand-edited array literal to schema-validated seed JSON under #8 (WP #333) — every
+ * entry below used to be a `{ ... }` object literal in this file; a figure correction is now a data
+ * diff against `seed/figure_checks.json`, validated at load time by `figureChecksArraySchema`
+ * (`schemas.ts`), not a code diff here. See `seed-io.ts`'s header comment for why the loader is
+ * self-contained in this file rather than routed through `data.ts`'s other loaders.
  */
-export const FIGURE_CHECKS: readonly FigureCheck[] = [
-  {
-    key: 'employment_earnings_total',
-    claim: '$350,268 total wages paid to 45 participants across 88 jobs; $229,000+ documented alumni wages',
-    // kb.theory_of_change and kb.capacity added 2026-08-11: both carry the $229,000+ alumni-wage
-    // restatement of the same underlying aggregate, and the same query_employment call settles all
-    // three. kb.capacity was found by the `figure_claim_uncovered` check rather than by reading.
-    appears_in: ['kb.metrics', 'kb.outcomes', 'kb.theory_of_change', 'kb.capacity'],
-    tool: 'query_employment',
-    args: { query_type: 'aggregate' },
-    population:
-      "Every participant employment record ever written — all phases, all statuses, all time. An all-time aggregate, NOT a period total.",
-    conflict_kind: 'drift',
-    severity: 'high',
-    note:
-      'Confirmed drifting: the connector reported $360,487 on 2026-07-23 and $362,030.26 on ' +
-      '2026-07-27. Always quote the live figure.',
-  },
-  {
-    key: 'students_served_total',
-    claim: '~145 young people served',
-    // kb.metrics added 2026-08-10: program.jobs_and_participants routes there, and a metrics-only
-    // draft otherwise lost the live query_enrollment call, leaving only the definitional flag.
-    appears_in: ['kb.capacity', 'kb.history', 'kb.metrics'],
-    tool: 'query_enrollment',
-    args: { query_type: 'total' },
-    population:
-      "Every enrollment record ever — all phases, all statuses, all time. The widest possible cut, and rarely what a funder asked for.",
-    conflict_kind: 'definitional',
-    severity: 'high',
-    note:
-      'The connector holds 301 enrollment records against the applications\' ~145 served. Both are ' +
-      'true of different populations ("meaningfully participated" vs. every record). Do NOT ' +
-      'auto-resolve — ask which population this funder is asking about, and pair with ' +
-      'query_students breakdown by enrollment_status.',
-  },
-  {
-    key: 'cert_pass_rate',
-    // Corrected 2026-08-11: this read '92% certification pass rate'. No KB slot says that. The 92%
-    // in kb.metrics and kb.capacity is the CohortÂ 1 paid-work rate (11 of 12 at six months) and now
-    // belongs to `placement_rate` below; the certification claim is the PCEP range. A reviewer sent
-    // to find "92% certification pass rate" in kb.metrics finds a 92% that means something else,
-    // which is the confident-wrong-figure failure this module exists to prevent.
-    claim: 'PCEP pass rates 70–100% per cohort; 100% in the most recent cohort',
-    appears_in: ['kb.metrics', 'kb.outcomes'],
-    tool: 'query_certifications',
-    args: { query_type: 'summary' },
-    population:
-      "All certification attempts ever recorded, every cohort pooled. An all-time rate, not a per-cohort one.",
-    conflict_kind: 'definitional',
-    severity: 'high',
-    note:
-      'All-time PCEP is 32/59 = 54.2%; the applications quote per-cohort rates. Different ' +
-      'denominators, both defensible. State which one you are quoting, in the sentence itself.',
-  },
-  {
-    key: 'annual_budget',
-    claim: '$1.34M FY2025 expenses; $1.68M FY2026 projected revenue',
-    // kb.eligibility added 2026-08-11: both its prose and its `eligibility.budget_size` structured
-    // value quote $1.34M, so an eligibility-only draft published the frozen budget figure with no
-    // verification step.
-    appears_in: ['kb.financials', 'kb.budget_narrative', 'kb.eligibility'],
-    tool: 'query_finances',
-    args: { query_type: 'annual' },
-    population:
-      'The annual finance tab: FY2025 actual through FY2028 projected. Name the fiscal year the ' +
-      'question asked about — and **do not quote a FY2026 figure as a fiscal-year amount.** Reported ' +
-      '2026-08-17 by a peer session, from the ledger\'s own hedge: `budget_actuals` returns the YTD row ' +
-      'with `actuals` and `fy_actual_projected` BOTH equal to $1,734,075.87, and the Annual tab\'s ' +
-      'column is `fy_2026_actual_projected`. The source fuses actual-to-date with full-year projection ' +
-      'and nothing separates them, so "our FY2026 budget was X" is the wrong answer to the question ' +
-      'asked. FY2025 is a clean `fy_2025_actual`. Flag [STAFF CONFIRM] on any current-year figure. ' +
-      'Separately open (`grant-a54`): no live total matches the KB\'s former $1.34M FY2025 expenses — ' +
-      'the closest is Total *Administrative* Expenses at $1,394,055.02, a narrower measure.',
-    conflict_kind: 'drift',
-    severity: 'high',
-    note:
-      'Corrected 2026-08-17 (work package #275, from a peer session\'s finding): this named ' +
-      'get_finance_brief, on the reasoning that query_finances "may be denied by the role ACL". That ' +
-      'traded a tool that might be refused for one that cannot answer at all — get_finance_brief ' +
-      'returns aplos fund rows, an account COUNT, recent transactions, fund balances and recent gifts, ' +
-      'and no income or expense total anywhere. query_finances(annual) is what holds these. If the ACL ' +
-      'refuses it, flag [DATA UNAVAILABLE]; do not fall back to get_finance_brief and read a total that ' +
-      'is not there.',
-  },
-  {
-    key: 'enrollment_by_phase',
-    claim: 'Program phases: Foundations, 101, LiftOff',
-    appears_in: ['kb.programs', 'kb.program_desc'],
-    tool: 'query_enrollment',
-    args: { query_type: 'by_phase' },
-    population:
-      "Enrollment counts per phase by status (Completed / In Progress / Dropped Before Completion / Not Enrolled), all time. Participants appear in every phase they touched, so these do NOT sum to a participant total.",
-    conflict_kind: 'content_gap',
-    severity: 'high',
-    note:
-      'The platform records a Lightspeed phase that the KB program descriptions omit entirely, so a ' +
-      'drafted program description built only from the KB is missing a phase. Queried 2026-08-11 — ' +
-      'Lightspeed is a 7-week summer intensive, run twice: 2024-07-01 to 2024-08-19 (7 completers) ' +
-      'and 2025-07-07 to 2025-08-27 (8), 15 of 15 completing and none dropping. 14 of the 15 sat ' +
-      'PCEP and all 14 passed. Do NOT describe it as a linear stage between 101 and LiftOff: it ' +
-      'runs in the summer gap between school years, no student has it as current_phase, and its ' +
-      'completers show up later under LiftOff and Alumni. For the roster, by_phase gives only the ' +
-      'counts and by_student cannot filter by phase at all (see the filter caveat in CLAUDE.md §4). ' +
-      'This note used to send you to query_enrollment active_during for it. **Do not rely on that ' +
-      'until OpenProject #278 is settled** — a peer session reports active_during matching only ' +
-      'records with a non-null end_date, which would silently drop every In Progress record. ' +
-      'Unverified here; #278 owns it.',
-  },
-  {
-    key: 'prior_funding_wpf',
-    claim: '$1.5M three-year William Penn grant from 2023, ending 6/30/26',
-    appears_in: ['kb.sustainability'],
-    // #306 repointed `query_donors` at the `development:*` CRM tabs, so this is one call again. It
-    // was briefly redirected to `query_finances {dev_grants_tracker}` while `query_donors` still
-    // read the unpopulated `donor_contacts` tables; the tool now reads the same tabs and adds the
-    // per-project split, which a raw tab row cannot give you.
-    tool: 'query_donors',
-    args: { query_type: 'profile', donor_name: 'William Penn Foundation', launchpad_only: true },
-    population:
-      'Every recorded gift from one funder, Launchpad-scoped. `giving_summary.by_project` splits ' +
-      'Launchpad from the other Building 21 projects and `by_fiscal_year` gives the schedule; ' +
-      '`grants_tracker` carries the lifecycle and period dates.',
-    conflict_kind: 'definitional',
-    severity: 'high',
-    note:
-      'THREE different true numbers here, and the stored claim is not wrong so much as scoped. ' +
-      'All-time Building 21 lifetime is $1,600,000. The FY24-FY26 three-year grant is $1,500,000 — ' +
-      'which is what the stored $1.5M claim means, so this is NOT simple drift. Launchpad-scoped ' +
-      'all-time is $1,375,000, because each year is two gifts: $425,000 to Launchpad plus $75,000 ' +
-      'to Network Unrestricted. Quoting $500,000/yr as Launchpad\'s grant overstates it by $75,000 ' +
-      'a year. Read by_project and by_fiscal_year and say which scope the sentence means. ' +
-      'Corrected 2026-08-19 (#306) — an earlier revision of this entry called the $1.5M/$1.6M gap ' +
-      'drift and told you the connector wins, which would have silently swapped a correct ' +
-      'three-year figure for an all-time one.',
-  },
-  {
-    key: 'demographics_race',
-    claim: '85% / 90% / 100% demographic shares',
-    // Four slots added 2026-08-11. The same shares are restated across the corpus, and only two
-    // slots declared them, so a draft built from any of the others published them unverified.
-    appears_in: [
-      'kb.dei',
-      'kb.profile.demographics',
-      'kb.need',
-      'kb.target_population',
-      'kb.metrics',
-      'kb.eligibility',
-    ],
-    tool: 'query_enrollment',
-    args: { query_type: 'by_race' },
-    population:
-      "Race and ethnicity across all enrollment records, all time. Values are free-text and multi-category — decide whether you are counting 'names this category at all' or 'this category alone', and say which.",
-    conflict_kind: 'drift',
-    severity: 'medium',
-    note: 'Recompute from the connector; percentages move with each cohort.',
-  },
-  {
-    key: 'employment_wage_range',
-    claim: '$15,000–$35,000 earned; ~$20/hr',
-    // Four slots added 2026-08-11: kb.outcomes carries the $15,000/$35,000 pair verbatim, and the
-    // $20/hour client-work rate is restated in kb.programs, kb.budget_narrative and
-    // kb.management_plan.
-    appears_in: [
-      'kb.metrics',
-      'kb.program_desc',
-      'kb.uniqueness',
-      'kb.outcomes',
-      'kb.programs',
-      'kb.budget_narrative',
-      'kb.management_plan',
-    ],
-    tool: 'query_employment',
-    args: { query_type: 'aggregate' },
-    population:
-      "Every participant employment record ever written — all phases, all statuses, all time.",
-    conflict_kind: 'drift',
-    severity: 'medium',
-    note: 'The same aggregate call returns avg_hourly_wage and avg_weekly_hours.',
-  },
-  {
-    key: 'top_employers',
-    claim: '17 employer partners / 20 employers',
-    // kb.theory_of_change and kb.risk added 2026-08-11: both lean on "17+ partners" — the risk
-    // narrative uses it as the mitigation for employer dependence, so a stale count there
-    // understates a stated control.
-    appears_in: ['kb.partnerships', 'kb.theory_of_change', 'kb.risk'],
-    tool: 'query_employment',
-    args: { query_type: 'by_employer' },
-    population:
-      "Every employer with at least one recorded placement, all time.",
-    conflict_kind: 'drift',
-    severity: 'medium',
-    note: 'Two different counts appear in the KB; the connector settles it.',
-  },
-  {
-    key: 'inc_client_work_booked',
-    claim: '$75,000 in client work booked in July 2026 alone (Barra Launchpad Inc overview, ~1/3 of the full-year target); ' +
-      // The range is written out as $50K-$80K, not $50-80K: the extractor reads a shared trailing
-      // suffix as belonging to the second number only, so the abbreviated form tokenizes to a bare
-      // `$50` — two orders of magnitude off, and generic enough to match unrelated prose.
-      'two clients with hiring intent in writing at $50K-$80K',
-    appears_in: ['kb.sustainability', 'kb.innovation'],
-    tool: 'query_finances',
-    args: { query_type: 'fund_balances', contains: 'Total Income' },
-    population:
-      'Income by fund, including the `launchpad_inc` fund column. FUND INCOME IS NOT BOOKINGS — it is ' +
-      'money recognised against that fund, not client work contracted. The two answer different ' +
-      'questions and the prose usually asks the second.',
-    conflict_kind: 'drift',
-    severity: 'medium',
-    note:
-      'Newest approved org overview (Barra, Jul 2026) introduces Inc. revenue and hiring-intent claims ' +
-      'the KB and its previous checks do not carry. **No query_* tool returns Inc. client bookings ' +
-      'directly** — still true. Retargeted twice on 2026-08-17 (work package #275): first from ' +
-      'get_finance_brief, which returns no revenue figure at all despite being described here as "the ' +
-      'closest revenue signal", then to this call rather than query_finances(annual). The second move ' +
-      'came from reading our own record: `docs/runs/2026-08-11/filled/FIGURE-LEDGER.md` line 32 had ' +
-      'already found the closest live figure on 2026-08-14 — the `launchpad_inc` fund column carries ' +
-      'Total Income $305,000.00 — and marked it PARTIAL for exactly the reason above. Treat it as a ' +
-      'floor and a different measure, not as the booked figure. If the prose asks for bookings, flag ' +
-      '[DATA UNAVAILABLE].',
-  },
-  {
-    key: 'program_size_reach',
-    claim: 'more than 200 young Philadelphians through programming to date; "about 145 served"',
-    appears_in: ['kb.capacity', 'kb.history', 'kb.metrics'],
-    tool: 'query_enrollment',
-    args: { query_type: 'total' },
-    population:
-      "Every enrollment record ever — all phases, all statuses, all time.",
-    conflict_kind: 'definitional',
-    severity: 'high',
-    note:
-      'The Barra Jul 2026 overview says 200+ "came through programming"; KB says ~145 "served"; the connector ' +
-      'holds 301 records. Three populations, three definitions — do NOT auto-resolve. Ask which population this ' +
-      'funder means and state it in the sentence.',
-  },
-  {
-    key: 'phase_costs',
-    claim: '$519K / $455K / $362K per phase; ~$6,000 per participant stipend floor',
-    // Three slots added 2026-08-11: the $6,000 stipend floor is quoted as a programme feature in
-    // kb.programs, kb.program_desc and kb.uniqueness, not only as a budget line.
-    appears_in: [
-      'kb.budget_narrative',
-      'kb.financials',
-      'kb.programs',
-      'kb.program_desc',
-      'kb.uniqueness',
-    ],
-    tool: 'query_finances',
-    args: { query_type: 'phase_budget_dashboard' },
-    population:
-      'The phase budget dashboard tab as the connector last synced it (163 rows on 2026-08-14). ' +
-      '**Its shape is not the KB sentence\'s shape.** The tab breaks out `hs` and `liftoff` against a ' +
-      '`total_launchpad`; the stored prose splits Launchpad 101 / LiftOff / shared administrative cost. ' +
-      'So `{{cost_shared_admin}}` is a RESIDUAL you compute — total_launchpad minus hs minus liftoff — ' +
-      'not a column you read, and `{{phase_cost_101}}` is the `hs` column under a different name. Say ' +
-      'which you did.',
-    conflict_kind: 'drift',
-    severity: 'medium',
-    note:
-      'Note the query_type is phase_budget_dashboard. phase_budget_summary is not a valid value and is ' +
-      'rejected with invalid_enum_value rather than returning an empty result — see the header comment ' +
-      'on FIGURE_CHECKS for the correction to what this note used to claim.',
-  },
-  {
-    key: 'revenue_mix',
-    claim: '60% / 25% / 10% / 5% revenue mix',
-    appears_in: ['kb.sustainability'],
-    tool: 'query_finances',
-    args: { query_type: 'annual' },
-    population:
-      "The annual finance tab, FY2025 actual through FY2028 projected. Name the fiscal year.",
-    conflict_kind: 'drift',
-    severity: 'medium',
-    note:
-      'Sustainability narratives quote this mix; confirm before repeating it. Retargeted from ' +
-      'get_finance_brief 2026-08-17 for the reason in the annual_budget note — a revenue mix needs ' +
-      'revenue totals, and that tool returns none.',
-  },
-  {
-    key: 'postsecondary_rate',
-    claim: '(absent from the knowledge base)',
-    appears_in: [],
-    tool: 'query_postsecondary',
-    args: { query_type: 'summary' },
-    population:
-      "Students with a National Student Clearinghouse record, all time.",
-    conflict_kind: 'content_gap',
-    severity: 'medium',
-    note:
-      'The connector holds 67 students with National Student Clearinghouse records, 3 graduated. ' +
-      'No KB slot covers postsecondary outcomes, so any funder asking about them needs live data.',
-  },
-  {
-    key: 'attendance_rate',
-    claim: '(absent from the knowledge base)',
-    appears_in: [],
-    tool: 'query_attendance',
-    args: { query_type: 'aggregate' },
-    population:
-      "All attendance records, all phases, all time.",
-    conflict_kind: 'content_gap',
-    severity: 'medium',
-    note: 'No KB slot covers attendance. Pull live if asked.',
-  },
-  {
-    key: 'competency_growth',
-    claim: 'Competency growth described qualitatively',
-    appears_in: ['kb.evaluation'],
-    tool: 'query_competency',
-    args: { query_type: 'scores' },
-    population:
-      "Competency scores. **Reported truncated at 1000 rows against roughly 2346 in the table** (peer session finding, 2026-08-17, unverified here) — so a single call is a partial slice and an org-wide figure computed from one is wrong.",
-    conflict_kind: 'drift',
-    severity: 'low',
-    note: 'The evaluation narrative is qualitative; live scores can make it concrete.',
-  },
-  {
-    key: 'placement_rate',
-    // Added 2026-08-11. The paid-work rate was the most-quoted outcome in the corpus and had no
-    // check at all: `cert_pass_rate` claimed the 92%, but 92% is 11 of 12 in paid work, not a
-    // certification result. Four slots restate some form of it and none had a verification path.
-    claim:
-      '11 of 12 (92%) in paid work or training at six months; 100% in paid work now; ' +
-      '95% of Launchpad 101 graduates to college, training or work',
-    appears_in: ['kb.metrics', 'kb.outcomes', 'kb.capacity', 'kb.theory_of_change'],
-    tool: 'query_employment',
-    args: { query_type: 'aggregate' },
-    population:
-      "Participant and job counts, all time. No cohort placement rate exists in any tool: the denominator comes from query_enrollment and the cohort window is yours to state.",
-    conflict_kind: 'unknown',
-    severity: 'high',
-    note:
-      'No query_* tool returns a cohort placement rate directly — query_employment aggregate gives ' +
-      'the participant and job counts, and the denominator has to come from query_enrollment. The ' +
-      'cohort framing ("Cohort 1 at six months") is also a moving window: "100% in paid work now" ' +
-      'is dated by whenever "now" was. Confirm both the numerator and the as-of date, or write ' +
-      '[DATA UNAVAILABLE].',
-  },
-  {
-    key: 'staff_count',
-    claim: '15 staff / 9 staff',
-    appears_in: ['kb.staff_bios'],
-    tool: 'search_documents',
-    args: { query: 'org chart staff roster' },
-    population:
-      "Whatever documents match the query string. Not a roster, and not a count.",
-    conflict_kind: 'unknown',
-    severity: 'medium',
-    note:
-      'No query_* tool covers headcount, and the KB states two different numbers. If the document ' +
-      'search does not settle it, write [DATA UNAVAILABLE] rather than picking one.',
-  },
-];
+export const FIGURE_CHECKS: readonly FigureCheck[] = parseSeed(
+  join(SEED_DIR, 'figure_checks.json'),
+  figureChecksArraySchema,
+);
 
 /** Detects a numeric claim: currency, percentage, or a multi-digit / spelled-out quantity. */
 const NUMERIC_CLAIM = /\$[\d,]+|\d+(?:\.\d+)?\s?%|\b\d{2,}\b/;
@@ -648,10 +313,14 @@ const POLICY =
  * Build the verification work order for a set of KB slots.
  *
  * Pass the slots a draft actually uses and the result is scoped to the figures that draft can get
- * wrong; pass nothing for the whole map.
+ * wrong; pass nothing for the whole map. `kb` is taken as a parameter rather than loaded here,
+ * matching `computeIntegrityReport(bank, kb)`'s pattern in data.ts — the caller already has one
+ * loaded and this keeps the function pure.
  */
-export function buildFigureWorkOrder(kbRefs?: readonly string[]): FigureWorkOrder {
-  const kb: KnowledgeBase = loadKnowledgeBase();
+export function buildFigureWorkOrder(
+  kbRefs: readonly string[] | undefined,
+  kb: KnowledgeBase,
+): FigureWorkOrder {
   const wanted = kbRefs === undefined ? null : new Set(kbRefs);
 
   const items = FIGURE_CHECKS.filter((check) => {

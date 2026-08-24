@@ -16,7 +16,7 @@ import {
   type DraftPackage,
 } from '@lp-ai/lib-grants';
 
-import { runTool, parseNum, parseStr } from '../tool-helpers.js';
+import { runTool, parseNum, parseStr, READ_ONLY_ANNOTATIONS } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
 
 const NAME = 'grant_build_draft';
@@ -183,7 +183,7 @@ function outstanding(pkg: DraftPackage, actor: Actor): OutstandingItem[] {
 }
 
 export function registerGrantBuildDraft(server: McpServer): void {
-  server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
+  server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: READ_ONLY_ANNOTATIONS }, (input) =>
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
       const formId = parseStr(raw, 'form_id');

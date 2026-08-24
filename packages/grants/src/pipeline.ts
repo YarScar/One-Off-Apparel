@@ -235,9 +235,18 @@ export interface AnswerPlan {
  * for a sharper reason: text containing `{{wages_total}}` rendered as an answer is text a caller can
  * paste into a funder's portal. It travels as {@link AnswerPlan.figure_template} instead.
  */
+/**
+ * What both `figureGate` callers (`withEntry`, `withStructured`) already have on hand: every
+ * `AnswerPlan` field except the three (`status`, `actor`, `action`) that differ by branch and are
+ * added at each return site below. Naming this instead of taking `Record<string, unknown>` means
+ * `shared`'s construction is checked against `AnswerPlan`'s actual fields, and each return site's
+ * `{ ...shared, status, actor, action }` is checked as a complete `AnswerPlan` — no cast needed.
+ */
+type FigureGateBase = Omit<AnswerPlan, 'status' | 'actor' | 'action'>;
+
 function figureGate(
   surfaced: string,
-  withEntry: Record<string, unknown>,
+  withEntry: FigureGateBase,
   limit: FormLimit | null,
   context: HandbackContext,
   kbRef: string,
@@ -254,13 +263,13 @@ function figureGate(
   // the measurement here would report an over-limit answer as though length were not an issue. It also
   // keeps `summary.all_fit` honest: without it, a 3x-over template reads as fitting.
   const measurement = limit === null ? null : measureAgainst(surfaced, limit, kbRef);
-  const shared = {
+  const shared: FigureGateBase = {
     ...withEntry,
     figure_slots: requirements,
     figure_template: surfaced,
     limit,
     ...(measurement === null ? {} : { measurement }),
-  } as unknown as AnswerPlan;
+  };
   const overLimit = measurement !== null && !measurement.fits;
 
   if (perApplication.length > 0) {
@@ -804,7 +813,7 @@ export function runPipeline(
     },
     results,
     kb_refs_used: kbRefsUsed,
-    figure_work_order: buildFigureWorkOrder(kbRefsUsed),
+    figure_work_order: buildFigureWorkOrder(kbRefsUsed, kb),
     integrity_warnings: loadIntegrityReport(),
   };
 }

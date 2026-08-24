@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -7,7 +10,9 @@ import {
   loadForm,
   loadIntegrityReport,
   loadKnowledgeBase,
+  loadTestimonials,
   listFormIds,
+  SEED_DIR,
   type IntegrityWarning,
 } from './data.js';
 import {
@@ -16,6 +21,7 @@ import {
   FIGURE_CHECKS,
   QUESTION_FIGURE_CHECKS,
 } from './figures.js';
+import { figureChecksArraySchema, testimonialsBankSchema } from './schemas.js';
 import type { KbAnswer, KnowledgeBase, QuestionBank } from './schemas.js';
 
 beforeEach(() => {
@@ -84,6 +90,17 @@ describe('seed loader', () => {
   it('throws a prefixed error for a form that does not exist', () => {
     expect(() => loadForm('no_such_fixture')).toThrow(/grant seed:/);
   });
+
+  // Added for the testimonials ingest (2026-08-24) — see schemas.ts's testimonialSchema doc.
+  it('loads the testimonials bank at the row count meta claims', () => {
+    const testimonials = loadTestimonials();
+    expect(testimonials.quotes).toHaveLength(testimonials.meta.row_count);
+    expect(testimonials.meta.row_count).toBe(23);
+  });
+
+  it('memoises the testimonials bank', () => {
+    expect(loadTestimonials()).toBe(loadTestimonials());
+  });
 });
 
 describe('integrity report', () => {
@@ -125,6 +142,33 @@ describe('integrity report', () => {
     const answers = loadKnowledgeBase().answers;
     const dangling = FIGURE_CHECKS.flatMap((c) => c.appears_in).filter((ref) => !(ref in answers));
     expect(dangling).toEqual([]);
+  });
+
+  // #8, WP #333: FIGURE_CHECKS moved from a hand-edited TS array literal to schema-validated seed
+  // JSON. This re-parses the raw file directly against the schema, independent of figures.ts's own
+  // load-at-import-time call — a schema regression here would otherwise only ever surface as every
+  // other test in the suite failing to import figures.ts at all, which points nowhere useful.
+  it('figure_checks.json parses cleanly against figureChecksArraySchema', () => {
+    const raw = JSON.parse(readFileSync(join(SEED_DIR, 'figure_checks.json'), 'utf8')) as unknown;
+    const parsed = figureChecksArraySchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    expect(FIGURE_CHECKS).toHaveLength(18);
+  });
+
+  // testimonials.json parses cleanly, and the de-identification rule holds on the real corpus: no
+  // student-role quote carries a name without documented consent. `loadIntegrityReport()` above
+  // already proves the check emits nothing on this seed; this asserts the same fact directly against
+  // the loaded data, independent of the checker, for the same reason the figure_checks test re-parses
+  // raw JSON rather than trusting the module load alone.
+  it('testimonials.json parses cleanly and no student quote is attributed without consent', () => {
+    const raw = JSON.parse(readFileSync(join(SEED_DIR, 'testimonials.json'), 'utf8')) as unknown;
+    const parsed = testimonialsBankSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    const testimonials = loadTestimonials();
+    const violations = testimonials.quotes.filter(
+      (q) => q.role === 'student' && q.attribution !== null && !q.consent_on_file,
+    );
+    expect(violations).toEqual([]);
   });
 });
 

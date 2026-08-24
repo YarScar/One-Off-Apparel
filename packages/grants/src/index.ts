@@ -20,6 +20,10 @@ export * from './catalog.js';
 // Counting primitives that reproduce Python semantics. The port depends on these for parity.
 export * from './py.js';
 
+// The one banned-jargon list every draft check enforces. See packages/grants/CLAUDE.md §2 on
+// keeping this and docs/PLAYBOOK.md in lockstep.
+export * from './banned-jargon.js';
+
 // Seed loading and the load-time integrity report.
 export * from './data.js';
 

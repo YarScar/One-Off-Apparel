@@ -8,7 +8,7 @@ import {
   type MatchResult,
 } from '@lp-ai/lib-grants';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseStr, parseNum, READ_ONLY_ANNOTATIONS } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
 
 const NAME = 'grant_match_question';
@@ -46,7 +46,7 @@ function decorate(r: MatchResult): MatchPayload {
 }
 
 export function registerGrantMatchQuestion(server: McpServer): void {
-  server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
+  server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: READ_ONLY_ANNOTATIONS }, (input) =>
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
       const single = parseStr(raw, 'question');

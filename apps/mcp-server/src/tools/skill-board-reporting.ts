@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { runTool, parseStr } from '../tool-helpers.js';
+import { runTool, parseStr, flattenMessages } from '../tool-helpers.js';
 import {
   boardReportingArgsSchema,
   buildBoardReportingMessages,
@@ -37,17 +37,7 @@ export function registerSkillBoardReporting(server: McpServer): void {
         };
 
         const result = buildBoardReportingMessages(args);
-        const instructions = result.messages
-          .map((m) => {
-            const text =
-              typeof m.content === 'string'
-                ? m.content
-                : m.content.type === 'text'
-                  ? m.content.text
-                  : '';
-            return `[${m.role.toUpperCase()}]\n${text}`;
-          })
-          .join('\n\n---\n\n');
+        const instructions = flattenMessages(result.messages);
 
         return {
           skill: NAME,
