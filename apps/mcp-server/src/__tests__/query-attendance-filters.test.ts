@@ -26,35 +26,34 @@ const describeLocal = isLocalDb ? describe : describe.skip;
 const PREFIX = 'WP209-';
 
 /**
- * Phase and cohort values that exist on no other row in any database this suite might run
- * against. That is what makes `current_phase: PHASE_A` + `cohort: COHORT_B` a *guaranteed*
- * zero rather than a probable one: both values are present in their columns, so the domain
- * check must pass them, and no attendance row carries both. The unmatchable-value versus
- * legitimate-zero boundary is untestable without a pair like this.
+ * Phase values that exist on no other row in any database this suite might run against.
  */
 const PHASE_A = 'WP209PhaseA';
 const PHASE_B = 'WP209PhaseB';
-const COHORT_A = 2091;
-const COHORT_B = 2092;
+
+/**
+ * Fixed at 2 (not 1) for every row: `sourceFormat` is the internal signal for which of the
+ * 3 source spreadsheets a row came from (see AttendanceRecord.sourceFormat in
+ * schema.prisma), and this suite is about `current_phase` scoping, not rate-calculation
+ * shape — a value other than 1 keeps `addRow` on the P/A/E code path rather than blending
+ * in a pre-aggregated percentage, so the rate under test is the code rate, unambiguously.
+ */
+const SOURCE_FORMAT = 2;
 
 /**
  * Three students, and attendance rows chosen so the scoped and unscoped answers differ in
  * a way no other data can mask:
  *
- * - **1, 2 — `PHASE_A`, cohort `COHORT_A`, all `P`.** Two students, so `limit: 1` on
- *   `by_student` is a meaningful truncation. All present, so the phase-scoped rate is
- *   exactly 100.
- * - **3 — `PHASE_B`, cohort `COHORT_B`, all `A`.** The row a phase-scoped query must
- *   exclude, and the reason the unscoped rate cannot be 100. This is the student the
- *   pre-fix tool included in a `PHASE_A` query.
- *
- * Cohort is neither 1 nor 3, so `addRow` takes the P/A/E code path rather than blending in
- * a pre-aggregated percentage — the rate under test is the code rate, unambiguously.
+ * - **1, 2 — `PHASE_A`, all `P`.** Two students, so `limit: 1` on `by_student` is a
+ *   meaningful truncation. All present, so the phase-scoped rate is exactly 100.
+ * - **3 — `PHASE_B`, all `A`.** The row a phase-scoped query must exclude, and the reason
+ *   the unscoped rate cannot be 100. This is the student the pre-fix tool included in a
+ *   `PHASE_A` query.
  */
 const FIXTURE = [
-  { n: '1', phase: PHASE_A, cohort: COHORT_A, codes: ['P', 'P', 'P'] },
-  { n: '2', phase: PHASE_A, cohort: COHORT_A, codes: ['P', 'P'] },
-  { n: '3', phase: PHASE_B, cohort: COHORT_B, codes: ['A', 'A'] },
+  { n: '1', phase: PHASE_A, codes: ['P', 'P', 'P'] },
+  { n: '2', phase: PHASE_A, codes: ['P', 'P'] },
+  { n: '3', phase: PHASE_B, codes: ['A', 'A'] },
 ] as const;
 
 const PHASE_A_STUDENTS = [`${PREFIX}1`, `${PREFIX}2`];
@@ -90,7 +89,7 @@ async function seed(): Promise<void> {
       await prisma.attendanceRecord.create({
         data: {
           sourceId: `${PREFIX}${f.n}-${String(i)}`,
-          cohort: f.cohort,
+          sourceFormat: SOURCE_FORMAT,
           studentNumber: `${PREFIX}${f.n}`,
           date: new Date(`2025-03-0${String(i + 1)}`),
           code,
@@ -273,44 +272,20 @@ describeLocal('query_attendance unmatchable filter values (live DB)', () => {
     }
   });
 
-  it('errors on a cohort absent from attendance_records', async () => {
+  // Cohort is not domain-checked like current_phase — it is rejected outright, regardless
+  // of whether the value happens to exist anywhere, since the concept itself was removed.
+  it('rejects any cohort filter with cohort_not_supported, not a domain check', async () => {
     const res = (await client.callTool('query_attendance', {
       query_type: 'aggregate',
       cohort: 1899,
     })) as Envelope;
-    expect(res.error?.code).toBe('no_records');
-    expect(res.error?.message).toContain('cohort=1899');
-    expect(res.error?.message).toContain('attendance_records.cohort');
-    expect(res.error?.message).toContain(String(COHORT_A));
-  });
+    expect(res.error?.code).toBe('cohort_not_supported');
 
-  /**
-   * The other direction, and the one that matters most. `PHASE_A` and `COHORT_B` are both
-   * real values in their columns; no attendance row carries both. That is a fact about the
-   * data, so it comes back as zero — not as an error, and not as a suggestion to retry.
-   */
-  it('returns a real zero, not an error, for present values that no row combines', async () => {
-    const { prisma } = await import('@lp-ai/lib-db');
-    const reference = await prisma.attendanceRecord.count({
-      where: { cohort: COHORT_B, studentNumber: { in: PHASE_A_STUDENTS } },
-    });
-    expect(reference).toBe(0); // guaranteed by the fixture, not assumed
-    // Each value on its own does match, which is what separates this from the cases above.
-    expect(await prisma.attendanceRecord.count({ where: { cohort: COHORT_B } })).toBeGreaterThan(0);
-    expect(
-      await prisma.attendanceRecord.count({ where: { studentNumber: { in: PHASE_A_STUDENTS } } }),
-    ).toBeGreaterThan(0);
-
-    const res = (await client.callTool('query_attendance', {
+    const byCohortGroup = (await client.callTool('query_attendance', {
       query_type: 'aggregate',
-      group_by: 'overall',
-      current_phase: PHASE_A,
-      cohort: COHORT_B,
+      group_by: 'cohort',
     })) as Envelope;
-    expect(res.error).toBeUndefined();
-    expect(res.overall?.rows_counted).toBe(0);
-    expect(res.overall?.student_count).toBe(0);
-    expect(res.filters_applied).toEqual({ cohort: COHORT_B, current_phase: PHASE_A });
+    expect(byCohortGroup.error?.code).toBe('cohort_not_supported');
   });
 
   // A blank means "no filter" — sending it through the domain check would error on the
