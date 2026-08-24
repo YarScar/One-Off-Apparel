@@ -53,3 +53,11 @@ export * from './resize.js';
 // Form → match → KB retrieve → limit check → Markdown. Returns the figure work order; never calls a
 // connector.
 export * from './pipeline.js';
+
+// Closed-loop check that a drafted figure traces to the live query_* result the caller ran for it.
+// Never re-runs the call itself — see the module header for why.
+export * from './verify.js';
+
+// `.docx` text extraction, ported from corpus_search.py — the production path for turning a
+// `grant_documents` catalog hit into text. See `get_grant_document_text` (WP #323).
+export * from './docx.js';

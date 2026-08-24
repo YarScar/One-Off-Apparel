@@ -25,7 +25,244 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-21
+
+### Added — WP #323: `get_grant_document_text`, the Drive text-fetch tool `find_grant_documents` promised
+
+`find_grant_documents` catalogs 1,253 Drive files but only ever returned metadata — its `usage_note`
+pointed at "a Google Drive read tool" that did not exist. New MCP tool
+`apps/mcp-server/src/tools/get-grant-document-text.ts` closes that: given a `drive_file_id`, it reads
+the `grant_documents` catalog to gate on `contentClass`/`driveFileId` (the same `fetchable` flag
+`find_grant_documents` already returns), then fetches via the `google-drive` connector's own client
+(`clientFromEnv`, now exposed to `apps/mcp-server` as `@lp-ai/connector-google-drive`) rather than a
+second Drive credential path. Google Docs/Slides export as plain text; uploaded `.docx`/`.dotx` are
+downloaded raw and extracted with a new `extractDocxText` (`packages/grants/src/docx.ts`, new `jszip`
+dependency) — a straight port of `.claude/skills/grant-writing/scripts/corpus_search.py`'s paragraph
+extraction, kept in parity with it deliberately. Other `contentClass: "text"` types (PDF, `.doc`,
+spreadsheets, `.csv`, `.vtt`, `.html`) are out of scope for this pass and return `not_yet_implemented`
+— `find_grant_documents`'s `fetchable=true` no longer guarantees this tool can read the file, which is
+now stated in both tools' descriptions and in `docs/mcp-server-spec.md`. `find-grant-documents.ts`'s
+`usage_note` and `.claude/skills/grant-writing/references/gap-fill.md` (rung 3) now name the new tool
+as the production path, with `corpus_search.py` kept as the documented dev-only fallback. Registered
+in `make-server.ts`; `tool_permissions` row added
+(`20260821010000_add_get_grant_document_text_permission`, same roles as `find_grant_documents`).
+**Production Drive auth for the Grants tree remains unverified** (the service account may lack
+access) — this tool inherits that limitation and says so in its error path rather than papering over
+it. Tool count: 26 → 27 on this branch; `docs/mcp-server-spec.md`, `docs/STATE.md`, and this package's
+`CLAUDE.md` all updated. If you have an existing local clone: `pnpm install` (new `jszip` dependency)
+and `pnpm db:migrate`.
+
+### Removed — WP #322: `kb.meta.connector_reconciliation` relocated out of the KB
+
+`kb_launchpad.json`'s `meta.connector_reconciliation` carried dollar/percentage figures dated
+2026-07-23, a month stale against `meta.updated` (2026-08-20), and outside every staleness check:
+`computeIntegrityReport`'s `stored_literal_figure` scan (`src/data.ts`) only walks `kb.answers`, and
+the only scan that touched `meta` at all (`kb_ref_dangling_in_prose`) checks for dangling KB-slot
+references, a different concern. Confirmed (2026-08-21) the field was read by nothing besides that
+dangling-ref scan — never surfaced to a drafting model — so the field is deleted from the KB and its
+content relocated verbatim to [`docs/connector-reconciliation-notes.md`](docs/connector-reconciliation-notes.md),
+a dated staff note no code path reads. This removes the staleness risk instead of scanning for it
+forever. `knowledgeBaseSchema` (`src/schemas.ts`) no longer declares the field; `data.ts`'s prose scan
+now runs over `source_recency` + `note` only. If you have an existing local clone with an older
+`kb_launchpad.json`, `pnpm db:seed` or re-pulling picks up the trimmed file automatically — no
+migration involved, this is corpus JSON, not the database.
+
+### Added — WP #321: `grant_verify_figure` closed-loop figure check
+
+`figure_call` in `pipeline.ts` tells the drafting model which `query_*` tool sources a figure, but
+nothing mechanically checked that the number it wrote down actually matched what that tool
+returned — the drafting model could still hallucinate a plausible-looking figure.
+
+- **New `verifyFigureAnswer(draftText, figureCall, queryResult)`** (`packages/grants/src/verify.ts`) —
+  extracts literal figures from the draft via the existing `literalFigures()` (`slots.ts`), walks
+  `queryResult` recursively collecting every numeric leaf (numbers and numeric substrings in
+  strings, via the existing `extractNumericClaims()` from `figures.ts`), and reports which drafted
+  figures do and don't appear anywhere in the live result. No new number-parsing was written.
+- **New MCP tool `grant_verify_figure`** (`apps/mcp-server/src/tools/grant-verify-figure.ts`) — takes
+  `{ answer_text, figure_call, query_result }` and returns `needs_input` naming the unmatched
+  figure(s) plus the correct live value(s) as suggestions, or `{ matched: true, drafted_figures }`
+  on success. Registered in `make-server.ts`; ACL row added via migration
+  `20260821000000_add_grant_verify_figure_permission` (`leadership`, `admin`, same as the other
+  `grant_*` tools).
+- **Deviates from the WP's literal text on purpose.** WP #321 as written says
+  `grant_verify_figure` should re-invoke the named `query_*` tool server-side. That would launder
+  permissions: `runTool`'s ACL check (`apps/mcp-server/src/permissions.ts`) keys on the literal
+  inbound tool name, so an internal call to e.g. `query_finances` from inside
+  `grant_verify_figure` would be authorized as `grant_verify_figure`, not as `query_finances` —
+  exactly the ACL-bypass pattern `figures.ts`'s own header comment already forbids. Raised to the
+  user, who chose the caller-supplies-`query_result` shape instead: the drafting model runs the
+  `query_*` tool itself (ACL-checked under its own name) and hands the raw result to
+  `grant_verify_figure` for comparison only. `pipeline.ts`'s `fetch_figure` action-text and the
+  markdown renderer's `figure_call` block both now instruct the drafting model to call
+  `grant_verify_figure` with that result before finalizing a figure answer.
+- **Verified:** `pnpm -r typecheck` clean across 14 packages, `pnpm test` 573/573, `pnpm lint`
+  clean. New coverage: `verify.test.ts` (5 cases — match, mismatch, nested-in-result match,
+  vacuous pass with no literal figures, multiple simultaneous mismatches) and two `tools.test.ts`
+  integration cases (mismatch → `needs_input` with the correct suggestion; match → `matched: true`).
+
+### Added — WP #320: `needs_input` gate enforces program/framing before drafting
+
+`admin/HANDOFF.md`'s three-principle review found principle 3 unenforced: `program`/`framing` on
+`grant_build_draft` were optional Zod fields nothing ever checked, `cover.fiscal_sponsor` was one
+hardcoded answer regardless of which fiscal-sponsorship posture applied, and no "ask for
+clarification" mechanism existed anywhere in this MCP server.
+
+- **New `ToolErrorCode`: `needs_input`** (`apps/mcp-server/src/errors.ts`) — not a failure; the tool
+  needs a fact only the caller's conversation has. Reuses the existing `{ error: { code, message,
+  suggestions? } }` envelope.
+- **`grant_build_draft` gates on `program`/`framing` before calling `runPipeline`**
+  (`apps/mcp-server/src/tools/grant-build-draft.ts`) — the one chokepoint every draft passes through,
+  per `docs/PLAYBOOK.md` steps 2 and 3. Missing either returns `needs_input` naming which is missing,
+  with suggestions listing the concrete choices (program: 101/LiftOff/Inc.; framing: the three
+  postures below). Applies to both the inline-`questions` path and the `form_id` stored-fixture path.
+- **`framing` is now a closed enum, not a free string** — `FRAMINGS` / `framingSchema` / `Framing`
+  (`packages/grants/src/schemas.ts`): `initiative` | `fiscal_sponsorship` | `silent`, naming the three
+  postures `docs/PLAYBOOK.md` step 3 says to ask about every time. Applies to
+  `incomingFormSchema.meta.framing` and the `grant_build_draft` tool's `framing` input.
+- **`cover.fiscal_sponsor` now varies by framing** — `kbStructuredValueSchema` gained an optional
+  `by_framing` map (`packages/grants/src/schemas.ts`); `packages/grants/seed/kb_launchpad.json`'s
+  `cover.fiscal_sponsor` carries an `initiative` and a `fiscal_sponsorship` variant (the `silent`
+  variant and the base `value` are the same minimal answer). `pipeline.ts::buildAnswer` resolves the
+  effective value from `formContext.emphasis`, falling back to `value` when framing is absent or the
+  slot carries no variant for it — so any other structured value is unaffected.
+- **Blast radius: all 10 stored form fixtures now carry a `framing`.** Five (`allen_hiles_2024`,
+  `dolfinger_mcmahon_2023`, `jff_ai_pathways_2026`, `sample_incoming`, `sample_philly_innovation`) had
+  none and were backfilled `"silent"` — the least-assumption default for a blank template or a
+  synthetic non-real fixture. Five had descriptive free-text framing and were normalized to the
+  nearest enum value (`aug7_gsk`, `hamilton_loi_2025`, `jevs_c2l_2024` → `initiative`; `aug7_truist`,
+  `wpf_workforce_2026` → `fiscal_sponsorship`) — no test asserted the old wording, confirmed by grep
+  before the change.
+- **Deliberately out of scope, tracked as follow-on debt** (`docs/STATE.md`): full per-program KB
+  sharding and a matcher-side ambiguity/runner-up signal. The KB is flat prose; splitting it by
+  program is a content lift, not a code fix.
+- **Verified:** `pnpm -r typecheck` clean across 14 packages, `pnpm test` 567/567 (one pre-existing
+  `pipeline.test.ts` assertion updated — it checked a fixture's old free-text framing string passed
+  through verbatim, not the feature under test), `pnpm lint` clean. New coverage:
+  `pipeline.test.ts` (`by_framing` resolution + fallback) and `tools.test.ts` (the gate, drafting once
+  supplied, and the enum rejecting an unlisted posture at the schema layer).
+
+### Removed — the five `FIGURE_DEBT` unsourced figures, stripped from the corpus rather than settled
+
+The language-only rule already blocked any *new* stored figure without a live slot or a recorded
+exemption (`stored_literal_figure`, `high`). It also carried one standing exception: `FIGURE_DEBT`
+(`packages/grants/src/slots.ts`) let five figures that drift with no connector to source them stay
+literal, reported at `medium` (`stored_figure_unsourced`) rather than blocked. On review, that
+exception was itself a hole in the "nothing pulled from the knowledge base can violate the live-figures
+rule" guarantee — so the five claims were removed from the corpus instead of left as acknowledged debt:
+
+- **Outreach reach** — "reached more than 1,000 young people through info sessions and outreach" /
+  "1,000+ reached through outreach" (`kb.history`, `kb.capacity`, `kb.metrics`).
+- **Recruitment footprint** — "more than 30 non-selective high schools", "30+ ZIP codes"
+  (`kb.program_desc`, `kb.target_population`, `kb.partnerships`, `kb.profile.demographics`).
+- **Volunteer count** — "roughly 30 volunteers" (`kb.staff_bios`).
+- **Recruitment-interest split** — "fewer than 10% of recruited students... the other ~90%", the stated
+  rationale for the Entrepreneurial Leadership pathway (`kb.dei`, rewritten to keep the pathway
+  rationale without the unsourced split).
+- **Draft-reconciliation commentary** — a note comparing how two draft applications rounded the wage
+  total, which had leaked into stored answer prose rather than staying in `meta` (`kb.outcomes`,
+  `kb.metrics`).
+
+`packages/grants/seed/kb_launchpad.json` no longer states any of these. The matching five entries in
+`slots.ts::FIGURE_DEBT` were removed with them — leaving a dead register entry pointing at a claim the
+corpus no longer makes would have been the "delete an entry to quiet the warning" move the module's own
+doc comment forbids; removing the claim and the entry together is not that. `FIGURE_DEBT` is now an
+empty array, kept as the mechanism for any *future* unfillable figure.
+
+**Test changes:** `data.test.ts::BASELINE_CODES` and the "carries no violation" assertion now expect an
+empty integrity report instead of `['stored_figure_unsourced']`. `slots.test.ts`'s "no leaked /g regex
+state" test for `FIGURE_DEBT` now asserts 0 matches instead of 1, since there is nothing left in the
+register to match — the regression it guards against re-arms the moment a new entry is added.
+
+**Blast radius:** `pnpm exec vitest run packages/grants/src/data.test.ts packages/grants/src/slots.test.ts`
+— 69/69 pass. Full `pnpm test` — 562/562 pass. `pnpm -r typecheck` clean across all fourteen typechecked
+packages. `loadIntegrityReport()` on the real seed now returns `[]` — zero warnings of any severity,
+not just zero `high`. See `CLAUDE.md` §3 and `docs/STATE.md` §3 for the updated snapshot.
+
+## 2026-08-20
+
+### Changed — `packages/grants/CLAUDE.md` slimmed; state snapshot, debt list, and verification commands moved to `docs/STATE.md`
+
+To cut per-request context cost (the file was ~38 KB and loads into every Claude Code request),
+`packages/grants/CLAUDE.md` now carries only the load-bearing rules: §1 (the reconciliation rule),
+§2 (sources of truth), a one-paragraph §3 current-state summary, and §5 (changelog maintenance).
+The full verified snapshot, the documentation-debt list, and the verification commands moved
+byte-for-byte into `packages/grants/docs/STATE.md` (§3 / §4 / §6 unchanged, plus a header noting the
+move). Root `CLAUDE.md` was slimmed the same way — the add-tool and connector how-tos were already
+duplicated verbatim by the `add-mcp-tool` and `implement-connector` skills, so those sections are now
+pointers to the skills; the migration-deploy ordering note is condensed.
+
+**Blast radius:** nothing functionally changed — same commands, same authority, same debt record, all
+one path hop away. If you reference `CLAUDE.md` §4 or §6, point at `docs/STATE.md` instead.
+
+### Added — three org-identity facts filled in `kb_launchpad.json`, closing a gap three runs flagged
+
+`drafts/runs/2026-08-19/GAPS-AND-UNCERTAINTIES.md` §D listed website, mailing address, and year founded
+as facts the platform holds no answer for, needed by all four grants in `#304`. The same gap was
+recorded on 2026-08-11 (`docs/INFORMATION-GAPS.md`) and never closed. Per staff direction, financial
+and other number-based figures were left alone here because they move day to day; these three do not.
+
+Added to `kb.profile.identity`'s prose (`packages/grants/seed/kb_launchpad.json`), sourced from public
+IRS filing data via web search — **not** filed Launchpad material, which is this KB's usual bar, so
+flag if a stricter provenance standard is wanted for this class of fact:
+
+- **Website**: `https://launchpadphilly.org`. Read off the org's own email domain already on file
+  (`dannyelle@launchpadphilly.org`, `giving@launchpadphilly.org`) and confirmed by web search.
+- **Building 21's IRS-registered address is not the Philadelphia hub.** ProPublica Nonprofit Explorer
+  (EIN 47-2514219) lists the registered locality as Plymouth Meeting, PA; 801 Market Street is
+  Launchpad's program site, not Building 21's registered address. Exact street still
+  `[STAFF CONFIRM]` — the full address sits behind an embedded PDF viewer this pass didn't extract.
+- **501(c)(3) determination year is 2018, not the 2013 founding year.** Same ProPublica source:
+  "tax-exempt since April 2018." The KB previously had only the founding year, so any field asking
+  specifically for the determination year had nothing correct to answer with — three separate runs
+  (`aug7_gsk`, `wpf_workforce_2026`) filed `[DATA UNAVAILABLE]` here.
+
+**Did not add** a `cover.website` structured value: no such question id exists in `questions.json` yet
+(`docs/INFORMATION-GAPS.md` §7.1 — the "Website" question currently routes to `cover.address` by
+design, a bank-wording defect, not a content one). Adding the key anyway fires
+`structured_key_dangling` (`data.test.ts`) — verified by trying it, reverting, and confirming
+`pnpm exec vitest run packages/grants` returns to 320/320 green. Wiring a real `cover.website`
+canonical is engineering work and is unchanged by this pass.
+
+Still open, and not addressable without a person: exact Building 21 registered street address, board
+list, audited financials/990 attachment. Tracked as work package `#317`, child of `#304`.
+
 ## 2026-08-19
+
+### Fixed — `recent_gifts` returned the OLDEST gifts, because sheet order is not chronological
+
+Work package `#306`, found by testing the repoint against production immediately after deploying it.
+The repoint made `get_finance_brief.recent_gifts` return rows instead of an empty array — and they came
+back **FY20, Dec 2019 / Jan 2020**, on a tab whose row 523 is FY26. A field named `recent_gifts`
+returning the tab's oldest gifts is a worse failure than the empty array it replaced, because it looks
+like an answer.
+
+**Two independent causes, both real:**
+
+1. **`orderBy: { sourceId: 'asc' }` is a lexical sort.** `development:giving history:99` sorts *after*
+   `…:784`, because `'9' > '7'`. So the query was never in sheet order, and "the last ten rows" under
+   that ordering were the low-numbered — oldest — ones.
+2. **Sheet order is not chronological anyway.** Rows 523–526 of the 784-row giving-history tab are FY26
+   (Jul 2025) while its final rows are FY20. Older gifts were appended after newer ones, so *no* slice
+   off either end of that tab can mean "recent". The comment shipped in the first cut said sheet order
+   was "append-chronological in the observed data" — that assumption was wrong, and only production
+   data showed it.
+
+**Fix.** New `byFiscalYearDesc()` in `dev-crm.ts` sorts on the `fiscal_year` cell (`FY26` → 26), which
+is the only ordering key on these tabs that means anything — `date` is a display string (`"Aug 2025"`)
+and does not sort. `readDevTab` now sorts numerically on the row number parsed out of `sourceId`, so
+sheet order is actually sheet order for anything that wants it. Rows with no parseable fiscal year sort
+last rather than being dropped.
+
+The response note now says what the field is: **ten gifts from the most recent fiscal years, not the
+ten most recent gifts**, with no meaningful order within a year.
+
+`summariseGiving`'s `first_gift` / `last_gift` are replaced by `first_fiscal_year` /
+`latest_fiscal_year`, derived from the fiscal-year keys. The old pair read the `date` cell off either
+end of the array and was wrong for both reasons above. Nothing consumed them, so no caller changes.
+
+Seven new tests, including both causes reproduced directly: one asserts that a lexical `sourceId` sort
+picks the FY20 row as "most recent" and that `byFiscalYearDesc` does not, and one covers a
+non-chronological tab in true numeric order. Suite **562 passing across 27 files**.
 
 ### Changed — `query_donors`, `get_entity_brief` and `get_finance_brief` repointed at the Development CRM tabs
 

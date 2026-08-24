@@ -79,11 +79,14 @@ describe('FIGURE_DEBT', () => {
   // Every pattern in both registers is a module-level `/g` regex, and `RegExp.test` on one advances
   // `lastIndex` — so the second identical call resumes past the match and returns false. A checker whose
   // answer depends on how many times it has been called is worse than no checker. `unsourcedFigures`
-  // uses `String.match`, which resets; this is what pins that.
+  // uses `String.match`, which resets; this is what pins that. FIGURE_DEBT is empty as of 2026-08-21
+  // (its five entries were removed along with the corpus claims they covered), so there is nothing to
+  // match today — this only proves the empty register is stable across repeated calls. The real leak
+  // regression is re-armed the moment a new entry lands here.
   it('gives the same answer on repeated calls — no leaked /g regex state', () => {
     const text = 'Launchpad reached more than 1,000 young people through outreach.';
     const first = unsourcedFigures(text);
-    expect(first.length).toBe(1);
+    expect(first.length).toBe(0);
     for (let i = 0; i < 5; i += 1) {
       expect(unsourcedFigures(text).length).toBe(first.length);
     }

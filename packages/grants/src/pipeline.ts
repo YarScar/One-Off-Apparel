@@ -86,8 +86,10 @@ import { buildHandback, type Handback, type HandbackContext } from './handback.j
 import { MAX_COMPRESSION_RATIO, measure, underfillsProseField, type Measurement } from './limits.js';
 import { DEFAULT_THRESHOLD, matchQuestion, type MatchResult } from './matcher.js';
 import {
+  FRAMINGS,
   NON_NARRATIVE_ANSWER_TYPES,
   type AnswerType,
+  type Framing,
   type FormLimit,
   type IncomingForm,
   type KnowledgeBase,
@@ -313,6 +315,11 @@ function figureGate(
   };
 }
 
+/** Narrows a form's free-typed `emphasis` string to a {@link Framing}, so `by_framing` can index it. */
+function isFraming(x: string): x is Framing {
+  return (FRAMINGS as readonly string[]).includes(x);
+}
+
 /**
  * Resolve one matched question to an answer plan.
  *
@@ -427,7 +434,9 @@ export function buildAnswer(
             `means before writing the number.`
           : `This question wants a live ${figure.tool} figure. Run it with ` +
             `${JSON.stringify(figure.args)} and write the returned number — do not quote a frozen ` +
-            `KB figure.`,
+            `KB figure. Before finalizing, call grant_verify_figure with this answer text, this ` +
+            `figure_call, and ${figure.tool}'s result to confirm the number you wrote actually came ` +
+            `from it.`,
         figure_call: { tool: figure.tool, args: figure.args },
       };
     }
@@ -438,8 +447,16 @@ export function buildAnswer(
   // derive_from_reference branch so a stored short value never becomes prose to derive from.
   const structured = match.matched_id === null ? undefined : entry.structured?.[match.matched_id];
   if (structured !== undefined) {
+    // A structured value can vary by fiscal-sponsorship framing (`cover.fiscal_sponsor` is the case
+    // that exists today) — the same fact reads differently depending which posture staff picked.
+    // Falls back to `value` when the framing is missing or the slot carries no variant for it.
+    const emphasis = formContext.emphasis;
+    const structuredValue =
+      emphasis !== null && isFraming(emphasis)
+        ? (structured.by_framing?.[emphasis] ?? structured.value)
+        : structured.value;
     const structuredVerified = structured.verified ?? entry.verified;
-    const structuredFigures = needsManualFigureCheck(structured.value);
+    const structuredFigures = needsManualFigureCheck(structuredValue);
     const withStructured = {
       ...withEntry,
       verified: structuredVerified,
@@ -450,7 +467,7 @@ export function buildAnswer(
     // value, so that is the text whose holes matter. `eligibility.budget_size` is the case — it hands a
     // funder the fiscal-year expense figure with no prose around it, so a slot there is the whole answer
     // rather than a detail inside one.
-    const gatedStructured = figureGate(structured.value, withStructured, limit, context, match.kb_ref);
+    const gatedStructured = figureGate(structuredValue, withStructured, limit, context, match.kb_ref);
     if (gatedStructured !== null) return gatedStructured;
     if (limit === null) {
       return {
@@ -462,10 +479,10 @@ export function buildAnswer(
           structuredVerified,
           structuredFigures,
         ),
-        answer: structured.value,
+        answer: structuredValue,
       };
     }
-    const measurement = measureAgainst(structured.value, limit, match.kb_ref);
+    const measurement = measureAgainst(structuredValue, limit, match.kb_ref);
     if (measurement.fits) {
       // FITTING IS NOT ANSWERING. A stored value can measure inside a funder's cap and still leave
       // most of the field unanswered — `underfillsProseField` is the test, and board `grant-h32` is
@@ -498,7 +515,7 @@ export function buildAnswer(
             limit,
             measurement,
             context,
-            anchorValue: structured.value,
+            anchorValue: structuredValue,
           }),
           measurement,
         };
@@ -508,7 +525,7 @@ export function buildAnswer(
         status: 'fits',
         actor: STATUS_ACTOR.fits,
         action: addWarnings(measurement.guidance, structuredVerified, structuredFigures),
-        answer: structured.value,
+        answer: structuredValue,
         measurement,
       };
     }
@@ -529,7 +546,7 @@ export function buildAnswer(
       ),
       handback: buildHandback({
         task: 'resize',
-        sourceText: structured.value,
+        sourceText: structuredValue,
         limit,
         measurement,
         context,
@@ -934,7 +951,8 @@ export function renderMarkdown(pkg: DraftPackage): string {
         .join(', ');
       L.push(
         `Run \`${r.figure_call.tool}\` with (${args}) and write the returned figure. ` +
-          `Do NOT quote a frozen KB number.`,
+          `Do NOT quote a frozen KB number. Then call \`grant_verify_figure\` with this answer, this ` +
+          `figure_call, and the result before finalizing.`,
       );
       L.push('');
     }

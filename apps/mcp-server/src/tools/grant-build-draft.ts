@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   DEFAULT_THRESHOLD,
+  FRAMINGS,
   incomingFormSchema,
   listFormIds,
   loadBank,
@@ -72,12 +73,23 @@ const inputSchema = {
     .max(200)
     .optional()
     .describe('The captured form. Results come back in this order.'),
-  program: z.string().optional().describe('The specific program or award being applied to.'),
-  due: z.string().optional().describe('The deadline, as the funder states it.'),
-  framing: z
+  program: z
     .string()
     .optional()
-    .describe('What to emphasise for this funder — the "hat" the application wears.'),
+    .describe(
+      'Which program or entity this application is for — e.g. "101", "LiftOff", or "Inc." Required: ' +
+        'ask which applies rather than assume.',
+    ),
+  due: z.string().optional().describe('The deadline, as the funder states it.'),
+  framing: z
+    .enum(FRAMINGS)
+    .optional()
+    .describe(
+      'The fiscal-sponsorship framing to use with this funder — `initiative` (Launchpad as an ' +
+        'initiative of Building 21, emphasising institutional backing), `fiscal_sponsorship` (the ' +
+        'formal fiscally sponsored structure), or `silent` (focus on Launchpad, no detail on the ' +
+        'Building 21 relationship). Required: ask which applies every time, never assume.',
+    ),
   form_id: z
     .string()
     .optional()
@@ -224,6 +236,29 @@ export function registerGrantBuildDraft(server: McpServer): void {
           return toolError('no_records', `The form did not validate — ${issues}.`);
         }
         form = parsed.data;
+      }
+
+      // Principle 3, enforced at the one chokepoint every draft passes through: this tool is the
+      // only caller of `runPipeline`. `program` and `framing` used to be optional fields nobody
+      // checked — cosmetic Markdown and an LLM tone nudge respectively — so a draft could go out
+      // built on an assumed program or fiscal-sponsorship posture. Ask, per `docs/PLAYBOOK.md` step
+      // 2 and step 3, rather than assume.
+      const missing = [
+        form.meta.program === undefined ? 'program' : null,
+        form.meta.framing === undefined ? 'framing' : null,
+      ].filter((f): f is string => f !== null);
+      if (missing.length > 0) {
+        return toolError(
+          'needs_input',
+          `Which ${missing.join(' and ')} applies to this application? Both are required before ` +
+            `drafting — never assume.`,
+          [
+            'program: which program or entity — "101", "LiftOff", or "Inc."?',
+            'framing: which fiscal-sponsorship framing — `initiative` (Launchpad as an initiative ' +
+              'of Building 21), `fiscal_sponsorship` (the formal fiscally sponsored structure), or ' +
+              '`silent` (no detail on the Building 21 relationship)?',
+          ].filter((s) => missing.some((f) => s.startsWith(`${f}:`))),
+        );
       }
 
       const threshold = parseNum(raw, 'threshold') ?? DEFAULT_THRESHOLD;

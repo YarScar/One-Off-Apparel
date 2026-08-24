@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 
 import { runTool, parseStr } from '../tool-helpers.js';
-import { DEV_TABS, cell, donorNameOf, parseMoney, readDevTab } from '../dev-crm.js';
+import { DEV_TABS, byFiscalYearDesc, cell, donorNameOf, parseMoney, readDevTab } from '../dev-crm.js';
 
 const NAME = 'get_finance_brief';
 
@@ -111,13 +111,12 @@ export function registerGetFinanceBrief(server: McpServer): void {
                 `field; use query_finances(fund_balances) with a limit for the full tab.`,
             }
           : {}),
-        // The sheet's `date` is a display string ("Aug 2025"), not a sortable date, so these are the
-        // LAST ten rows in sheet order rather than a computed top-ten-by-date. Sheet order is
-        // append-chronological in the observed data, which makes them the most recent in practice —
-        // but that is a property of how the tab is maintained, not a guarantee, so the note says so.
-        recent_gifts: recentGifts
-          .slice(-10)
-          .reverse()
+        // Sorted by fiscal year, newest first. An earlier revision took the last ten rows in sheet
+        // order on the assumption the tab was append-chronological. Production disproved it: those
+        // ten came back FY20 (Dec 2019) on a tab whose row 523 is FY26. Sheet order is not
+        // chronological here, so "recent" has to be computed from the fiscal year.
+        recent_gifts: byFiscalYearDesc(recentGifts)
+          .slice(0, 10)
           .map((g) => ({
             amount: parseMoney(g.data['gross_amount']),
             gift_date: cell(g, 'date'),
@@ -128,9 +127,11 @@ export function registerGetFinanceBrief(server: McpServer): void {
           })),
         recent_gifts_note:
           'Repointed to development:giving history (#306); previously read the unpopulated donor_gifts ' +
-          'table and was always empty. These are the last ten rows in SHEET ORDER, not a computed ' +
-          'top-ten-by-date — the tab’s date cell is a display string ("Aug 2025") and is not sortable. ' +
-          'All-Building-21 scope; use query_donors for a Launchpad-scoped view.',
+          'table and was always empty. Ordered by FISCAL YEAR, newest first — the tab’s date cell is a ' +
+          'display string ("Aug 2025") that does not sort, and sheet order is not chronological. So ' +
+          'these are ten gifts from the most recent fiscal years, but not the ten most recent gifts, ' +
+          'and order within a fiscal year carries no meaning. All-Building-21 scope; use query_donors ' +
+          'for a Launchpad-scoped view.',
         sources_active: ['aplos', 'google_sheets'],
       };
     }),

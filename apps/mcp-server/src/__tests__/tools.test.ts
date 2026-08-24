@@ -19,7 +19,7 @@ describeLocal('MCP tool handlers (integration)', () => {
     await prisma.$disconnect();
   });
 
-  it('tools/list exposes all 25 tools', async () => {
+  it('tools/list exposes all 27 tools', async () => {
     const tools = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -27,10 +27,12 @@ describeLocal('MCP tool handlers (integration)', () => {
         'find_grant_documents',
         'get_entity_brief',
         'get_finance_brief',
+        'get_grant_document_text',
         'get_student_info',
         'grant_build_draft',
         'grant_match_question',
         'grant_resize_answer',
+        'grant_verify_figure',
         'query_attendance',
         'query_certifications',
         'query_competency',
@@ -494,6 +496,29 @@ describeLocal('MCP tool handlers (integration)', () => {
     expect(result.error?.message).toContain('Whitespace is not an answer');
   });
 
+  // grant_verify_figure, WP #321. Driven through the real server so the zod schema (`query_result` as
+  // z.unknown()) and the runTool envelope are exercised, not just verifyFigureAnswer directly.
+  it('grant_verify_figure rejects a drafted number the caller\'s own query result does not carry', async () => {
+    const result = (await client.callTool('grant_verify_figure', {
+      answer_text: 'Participants earned $350,268 in total wages.',
+      figure_call: { tool: 'query_employment', args: { query_type: 'aggregate' } },
+      query_result: { wages_total: 362030.26, wage_participants: 45 },
+    })) as { error?: { code: string; message: string; suggestions?: string[] } };
+    expect(result.error?.code).toBe('needs_input');
+    expect(result.error?.message).toContain('$350,268');
+    expect(result.error?.suggestions?.join(' ')).toContain('362030.26');
+  });
+
+  it('grant_verify_figure passes a drafted number that matches the caller\'s own query result', async () => {
+    const result = (await client.callTool('grant_verify_figure', {
+      answer_text: 'Participants earned $362,030.26 in total wages.',
+      figure_call: { tool: 'query_employment', args: { query_type: 'aggregate' } },
+      query_result: { wages_total: 362030.26, wage_participants: 45 },
+    })) as { matched: boolean; drafted_figures: string[] };
+    expect(result.matched).toBe(true);
+    expect(result.drafted_figures).toEqual(['$362,030.26']);
+  });
+
   // The defect this pins: `your_tasks` and `staff_actions` were built from two hand-written maps keyed
   // on `string`, and the builder iterated the MAP's keys — so a status absent from both maps counted
   // toward `by_actor` and appeared in neither list. Three were missing (`fetch_figure`, `needs_expand`,
@@ -579,5 +604,41 @@ describeLocal('MCP tool handlers (integration)', () => {
       questions: [{ text: 'What is your mission?' }],
     })) as { error?: { code: string } };
     expect(result.error?.code).toBe('no_records');
+  });
+
+  it('grant_build_draft asks for program and framing before drafting, rather than assume', async () => {
+    const result = (await client.callTool('grant_build_draft', {
+      questions: [{ text: 'What is your mission?' }],
+      funder: 'Example Foundation',
+    })) as { error?: { code: string; message: string; suggestions?: string[] } };
+    expect(result.error?.code).toBe('needs_input');
+    expect(result.error?.message).toContain('program');
+    expect(result.error?.message).toContain('framing');
+    expect(result.error?.suggestions?.some((s) => s.startsWith('program:'))).toBe(true);
+    expect(result.error?.suggestions?.some((s) => s.startsWith('framing:'))).toBe(true);
+  });
+
+  it('grant_build_draft drafts once program and framing are supplied', async () => {
+    const result = (await client.callTool('grant_build_draft', {
+      questions: [{ text: 'What is your mission?' }],
+      funder: 'Example Foundation',
+      program: 'LiftOff',
+      framing: 'initiative',
+    })) as { error?: { code: string }; summary?: { total: number } };
+    expect(result.error).toBeUndefined();
+    expect(result.summary?.total).toBe(1);
+  });
+
+  it('grant_build_draft rejects a framing value outside the three fiscal-sponsorship postures', async () => {
+    // Enforced by the input schema itself (a z.enum), so the MCP layer refuses the call before it
+    // ever reaches the handler — not a toolError envelope.
+    await expect(
+      client.callTool('grant_build_draft', {
+        questions: [{ text: 'What is your mission?' }],
+        funder: 'Example Foundation',
+        program: 'LiftOff',
+        framing: 'not_a_real_posture',
+      }),
+    ).rejects.toThrow();
   });
 });

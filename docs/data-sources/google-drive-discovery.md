@@ -358,7 +358,7 @@ describe the connector as built: the grant corpus, the discovery failure, the ca
 rules, and the deliberate absence of text ingestion. Its two specific defects are gone with it — the
 name-pattern "Sync Logic" step that could not work for this tree, and the dead
 `docs/embedding-pipeline.md` link (that link no longer exists anywhere, retiring
-`packages/grants/CLAUDE.md` §4 item 2's fifth target).
+`packages/grants/docs/STATE.md` §4 item 2's fifth target).
 
 **What that file used to promise and the code never did.** It described ingesting two student
 documents and named one of them the primary seed source for entity resolution. No such code was ever
@@ -378,7 +378,7 @@ grep -rn 'GOOGLE_DRIVE_FOLDER_ID\|google-drive\|skeleton' docs/ README.md CLAUDE
 | `README.md` | connector table and the "Remaining connectors" status line |
 | `docs/runbooks/local-dev.md` | `pnpm sync:drive # (skeleton)` |
 | `docs/mcp-server-spec.md` | `find_grant_documents` — IDs come from the connector now, not only the script |
-| `packages/grants/CLAUDE.md` §3 | connector status, test counts, the Drive discovery paragraph |
+| `packages/grants/docs/STATE.md` §3 | connector status, test counts, the Drive discovery paragraph |
 | `packages/grants/CHANGELOG.md` | the entry for all of the above |
 
 ---
@@ -397,7 +397,7 @@ State these as unknown rather than guessing. Each names what would settle it.
 | Can the 6 unlistable shortcut subtrees be reached? | An access request to the tree's owner. Named by path in the §5.2 run output |
 | Is H2 (connector indexing) also in play? | Share one deep subfolder directly, retry `parentId =` |
 | Why is `document_chunks` empty for `notion`? | Run `pnpm sync:notion` and read the `sync_runs` row |
-| Do the grant `tool_permissions` rows exist in **production**? | Needs an ECS one-off task or the bastion; RDS is not publicly reachable. Pre-existing gap — `packages/grants/CLAUDE.md` §3 |
+| Do the grant `tool_permissions` rows exist in **production**? | Needs an ECS one-off task or the bastion; RDS is not publicly reachable. Pre-existing gap — `packages/grants/docs/STATE.md` §3 |
 | True corpus size and file count | The walk's manifest, `data/drive-manifest.jsonl` |
 
 ---

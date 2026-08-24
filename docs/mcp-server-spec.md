@@ -2,9 +2,9 @@
 
 ## Tool Availability
 
-The server currently exposes **25 tools** — 16 data tools, `find_grant_documents`, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, and 5 `skill_*` tools — backed by Google Sheets, Aplos, Notion, and Google Drive connectors. Counted 2026-08-17 on `writing/dev` after `fix/google-drive-discovery` merged in; `main` is at 21. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
+The server currently exposes **27 tools** — 16 data tools, `find_grant_documents`, `get_grant_document_text`, `grant_match_question`, `grant_build_draft`, `grant_resize_answer`, `grant_verify_figure`, and 5 `skill_*` tools — backed by Google Sheets, Aplos, Notion, and Google Drive connectors. Counted 2026-08-21 on `writing/dev` after `get_grant_document_text` landed (WP #323); `main` is at 21. Semantic search uses pgvector with OpenAI `text-embedding-3-large` embeddings (1536 dimensions).
 
-`main`'s 21 do **not** map onto a subset of these 25 in the obvious way, and the difference matters when reasoning about what production can answer. `main` lacks the three `grant_*` tools and the fifth `skill_*` tool, and it *has* `find_grant_documents` — which was deployed to production from `fix/google-drive-discovery` on 2026-08-06, before `main` became the only deploy branch. Merging this branch is what finally makes the repository and production agree on that tool. Verify the count with:
+`main`'s 21 do **not** map onto a subset of these 27 in the obvious way, and the difference matters when reasoning about what production can answer. `main` lacks `get_grant_document_text`, the four `grant_*` tools, and the fifth `skill_*` tool, and it *has* `find_grant_documents` — which was deployed to production from `fix/google-drive-discovery` on 2026-08-06, before `main` became the only deploy branch. Merging this branch is what finally makes the repository and production agree on that tool. Verify the count with:
 
 ```bash
 grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print s}'
@@ -33,8 +33,9 @@ grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print 
 - `grant_build_draft` — captured funder form → reviewable draft package + figure verification work order
 - `grant_resize_answer` — one stored answer + one stated limit → the measurement, the rewrite rules, and a check on the rewrite the caller sends back
 
-**Grant document discovery (1):** listed apart from the three above because it is *not* one of them — it queries the `grant_documents` Postgres catalog, not the seed files, so it is a data tool that happens to serve grant work.
+**Grant document discovery (2):** listed apart from the three above because they are *not* one of them — they query the `grant_documents` Postgres catalog and live Drive, not the seed files, so they are data tools that happen to serve grant work.
 - `find_grant_documents` — funder / year / kind filters over the Drive Grants catalog → matching files and their Drive file IDs
+- `get_grant_document_text` — a `drive_file_id` from `find_grant_documents` → the file's extracted text (Google Docs/Slides and .docx/.dotx today; other text-bearing types return `not_yet_implemented`)
 
 **Still pending:**
 - Slack connector for `search_conversations`
@@ -43,7 +44,7 @@ Composite tools (`get_entity_brief`, `get_finance_brief`) MUST gracefully omit s
 
 ## Overview
 
-The MCP server exposes 25 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
+The MCP server exposes 27 tools to Claude. It runs as a Node.js HTTP server using the `@modelcontextprotocol/sdk` package with Streamable HTTP transport (or stdio for local desktop use). All tools are read-only — no writes to any data source.
 
 Every tool call is logged to the `usage_logs` Postgres table (tool name, timestamp, duration, caller identity, token usage).
 
@@ -543,10 +544,19 @@ Return a high-level financial overview — Aplos fund balances, a chart-of-accou
 Queries Aplos (`finance_snapshots` with `aplos:*` tab names) and Google Sheets fund balances directly.
 
 **`recent_gifts` was always empty until 2026-08-19 (#306).** It read `donor_gifts`, a table no
-connector writes. It now reads `development:giving history`. Two caveats carried in
-`recent_gifts_note`: these are the **last ten rows in sheet order**, not a computed top-ten-by-date —
-the tab's `date` cell is a display string (`"Aug 2025"`) and is not sortable — and they are
-all-Building-21 scope. Use `query_donors` for a Launchpad-scoped view.
+connector writes. It now reads `development:giving history`, **ordered by fiscal year, newest first**.
+
+Read the ordering caveat before quoting anything from it. The tab's `date` cell is a display string
+(`"Aug 2025"`) and does not sort, and **sheet order is not chronological** — rows 523–526 of the
+784-row tab are FY26 while its final rows are FY20, because older gifts were appended after newer
+ones. A first cut of this change took the last ten rows in sheet order and returned gifts from
+December 2019; the ordering is now computed from `fiscal_year`. So the field gives **ten gifts from the
+most recent fiscal years, not the ten most recent gifts**, and order within a fiscal year carries no
+meaning. All-Building-21 scope — use `query_donors` for a Launchpad-scoped view.
+
+Related, and worth knowing for any code reading these tabs: ordering a `finance_snapshots` query by
+`sourceId` is a **lexical** sort, so `development:giving history:99` sorts after `…:784`. `dev-crm.ts`
+sorts numerically on the parsed row number instead.
 
 **`aplos_funds` is pinned to one snapshot date.** The Aplos connector snapshots funds daily, so an
 unbounded "newest 50" spanned two `period` values and truncated the newest one — a caller reading the
@@ -725,7 +735,7 @@ Match a funder application question to a canonical entry in the LaunchPad grant 
 
 Resolve a captured funder form into a reviewable draft package: match each question, retrieve the mapped knowledge-base answer, measure it against the funder's stated limit, and flag what a person must do. Deterministic, and it reads seed files only.
 
-**Inputs:** either `funder` + `questions[]` (each `{ text, limit?: { unit, max } }`, max 200) or `form_id` for a stored fixture; optional `program`, `due`, `framing`, `threshold`, `include_markdown`.
+**Inputs:** either `funder` + `questions[]` (each `{ text, limit?: { unit, max } }`, max 200) or `form_id` for a stored fixture; optional `due`, `threshold`, `include_markdown`. **`program` and `framing` are enforced, not optional** — both fields exist on the schema so a well-formed call can supply them up front, but the tool returns a `needs_input` error naming whichever is missing before it will draft anything, rather than assume. `framing` is one of the three enum values `initiative` / `fiscal_sponsorship` / `silent` (`docs/PLAYBOOK.md` step 3), not a free string.
 
 **Returns:** `results[]` (one answer plan per question), `summary` (including `by_actor`), `your_tasks`, `staff_actions`, `kb_refs_used`, `figure_work_order`, `integrity_warnings`, and the rendered `markdown` draft.
 
@@ -789,6 +799,18 @@ Find grant documents in the Google Drive "Grants" tree by funder, year, and docu
 - **`funder`, `year`, and `doc_kind` are inferred from folder and file names only** — nothing is read from file contents. `needs_review` marks rows where inference was not decisive (no year, or `doc_kind = other`). Treat a filter built on them as a good shortlist, not a guarantee of completeness.
 
 **`fetchable=false` means the row has no Drive file ID recorded yet**, so it can be seen but not read. IDs come from the `google-drive` connector (`pnpm sync:drive`, or `packages/grants/scripts/drive-walk-grants.ts --dry-run` to look first), which needs an identity with shared-drive membership — see [docs/data-sources/google-drive-connector.md](data-sources/google-drive-connector.md).
+
+### `get_grant_document_text`
+
+Fetch the extracted text of one document a `find_grant_documents` call found, by `drive_file_id`. Reads the `grant_documents` catalog to gate on `contentClass`/`driveFileId` (the same `fetchable` flag `find_grant_documents` returns), then reads Drive itself — reusing the `google-drive` connector's client (`clientFromEnv`, `@lp-ai/connector-google-drive`) rather than a second credential path.
+
+**Why this shape.** The Drive connector deliberately never embeds corpus text (cost with no stated need — see `docs/data-sources/google-drive-connector.md`), so `find_grant_documents` only ever returned metadata. This tool is the missing other half: it turns one catalog hit into text on demand, instead of embedding all 1,253 files up front.
+
+**Inputs:** `drive_file_id` (required) — from a `find_grant_documents` result.
+
+**Returns:** `{ drive_file_id, filename, text }` on success. Two extraction paths today: Google-native Docs/Slides export as plain text via the Drive API; uploaded `.docx`/`.dotx` are downloaded raw and their paragraphs extracted from `word/document.xml` (`extractDocxText`, `@lp-ai/lib-grants`) — the same approach `.claude/skills/grant-writing/scripts/corpus_search.py` uses against a local mirror, kept in parity deliberately (WP #323). Other `contentClass: "text"` types (PDF, `.doc`, spreadsheets, `.csv`, `.vtt`, `.html`) are catalogued as fetchable by `find_grant_documents` but return `not_yet_implemented` here — that mismatch is a known gap, not a bug.
+
+**Errors:** `entity_not_found` (no catalog row for that ID), `no_records` (row exists but isn't fetchable), `not_yet_implemented` (fetchable but not yet an extractable type), `internal_error` (Drive call failed — **most likely production's unverified service-account access to the Grants tree**, per `docs/data-sources/google-drive-connector.md`, surfacing here rather than in a sync run).
 
 ### `grant_resize_answer`
 

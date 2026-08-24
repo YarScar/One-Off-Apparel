@@ -91,13 +91,14 @@ describe('integrity report', () => {
   // (meta named a `kb.serve` slot that never existed) and `attachment_questions_route_to_prose`
   // (the check flagged correct routings to the attachment checklist slots). This asserts the
   // clean state so neither can regress silently — SPEC.md gate G1 requires zero warnings.
-  it('carries no violation on the current seed — only the known debt register', () => {
+  it('carries no violation on the current seed', () => {
     const report = loadIntegrityReport();
     // No `high` at all. That is the language-only guarantee: every figure in a stored answer either has
     // a slot that fills it live or has a recorded reason for being literal.
     expect(report.filter((w) => w.severity === 'high')).toEqual([]);
-    // And the one thing left is the register, not a surprise.
-    expect(report.map((w) => w.code)).toEqual(['stored_figure_unsourced']);
+    // As of 2026-08-21 the FIGURE_DEBT register is empty too (its five claims were removed from the
+    // corpus rather than settled — see CHANGELOG.md), so the report is fully clean.
+    expect(report.map((w) => w.code)).toEqual([]);
   });
 
   it('memoises', () => {
@@ -141,12 +142,11 @@ function corpus(): { bank: QuestionBank; kb: KnowledgeBase } {
 /**
  * The codes the unmodified seed reports, which every mutated corpus reports too.
  *
- * Exactly one entry as of 2026-08-17: `stored_figure_unsourced`, the FIGURE_DEBT register — figures
- * that drift with no live source to fill them from, which stay literal and stay reported rather than
- * being slotted into a hole nothing can fill or allowlisted as though they were stable. See
- * `slots.ts::FIGURE_DEBT`.
+ * Empty as of 2026-08-21: the `stored_figure_unsourced` warning that used to sit here came from the
+ * five `FIGURE_DEBT` entries — figures that drifted with no live source to fill them from — and those
+ * were removed from the corpus rather than settled. See `slots.ts::FIGURE_DEBT`.
  */
-const BASELINE_CODES: readonly string[] = ['stored_figure_unsourced'];
+const BASELINE_CODES: readonly string[] = [];
 
 /**
  * A report with {@link BASELINE_CODES} removed — the warnings a mutation INTRODUCED.
@@ -263,7 +263,7 @@ describe('computeIntegrityReport', () => {
 
   it('fires kb_ref_dangling_in_prose for a slot named only in meta, trailing period and all', () => {
     const { bank, kb } = corpus();
-    kb.meta.connector_reconciliation += ' Cross-checked against kb.gone_slot.';
+    kb.meta.note += ' Cross-checked against kb.gone_slot.';
     const report = introduced(computeIntegrityReport(bank, kb));
     expect(report.map((w) => w.code)).toEqual(['kb_ref_dangling_in_prose']);
     // The sentence-final period must be stripped before the lookup, or a prose reference at the end

@@ -2,6 +2,7 @@
   "meta": {
     "funder": "Example Philadelphia Innovation & Workforce Fund",
     "program": "Youth Tech Pathways (FY26)",
+    "framing": "silent",
     "note": "Synthetic form built from real recurring question types captured in sources/philadelphia-regional-and-sector-forms.md (Seybert, Barra, PAsmart, SF-424, corporate eligibility quizzes). Not a real funder. Exercises the v0.2 question-bank additions."
   },
   "questions": [

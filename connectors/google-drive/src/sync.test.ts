@@ -26,6 +26,7 @@ function fakeClient(root: Partial<DriveRoot>, files: DriveFile[]): DriveClient {
         duplicatePaths: [],
       }),
     exportText: () => Promise.resolve(null),
+    downloadFile: () => Promise.resolve(Buffer.alloc(0)),
   };
 }
 
