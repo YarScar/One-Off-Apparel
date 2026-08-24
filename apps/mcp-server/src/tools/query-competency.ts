@@ -9,16 +9,16 @@ import { resultEnvelope, clampLimit, MAX_LIMIT } from '../result-envelope.js';
 const NAME = 'query_competency';
 
 const DESCRIPTION =
-  'Per-student competency analytics (baseline, performance level, growth, progress, ER counts), the rubric structure stored as finance_snapshots row data, or an org-wide growth aggregate. Row-returning query_types are paged: every response carries total_matching (a real count over the whole filter, independent of limit) and truncated, so a page is never mistaken for the population. Do not average growth from the rows of a truncated response — use query_type "growth_aggregate", which computes the figure in the database over every matching row and is the only growth number safe to quote.';
+  'Per-student competency analytics (baseline, performance level, growth, progress, ER counts), or an org-wide growth aggregate. Row-returning query_types are paged: every response carries total_matching (a real count over the whole filter, independent of limit) and truncated, so a page is never mistaken for the population. Do not average growth from the rows of a truncated response — use query_type "growth_aggregate", which computes the figure in the database over every matching row and is the only growth number safe to quote.';
 
 const inputSchema = {
-  query_type: z.enum(['scores', 'rubric', 'growth_aggregate']),
+  query_type: z.enum(['scores', 'growth_aggregate']),
   student_number: z.string().optional(),
   competency: z.string().optional().describe('Partial match.'),
   limit: z
     .number()
     .optional()
-    .describe(`Max rows returned by 'scores' and 'rubric'; default 500, capped at ${MAX_LIMIT}. Ignored by 'growth_aggregate', which reads every matching row.`),
+    .describe(`Max rows returned by 'scores'; default 500, capped at ${MAX_LIMIT}. Ignored by 'growth_aggregate', which reads every matching row.`),
 };
 
 /**
@@ -55,23 +55,6 @@ export function registerQueryCompetency(server: McpServer): void {
       const studentNumber = parseStr(raw, 'student_number');
       const competency = parseStr(raw, 'competency');
       const limit = clampLimit(parseNum(raw, 'limit'));
-
-      if (queryType === 'rubric') {
-        const rubricWhere: Prisma.FinanceSnapshotWhereInput = { tabName: 'student_competency:rubric' };
-        const [total, rubric] = await Promise.all([
-          prisma.financeSnapshot.count({ where: rubricWhere }),
-          prisma.financeSnapshot.findMany({
-            where: rubricWhere,
-            orderBy: [{ sourceId: 'asc' }],
-            take: limit,
-          }),
-        ]);
-        return {
-          query_type: 'rubric',
-          ...resultEnvelope(rubric.length, total, limit),
-          records: rubric.map((r) => ({ source_id: r.sourceId, row_data: r.rowData })),
-        };
-      }
 
       const where: Prisma.StudentCompetencyWhereInput = {};
       if (studentNumber) where.studentNumber = studentNumber;

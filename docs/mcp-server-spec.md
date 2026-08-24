@@ -16,7 +16,7 @@ grep -c "NAME = '" apps/mcp-server/src/tools/*.ts | awk -F: '{s+=$2} END {print 
 - `query_enrollment` — enrollment statistics by phase, school, cohort, race, date ranges, with full per-student profile filters
 - `query_certifications` — PCEP pass/fail results, scores, by phase
 - `query_students` — population statistics + filtered lists with full demographic, academic, and post-program filter set
-- `query_competency` — per-student competency scores and the rubric structure
+- `query_competency` — per-student competency scores and org-wide growth aggregates
 - `query_finances` — Launchpad Dashboard, Phase Budget Dashboard (incl. monthly LiftOff/HS), Phase Actuals 2025 + Q3 2026, Rapid + PEX stipends, **and Building21 Development CRM** (giving history, prospect pipeline, denied, Launchpad pipeline, grants tracker, contacts)
 - `query_donors` — Building21 Development CRM donor lookup (list / profile / summary). Profile mode joins one donor's record to their gift history, pipeline, Launchpad-specific asks, and grants
 - `query_attendance` — three Launchpad cohort attendance sheets unified into `attendance_records`. By-student rates, aggregate breakdowns, raw event drill-downs
@@ -699,17 +699,19 @@ stopped early.
 
 ### `query_competency`
 
-Per-student competency data (scores), the rubric structure (skills + opportunity totals by
-phase and term), or an org-wide growth aggregate.
+Per-student competency data (scores), or an org-wide growth aggregate. The rubric structure
+(skills + opportunity totals by phase and term) is no longer synced — the current source sheet
+doesn't carry it — so `query_type: "rubric"` was removed rather than left returning an empty
+answer.
 
-**Query types:** `scores`, `rubric`, `growth_aggregate`.
+**Query types:** `scores`, `growth_aggregate`.
 
 **Filters:** `student_number`, `competency` (partial match), `limit` (default 500, max 1000;
-`scores` and `rubric` only).
+`scores` only).
 
-`scores` and `rubric` return a page and report it as one: `record_count`, `total_matching`,
-`truncated` and `limit` (see "Truncation reporting" below). `growth_aggregate` reads every
-matching row and returns scalars — `avg_growth`, `min_growth`, `max_growth`, `avg_baseline`,
+`scores` returns a page and reports it as one: `record_count`, `total_matching`, `truncated`
+and `limit` (see "Truncation reporting" below). `growth_aggregate` reads every matching row and
+returns scalars — `avg_growth`, `min_growth`, `max_growth`, `avg_baseline`,
 `avg_performance_level`, `avg_progress`, `row_count`, `student_count`, the per-column non-null
 counts that are the real denominators, and a `by_competency` breakdown.
 

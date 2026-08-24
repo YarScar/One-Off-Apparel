@@ -66,7 +66,7 @@ These return data directly from the database. Typical query tools include:
 | `query_enrollment` | Enrollment headcounts, phase breakdowns, cohort summaries |
 | `query_attendance` | Per-person or aggregate attendance rates by phase, cohort, demographic |
 | `query_outcomes` | Program outcomes — baseline, performance level, growth, progress |
-| `query_competency` | Per-person competency analytics or rubric structure |
+| `query_competency` | Per-person competency analytics or org-wide growth aggregates |
 | `query_certifications` | Certification pass/fail rates, scores, breakdowns |
 | `query_employment` | Employment records — earnings, hours, exit codes |
 | `query_postsecondary` | Post-program education enrollment and outcomes |

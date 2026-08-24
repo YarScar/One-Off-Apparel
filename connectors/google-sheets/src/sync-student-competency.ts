@@ -1,10 +1,6 @@
 import { prisma } from '@lp-ai/lib-db';
 import { getAllSheetRows } from './sheets-client.js';
 
-function snakeCase(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-}
-
 function parseNumStr(v: string | undefined): string | null {
   const s = v?.trim().replace(/,/g, '');
   return s !== undefined && s !== '' && !isNaN(Number(s)) ? s : null;
@@ -32,21 +28,18 @@ function normalizeScoreColumn(raw: string): string | null {
   }
 }
 
-function normalizeRubricColumn(raw: string): string | null {
-  switch (raw.trim()) {
-    case 'Type':                          return 'type';
-    case 'Code':                          return 'code';
-    case 'Descriptor':                    return 'descriptor';
-    case 'Statement or Guiding Question': return 'statement';
-    case 'HS ER':                         return 'hs_er';
-    case 'HS Total':                      return 'hs_total';
-    case 'LO ER':                         return 'lo_er';
-    case 'LO Total':                      return 'lo_total';
-    default:                              return null;
-  }
-}
+export async function syncStudentCompetency(): Promise<number> {
+  const sheetId = process.env['GOOGLE_SHEETS_STUDENT_COMPETENCY'];
+  if (!sheetId) throw new Error('GOOGLE_SHEETS_STUDENT_COMPETENCY not set');
 
-async function syncScoresTab(allSheets: Map<string, string[][]>): Promise<number> {
+  let allSheets: Map<string, string[][]>;
+  try {
+    allSheets = await getAllSheetRows(sheetId);
+  } catch (err) {
+    console.warn(`  skipping student competency: ${err instanceof Error ? err.message : String(err)}`);
+    return 0;
+  }
+
   let rows: string[][] | null = null;
   for (const [, tabRows] of allSheets) {
     if (tabRows[0]?.some((c) => c?.trim() === 'Student Number')) {
@@ -55,7 +48,7 @@ async function syncScoresTab(allSheets: Map<string, string[][]>): Promise<number
     }
   }
   if (!rows) {
-    console.warn('  skipping student competency scores tab: could not detect tab with "Student Number" header');
+    console.warn('  skipping student competency: could not detect tab with "Student Number" header');
     return 0;
   }
 
@@ -67,7 +60,12 @@ async function syncScoresTab(allSheets: Map<string, string[][]>): Promise<number
     })
     .filter((e): e is { rawIdx: number; key: string } => e !== null);
 
+  // Keyed by student + competency rather than sheet row number: a row-number key would
+  // silently reattach to whatever row happens to land in that position the next time this
+  // points at a different sheet, overwriting unrelated data instead of cleanly replacing it.
+  const seenSourceIds = new Set<string>();
   let synced = 0;
+
   for (let i = 1; i < rows.length; i += 1) {
     const raw = rows[i];
     if (!raw || raw.every((c) => !c?.trim())) continue;
@@ -82,7 +80,9 @@ async function syncScoresTab(allSheets: Map<string, string[][]>): Promise<number
     const competency = rowData['competency'];
     if (!studentNumber || !competency) continue;
 
-    const sourceId = `student_competency:scores:${i + 1}`;
+    const sourceId = `student_competency:${studentNumber}:${competency}`;
+    seenSourceIds.add(sourceId);
+
     const data = {
       studentNumber,
       competency,
@@ -104,93 +104,13 @@ async function syncScoresTab(allSheets: Map<string, string[][]>): Promise<number
     });
     synced += 1;
   }
-  return synced;
-}
 
-async function syncRubricTab(allSheets: Map<string, string[][]>): Promise<number> {
-  const rows = allSheets.get('Sheet1') ?? [];
-  if (rows.length < 5) return 0;
-
-  let headerIdx = -1;
-  for (let i = 0; i < rows.length; i += 1) {
-    const row = rows[i] ?? [];
-    if (
-      row.some((c) => c?.trim() === 'Type') &&
-      row.some((c) => c?.trim() === 'Code') &&
-      row.some((c) => c?.trim() === 'Descriptor')
-    ) {
-      headerIdx = i;
-      break;
-    }
-  }
-  if (headerIdx < 2) return 0;
-
-  const phaseTermRow = rows[headerIdx - 2] ?? [];
-  const opTotalsRow  = rows[headerIdx - 1] ?? [];
-  const headerRow    = rows[headerIdx]     ?? [];
-
-  const columnMap: { rawIdx: number; key: string }[] = headerRow
-    .map((h, i) => {
-      const h4 = h?.trim() ?? '';
-      let key: string | null;
-      if (h4) {
-        key = normalizeRubricColumn(h4);
-      } else {
-        const h2 = phaseTermRow[i]?.trim() ?? '';
-        key = h2 ? snakeCase(h2) : null;
-      }
-      return key === null ? null : { rawIdx: i, key };
-    })
-    .filter((e): e is { rawIdx: number; key: string } => e !== null);
-
-  let synced = 0;
-
-  const totalsData: Record<string, string> = { row_type: 'opportunity_totals' };
-  for (const { rawIdx, key } of columnMap) {
-    totalsData[key] = opTotalsRow[rawIdx]?.trim() ?? '';
-  }
-  const totalsSourceId = `student_competency:rubric:${headerIdx}`;
-  await prisma.financeSnapshot.upsert({
-    where: { sourceId: totalsSourceId },
-    create: { sourceId: totalsSourceId, tabName: 'student_competency:rubric', period: null, rowData: totalsData },
-    update: { rowData: totalsData },
-  });
-  synced += 1;
-
-  for (let i = headerIdx + 1; i < rows.length; i += 1) {
-    const raw = rows[i];
-    if (!raw || raw.every((c) => !c?.trim())) continue;
-
-    const rowData: Record<string, string> = {};
-    for (const { rawIdx, key } of columnMap) {
-      rowData[key] = raw[rawIdx]?.trim() ?? '';
-    }
-    if (Object.values(rowData).every((v) => !v)) continue;
-
-    const sourceId = `student_competency:rubric:${i + 1}`;
-    await prisma.financeSnapshot.upsert({
-      where: { sourceId },
-      create: { sourceId, tabName: 'student_competency:rubric', period: null, rowData },
-      update: { rowData },
+  if (seenSourceIds.size > 0) {
+    const { count: removed } = await prisma.studentCompetency.deleteMany({
+      where: { sourceId: { notIn: [...seenSourceIds] } },
     });
-    synced += 1;
+    if (removed > 0) console.log(`  student competency: removed ${removed} stale row(s) no longer in the source`);
   }
+
   return synced;
-}
-
-export async function syncStudentCompetency(): Promise<number> {
-  const sheetId = process.env['GOOGLE_SHEETS_STUDENT_COMPETENCY'];
-  if (!sheetId) throw new Error('GOOGLE_SHEETS_STUDENT_COMPETENCY not set');
-
-  let allSheets: Map<string, string[][]>;
-  try {
-    allSheets = await getAllSheetRows(sheetId);
-  } catch (err) {
-    console.warn(`  skipping student competency: ${err instanceof Error ? err.message : String(err)}`);
-    return 0;
-  }
-
-  const scoresCount = await syncScoresTab(allSheets);
-  const rubricCount = await syncRubricTab(allSheets);
-  return scoresCount + rubricCount;
 }

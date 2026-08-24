@@ -133,7 +133,7 @@ Pull the numbers the form actually needs. This is the tool map.
 | Certifications, pass rates | `query_certifications({query_type: "summary" \| "by_type" \| "by_phase" \| "by_result"})` | Live. **One certification only:** every record is PCEP. "Industry certifications" in the plural is a program-design statement, not something this data supports |
 | Attendance, persistence | `query_attendance({query_type: "aggregate", group_by: "overall" \| "cohort" \| "current_phase" \| "enrollment_status"})` | Live. Rates blend three differently-coded cohort sheets, and one phase records zero excused absences where others record them, so cross-phase comparison is uneven. `current_phase` also returns an **Alumni** group that is not one of the four program phases |
 | College enrollment and completion | `query_postsecondary({query_type, graduated_only})` | Live. Read the denominator warning below before quoting any rate |
-| The competency framework itself | `query_competency({query_type: "rubric"})` | Live: 95 rows, areas + competencies + skills + per-term assessment counts |
+| The competency framework itself | — | **Removed.** `query_competency({query_type: "rubric"})` no longer exists — the source sheet stopped carrying that structure. Describing the framework (areas, competencies, skills) now needs a person or a document, not a live call |
 | One student's competency detail | `query_competency({query_type: "scores", student_number})`, `query_outcomes({student_name})` | Per-student only. There is no org-level competency aggregate, and an unfiltered `scores` call returns a payload too large to read |
 | Budget lines, expense actuals | `query_finances({query_type: "ytd"})` for budget vs actual by account; `get_finance_brief({period})` for Aplos accounts and dated transactions | Live |
 | Fund balances | `get_finance_brief` | **Names only.** The fund entries carry no balance amounts, and `sheet_fund_balances` and `recent_gifts` came back empty. Do not report a balance from this tool |
@@ -397,8 +397,9 @@ competencies and roughly two dozen skills, staged Associate → AI Engineer, wit
 bar. That framework is the Technical Skills area of a wider rubric. The stored rubric holds three areas,
 Work Readiness, Technical Skills, and Critical Inquiry / Creation / Communication, so durable skills and
 communication are assessed alongside the technical ladder. That is the answer for an education funder
-asking how non-technical growth is measured, and `query_competency({query_type: "rubric"})` returns the
-statements and the per-term assessment counts to back it. Assessed on deployed work rather than seat time,
+asking how non-technical growth is measured. The rubric statements and per-term assessment counts are no
+longer available through the MCP connector (`query_competency`'s `rubric` query type was removed) — get
+current wording from staff before quoting it. Assessed on deployed work rather than seat time,
 tracked in Beacon, Building 21's competency platform. Launchpad
 measures earning power over time toward a USD 50,000 living wage rather than a job on graduation day.
 

@@ -13,7 +13,7 @@ Syncs structured data from multiple Google Sheets into Postgres. The connector i
 | Launchpad By Phase Actuals 2025 | `GOOGLE_SHEETS_BUDGET_BY_PHASE_ACTUALS_2025` | `finance_snapshots` (3 tabs) |
 | Rapid stipend transactions | `GOOGLE_SHEETS_RAPID` | `finance_snapshots` (Dashboard + FY2023–FY2025) |
 | PEX card transactions | `GOOGLE_SHEETS_PEX` | `finance_snapshots` (Dashboard + FY2022–FY2026) |
-| Student Competency | `GOOGLE_SHEETS_STUDENT_COMPETENCY` | `finance_snapshots` (`student_competency:scores`, `student_competency:rubric`) |
+| Student Competency | `GOOGLE_SHEETS_STUDENT_COMPETENCY` | `student_competencies` |
 | Building21 Development CRM | `GOOGLE_SHEETS_DEVELOPMENT_CRM` | `finance_snapshots` (6 tabs: contacts, giving history, prospect pipeline, denied, launchpad pipeline, grants tracker) |
 | Attendance — Cohort 1 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_1` | `attendance_records` (cohort=1) |
 | Attendance — Cohort 2 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_2` | `attendance_records` (cohort=2) |
@@ -136,7 +136,12 @@ Skipped headers (sheet-script metadata): `sheetName`, `sheetId`, `spreadsheetNam
 
 ### Student Competency
 
-The scores tab is detected by content (its name includes a date suffix that changes per export, e.g. `StudentCompetency 2026-04-29T12...`). Stored as `student_competency:scores`. The rubric tab (`Sheet1`) has a multi-row header layout (rows 2–4 combined) — stored as `student_competency:rubric`.
+The tab is detected by content (looks for a header row containing `Student Number`), not by
+tab name, since the source spreadsheet has been swapped more than once. Rows upsert into
+`student_competencies`, keyed on `student_number` + `competency` rather than sheet row number —
+that key survives pointing the sync at a different sheet, where row numbers would not. The
+source sheet no longer carries a rubric tab (skills + opportunity totals by phase/term); that
+data is retired, and `query_competency`'s `rubric` query type was removed with it.
 
 ## PII Handling Guardrails (Students tab)
 
@@ -295,7 +300,7 @@ Key files:
 - `src/sync-phase-dashboard.ts` — Phase Actuals 2025 + Q3 2026
 - `src/sync-phase-budget-dashboard.ts` — Phase Budget Dashboard (2025 Actuals + Monthly LiftOff/HS)
 - `src/sync-rapid.ts`, `src/sync-pex.ts` — stipend sheets
-- `src/sync-student-competency.ts` — competency scores + rubric
+- `src/sync-student-competency.ts` — competency scores
 - `src/sync-development-crm.ts` — Building21 CRM (6 tabs)
 - `src/sync-attendance.ts` — three cohort sheets, chunked-fetch (5,000 rows per chunk)
 - `src/sync-distances.ts` — geocodes student zips to office distance
