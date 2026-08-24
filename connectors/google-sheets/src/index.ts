@@ -1,5 +1,5 @@
 import { runSync, type SyncRunRecord } from '@lp-ai/lib-db';
-import { syncStudents, syncOutcomes, syncCertifications } from './sync-students.js';
+import { syncStudents, syncOutcomes, syncCertifications, syncOutcomesTab } from './sync-students.js';
 import { syncEmployment } from './sync-employment.js';
 import { syncPostsecondary } from './sync-postsecondary.js';
 import { syncRapid } from './sync-rapid.js';
@@ -34,6 +34,7 @@ export async function sync(): Promise<SyncResult> {
     const employment = await safeRun('employment', syncEmployment);
     const postsecondary = await safeRun('postsecondary', syncPostsecondary);
     const certifications = await safeRun('certifications', syncCertifications);
+    const outcomesTab = await safeRun('outcomes tab', syncOutcomesTab);
     const dashboard = await safeRun('dashboard', syncDashboard);
     const phaseBudget = await safeRun('phase budget dashboard', syncPhaseBudgetDashboard);
     const phaseQ3 = await safeRun('phase actuals Q3 2026', syncPhaseActualsQ3_2026);
@@ -70,7 +71,7 @@ export async function sync(): Promise<SyncResult> {
     }
 
     const total =
-      students + outcomes + employment + postsecondary + certifications +
+      students + outcomes + employment + postsecondary + certifications + outcomesTab +
       dashboard + phaseBudget + phaseQ3 + phase2025 +
       rapid + pex + competency + devCrm +
       attendance + enrollment + distanceUpdated + quotesSynced;
@@ -78,7 +79,7 @@ export async function sync(): Promise<SyncResult> {
     return {
       status: 'ok',
       recordsUpserted: total,
-      notes: `students: ${students}; outcomes: ${outcomes}; employment: ${employment}; postsecondary: ${postsecondary}; certifications: ${certifications}; dashboard: ${dashboard}; phase_budget: ${phaseBudget}; phase_q3_2026: ${phaseQ3}; phase_2025: ${phase2025}; rapid: ${rapid}; pex: ${pex}; competency: ${competency}; dev_crm: ${devCrm}; attendance: ${attendance}; enrollment: ${enrollment}; distances: ${distanceUpdated} updated / ${distanceSkipped} skipped; quotes: ${quotesSynced} synced / ${quotesSeen} seen / ${quotesEmpty} empty`,
+      notes: `students: ${students}; outcomes: ${outcomes}; employment: ${employment}; postsecondary: ${postsecondary}; certifications: ${certifications}; outcomes_tab: ${outcomesTab}; dashboard: ${dashboard}; phase_budget: ${phaseBudget}; phase_q3_2026: ${phaseQ3}; phase_2025: ${phase2025}; rapid: ${rapid}; pex: ${pex}; competency: ${competency}; dev_crm: ${devCrm}; attendance: ${attendance}; enrollment: ${enrollment}; distances: ${distanceUpdated} updated / ${distanceSkipped} skipped; quotes: ${quotesSynced} synced / ${quotesSeen} seen / ${quotesEmpty} empty`,
     };
   }, {
     tables: [
@@ -97,7 +98,7 @@ export async function sync(): Promise<SyncResult> {
   });
 }
 
-export { syncStudents, syncOutcomes, syncCertifications } from './sync-students.js';
+export { syncStudents, syncOutcomes, syncCertifications, syncOutcomesTab } from './sync-students.js';
 export { syncEmployment } from './sync-employment.js';
 export { syncPostsecondary } from './sync-postsecondary.js';
 export { syncRapid } from './sync-rapid.js';

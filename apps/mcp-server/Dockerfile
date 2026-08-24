@@ -40,6 +40,7 @@ RUN pnpm --filter @lp-ai/lib-config build
 RUN pnpm --filter @lp-ai/lib-db build
 RUN pnpm --filter @lp-ai/lib-embedding build
 RUN pnpm --filter @lp-ai/lib-grants build
+RUN pnpm --filter @lp-ai/connector-google-drive build
 RUN pnpm --filter @lp-ai/mcp-server build
 
 # ----- runner -----------------------------------------------------------------
