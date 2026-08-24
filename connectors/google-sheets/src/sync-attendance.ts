@@ -35,7 +35,7 @@ function parseDateStr(v: string | undefined): Date | null {
 }
 
 type CohortConfig = {
-  cohort: 1 | 2 | 3;
+  cohort: 1 | 2 | 3 | 4;
   envKey: string;
 };
 
@@ -43,6 +43,7 @@ const COHORT_CONFIGS: CohortConfig[] = [
   { cohort: 1, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_1' },
   { cohort: 2, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_2' },
   { cohort: 3, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_3' },
+  { cohort: 4, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_4' },
 ];
 
 const ROW_CHUNK_SIZE = 5000;
