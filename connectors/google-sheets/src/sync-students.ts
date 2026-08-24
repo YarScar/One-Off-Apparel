@@ -186,9 +186,13 @@ export async function syncOutcomes(): Promise<number> {
 }
 
 export async function syncCertifications(): Promise<number> {
-  // Certifications stay on the LEGACY sheet — V2 doesn't have this tab.
+  // Certifications lived on the legacy student-info sheet, retired 2026-08-24.
+  // V2 has no replacement tab yet — existing rows are left as-is until one exists.
   const sheetId = process.env['GOOGLE_SHEETS_STUDENT_INFO_ID'];
-  if (!sheetId) throw new Error('GOOGLE_SHEETS_STUDENT_INFO_ID not set');
+  if (!sheetId) {
+    console.warn('  syncCertifications: GOOGLE_SHEETS_STUDENT_INFO_ID not set (legacy sheet retired), skipping');
+    return 0;
+  }
 
   const dataRows = await getSheetRows(sheetId, 'Certifications!A2:H');
   let synced = 0;
