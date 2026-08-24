@@ -61,6 +61,7 @@ COPY --from=builder --chown=mcp:nodejs /workspace/apps/mcp-server/dist ./apps/mc
 COPY --from=builder --chown=mcp:nodejs /workspace/apps/mcp-server/node_modules ./apps/mcp-server/node_modules
 COPY --from=builder --chown=mcp:nodejs /workspace/apps/mcp-server/package.json ./apps/mcp-server/package.json
 COPY --from=builder --chown=mcp:nodejs /workspace/packages ./packages
+COPY --from=builder --chown=mcp:nodejs /workspace/connectors/google-drive ./connectors/google-drive
 COPY --from=builder --chown=mcp:nodejs /workspace/pnpm-workspace.yaml /workspace/package.json /workspace/prisma.config.ts ./
 
 WORKDIR /workspace/apps/mcp-server
