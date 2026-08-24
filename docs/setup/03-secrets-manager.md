@@ -39,7 +39,7 @@ aws secretsmanager create-secret \
   --secret-string '{
     "GOOGLE_SERVICE_ACCOUNT_JSON":"<base64-encoded-json>",
     "GOOGLE_DRIVE_FOLDER_ID":"...",
-    "GOOGLE_SHEETS_STUDENT_INFO_ID":"...",
+    "GOOGLE_SHEETS_STUDENT_INFO_V2":"...",
     "GOOGLE_SHEETS_DASHBOARD_ID":"...",
     "GOOGLE_SHEETS_DEVELOPMENT_CRM":"..."
   }'
