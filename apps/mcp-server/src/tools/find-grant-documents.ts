@@ -2,8 +2,9 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { prisma } from '@lp-ai/lib-db';
 
-import { runTool, parseStr, parseNum } from '../tool-helpers.js';
+import { runTool, parseStr, parseNum, READ_ONLY_ANNOTATIONS } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
+import { clampLimit, resultEnvelope } from '../result-envelope.js';
 
 const NAME = 'find_grant_documents';
 
@@ -107,12 +108,16 @@ interface FindParams {
 }
 
 export async function findGrantDocuments(params: FindParams): Promise<{
+  record_count: number;
   total_matching: number;
-  returned: number;
+  truncated: boolean;
+  limit: number;
   facets: { funders: Record<string, number>; kinds: Record<string, number> };
   results: unknown[];
 }> {
-  const limit = Math.min(params.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+  // clampLimit guards against 0, negative, and non-finite (NaN/Infinity) values that
+  // Math.min alone would pass straight through to Prisma's `take`.
+  const limit = clampLimit(params.limit, DEFAULT_LIMIT, MAX_LIMIT);
 
   const yearFilter =
     params.year !== undefined
@@ -167,8 +172,7 @@ export async function findGrantDocuments(params: FindParams): Promise<{
   };
 
   return {
-    total_matching: total,
-    returned: rows.length,
+    ...resultEnvelope(rows.length, total, limit),
     // Facets let the caller narrow a broad hit list without a second round trip.
     facets: {
       funders: toRecord(byFunder, (g) => g.funder),
@@ -203,12 +207,7 @@ export function registerFindGrantDocuments(server: McpServer): void {
     {
       description: DESCRIPTION,
       inputSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     (input) =>
       runTool(NAME, input, async () => {

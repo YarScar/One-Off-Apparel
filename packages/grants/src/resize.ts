@@ -506,8 +506,14 @@ function overflowFeedback(have: number, limit: FormLimit): string {
   );
 }
 
-/** The rule added when compression past {@link MAX_COMPRESSION_RATIO} is being asked for. */
-function infeasibleRule(ratio: number): string {
+/**
+ * The rule added when compression past {@link MAX_COMPRESSION_RATIO} is being asked for.
+ *
+ * Exported so `pipeline.ts`'s own compression_infeasible branches can call this instead of
+ * hand-duplicating the sentence — the two copies had already drifted apart from being edited
+ * independently once (see `pipeline.ts`'s `buildAnswer`).
+ */
+export function infeasibleRule(ratio: number): string {
   return (
     `This needs ${String(ratio)}x compression, past the ${String(MAX_COMPRESSION_RATIO)}x point where ` +
     `shortening stops being compression. Facts WILL have to be dropped. Say which ones you dropped, ` +

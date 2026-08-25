@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { verifyFigureAnswer, type FigureCall } from '@lp-ai/lib-grants';
 
-import { runTool, parseStr } from '../tool-helpers.js';
+import { runTool, parseStr, READ_ONLY_ANNOTATIONS } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
 
 const NAME = 'grant_verify_figure';
@@ -15,17 +15,19 @@ const DESCRIPTION =
   '`figure_call` you were given, and the raw result you got back. Mismatch returns `needs_input` — redo ' +
   'the number, do not argue with the verdict. Deterministic: no model, no database, no network.';
 
+const figureCallSchema = z.object({
+  tool: z.string().min(1),
+  args: z.record(z.union([z.string(), z.number(), z.boolean()])),
+});
+
 const inputSchema = {
   answer_text: z
     .string()
     .min(1)
     .describe('The drafted answer text carrying the figure to verify.'),
-  figure_call: z
-    .object({
-      tool: z.string().min(1),
-      args: z.record(z.union([z.string(), z.number(), z.boolean()])),
-    })
-    .describe('The exact `{ tool, args }` from the `fetch_figure` result this answer is sourcing.'),
+  figure_call: figureCallSchema.describe(
+    'The exact `{ tool, args }` from the `fetch_figure` result this answer is sourcing.',
+  ),
   query_result: z
     .unknown()
     .describe('The raw result YOU got back from calling `figure_call.tool` with `figure_call.args`.'),
@@ -37,12 +39,7 @@ export function registerGrantVerifyFigure(server: McpServer): void {
     {
       description: DESCRIPTION,
       inputSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     (input) =>
       runTool(NAME, input, async () => {
@@ -59,7 +56,9 @@ export function registerGrantVerifyFigure(server: McpServer): void {
         // The schema requires `figure_call` and `query_result`, so the SDK rejects a missing one
         // before this runs. `query_result` is deliberately `z.unknown()` — every query_* tool has its
         // own output shape, and this tool's job is to diff whatever came back, not to know all of them.
-        const figureCall = raw['figure_call'] as FigureCall;
+        // `figure_call` is re-parsed rather than cast, matching grant-resize-answer.ts's `limit`
+        // handling — a boundary this family is otherwise careful about.
+        const figureCall: FigureCall = figureCallSchema.parse(raw['figure_call']);
         const queryResult = raw['query_result'];
 
         const verdict = verifyFigureAnswer(answerText, figureCall, queryResult);

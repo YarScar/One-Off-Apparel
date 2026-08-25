@@ -9,7 +9,9 @@ requirement, not a licence to write something plausible.
 
 ## The four gap classes
 
-`prep.mjs` reports these. Each has a different fix.
+`prep.mjs` reports these as independent checks, not a partition — a question can land in more than
+one class at once (e.g. matched with low confidence to a slot that is itself unverified).
+`gapfill.mjs` mirrors that: every candidate carries a `gap_classes` array, not a single class.
 
 | Class | What it means | Fix |
 |---|---|---|
@@ -20,6 +22,11 @@ requirement, not a licence to write something plausible.
 
 `low_confidence` is the one that gets mishandled. Researching a fresh answer for a question the KB
 already covers wastes the work and risks contradicting filed material. Check the routing first.
+
+**When `gap_classes` has more than one entry, apply `low_confidence`'s re-route-first rule before
+any other fix in the list.** A row that is both `low_confidence` and `kb_unverified`, for example,
+needs the mapping confirmed by hand first — only research it once you've confirmed nothing else
+fits, and if you do research it, treat the stored text as unverified per that class's own fix.
 
 ## The source ladder
 
@@ -88,7 +95,7 @@ Every record carries:
 | `sources` | **At least one.** Each is a ladder rung plus the specific artifact: a tool call and its `asOf` date, a corpus file path, a wiki entry, a URL. An answer with no source is not a candidate; it is a guess. |
 | `verified` | Always `false` on creation. Only a person reviewing it can change that. |
 | `needs_staff` | What a person still has to confirm, in words. Empty only if genuinely nothing. |
-| `gap_class` | Carried through from `prep.mjs`, so a reviewer knows why this was written. |
+| `gap_classes` | The classes this question landed in (see above) — always an array, may hold more than one — so a reviewer knows why this was written. |
 
 `--validate` enforces the mechanical parts: non-empty answer, at least one source, `verified:false`,
 within limit, no em dashes, no banned jargon.

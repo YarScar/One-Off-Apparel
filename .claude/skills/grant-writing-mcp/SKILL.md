@@ -148,7 +148,9 @@ an empty result is a gap to report, never a licence to write the section from me
 Then apply these rules, which are where drafts actually go wrong.
 
 **Stamp every figure with its source tool and an `asOf` date.** Re-check anything measured more than
-three days before submission.
+three days before submission. If `grant_verify_figure` is available on this deployment, call it on the
+finished text with the drafted answer, the `query_*` call, and its result before finalizing — it
+catches a figure that was typed wrong or drifted between the call and the draft.
 
 **Any wage total containing an active job is not reproducible.** `query_employment` computes
 `current_earned` for active jobs as weeks-since-start times weekly hours times wage, against today. Two
@@ -449,10 +451,13 @@ Rules, in the order they get broken:
 
 - **No em dashes.** Use hyphens. Never `—` or `–`. It is the strongest tell of machine-written text,
   and prior filed Launchpad responses are full of them: do not carry that habit forward.
-- **Banned words:** transformative, innovative, holistic, leverage, ecosystem, move the needle, at the
-  intersection of, reimagine, synergy, best-in-class, world-class, cutting-edge, game-changer,
-  paradigm, empower, unlock, unprecedented. The rule is broader than the list: any word doing the work
-  of sounding impressive instead of being specific is out.
+- **Banned words:** the canonical list (`packages/grants/docs/PLAYBOOK.md`, enforced in code as
+  `BANNED_JARGON`) is transformative, innovative, holistic, leverage, ecosystem, move the needle, at
+  the intersection of, reimagine — plus, for this skill only, synergy, best-in-class, world-class,
+  cutting-edge, game-changer, paradigm, empower, unlock, unprecedented. This skill has no repository
+  checkout to import the canonical list from, so the extra nine are maintained by hand here; if the
+  canonical list changes, recheck this one. The rule is broader than either list: any word doing the
+  work of sounding impressive instead of being specific is out.
 - **A specific number beats an adjective, every time.** "11 of 12 graduates were in paid work at six
   months" beats "strong placement outcomes."
 - **Lead with the claim.** No throat-clearing, no scene-setting, no building to a point.
@@ -486,6 +491,14 @@ Those calls are legitimate for verifying a claim. What comes out of them does no
   publishable; the same sentence with a name and an hourly wage is not.
 - A named story requires the participant's documented consent, which staff hold and you cannot check. If
   a funder wants one, write `[NEEDS: staff-approved participant story with consent on file]` and move on.
+- **Quotes bank (added 2026-08-24):** Launchpad's testimonials spreadsheet (23 student/employer/other
+  quotes) is now curated into the platform as de-identified data — student quotes carry role, school,
+  and cohort but no name; employer/client quotes carry a real professional attribution (person,
+  company, title), which is not student PII and is fine to name. This skill has no repository
+  checkout, so it cannot read that file directly — if the platform exposes a quotes-bank lookup, use
+  it and quote a student row by role/school only, never inventing a name to attach. If it does not,
+  the same rule above applies: a named student story still needs `[NEEDS: staff-approved participant
+  story with consent on file]`.
 - Never reproduce a free-text `notes` field. It is internal staff commentary about a young person.
 - The same rule covers the composite: a school, a cohort, an employer, and an age together identify
   someone in a program this size even with the name removed.

@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 const GRANTS = new URL('../../../../packages/grants/dist/index.js', import.meta.url).href;
 const {
-  loadForm, loadKnowledgeBase, matchForm, measure, DEFAULT_THRESHOLD,
+  loadForm, loadKnowledgeBase, matchForm, measure, DEFAULT_THRESHOLD, BANNED_JARGON,
 } = await import(GRANTS);
 
 const args = argv.slice(2);
@@ -43,11 +43,6 @@ const LADDER = {
   ],
 };
 
-const BANNED = [
-  'transformative', 'innovative', 'holistic', 'leverage', 'ecosystem',
-  'move the needle', 'at the intersection of', 'reimagine',
-];
-
 function validate(path) {
   const records = JSON.parse(readFileSync(path, 'utf8'));
   if (!Array.isArray(records)) {
@@ -65,7 +60,7 @@ function validate(path) {
     if (r.verified !== false) problems.push('verified must be false on creation');
     if (r.needs_staff === undefined) problems.push('needs_staff missing (use "" only if genuinely nothing)');
     if (answer && /[—–]/.test(answer)) problems.push('em dash or en dash — use a hyphen');
-    const jargon = BANNED.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(answer));
+    const jargon = BANNED_JARGON.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(answer));
     if (jargon.length) problems.push(`banned jargon: ${jargon.join(', ')}`);
     if (answer && r.limit?.unit && r.limit?.max) {
       const m = measure({ text: answer, unit: r.limit.unit, max: r.limit.max });
@@ -111,22 +106,27 @@ for (const [i, q] of form.questions.entries()) {
   const m = matches[i];
   const stored = m?.kb_ref ? kb.answers?.[m.kb_ref] : undefined;
 
-  let gapClass = null;
-  if (!m?.matched_id) gapClass = 'unmatched';
-  else if (!m.kb_ref || !stored) gapClass = 'no_kb_answer';
-  else if (stored.verified === false) gapClass = 'kb_unverified';
-  else if (!m.is_confident) gapClass = 'low_confidence';
-  if (!gapClass) continue;
+  // Independent checks, same as prep.mjs's report.gaps (not an if/else chain) — a question can be
+  // both low_confidence and kb_unverified at once, and each needs its own fix instruction. See
+  // references/gap-fill.md.
+  const gapClasses = [];
+  if (!m?.matched_id) gapClasses.push('unmatched');
+  if (m?.matched_id && !m.is_confident) gapClasses.push('low_confidence');
+  if (!m?.kb_ref) gapClasses.push('no_kb_answer');
+  if (stored?.verified === false) gapClasses.push('kb_unverified');
+  if (gapClasses.length === 0) continue;
+
+  const researchLadder = [...new Set(gapClasses.flatMap((c) => LADDER[c]))];
 
   candidates.push({
     n: i + 1,
     question: q.text,
     limit: q.limit ?? null,
-    gap_class: gapClass,
+    gap_classes: gapClasses,
     matched_id: m?.matched_id ?? null,
     matched_confidence: m?.confidence ?? 0,
     kb_ref: m?.kb_ref ?? null,
-    research_ladder: LADDER[gapClass],
+    research_ladder: researchLadder,
     answer: '',
     sources: [],
     verified: false,
@@ -141,7 +141,13 @@ const json = JSON.stringify(candidates, null, 2);
 if (outPath) {
   writeFileSync(outPath, `${json}\n`);
   console.log(`${candidates.length} candidate(s) written to ${outPath}`);
-  const byClass = candidates.reduce((a, c) => ({ ...a, [c.gap_class]: (a[c.gap_class] ?? 0) + 1 }), {});
+  const byClass = candidates.reduce(
+    (a, c) => {
+      for (const cls of c.gap_classes) a[cls] = (a[cls] ?? 0) + 1;
+      return a;
+    },
+    {},
+  );
   for (const [k, v] of Object.entries(byClass)) console.log(`  ${k.padEnd(16)} ${v}`);
   console.log(`\nMatcher threshold is ${DEFAULT_THRESHOLD}. Work the ladder in each record, fill`);
   console.log('`answer`, `sources`, and `needs_staff`, then re-run with --validate.');

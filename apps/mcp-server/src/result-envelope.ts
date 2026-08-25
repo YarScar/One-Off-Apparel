@@ -48,8 +48,18 @@ export function resultEnvelope(returned: number, totalMatching: number, limit: n
 export const DEFAULT_LIMIT = 500;
 export const MAX_LIMIT = 1000;
 
-/** Clamp a caller-supplied limit into `[1, MAX_LIMIT]`, defaulting when absent. */
-export function clampLimit(requested: number | undefined): number {
-  if (requested === undefined || !Number.isFinite(requested)) return DEFAULT_LIMIT;
-  return Math.max(1, Math.min(Math.floor(requested), MAX_LIMIT));
+/**
+ * Clamp a caller-supplied limit into `[1, maxLimit]`, defaulting when absent or
+ * non-finite (undefined, NaN, Infinity). `defaultLimit`/`maxLimit` default to the
+ * shared page-size constants above; pass a tool's own tighter constants (e.g. a
+ * catalog tool with a smaller natural page size) to reuse this guard without
+ * adopting the shared numbers.
+ */
+export function clampLimit(
+  requested: number | undefined,
+  defaultLimit: number = DEFAULT_LIMIT,
+  maxLimit: number = MAX_LIMIT,
+): number {
+  if (requested === undefined || !Number.isFinite(requested)) return defaultLimit;
+  return Math.max(1, Math.min(Math.floor(requested), maxLimit));
 }
