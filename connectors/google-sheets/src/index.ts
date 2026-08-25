@@ -1,5 +1,5 @@
 import { runSync, type SyncRunRecord } from '@lp-ai/lib-db';
-import { syncStudents, syncOutcomes, syncCertifications } from './sync-students.js';
+import { syncStudents, syncOutcomes, syncCertifications, syncOutcomesTab } from './sync-students.js';
 import { syncEmployment } from './sync-employment.js';
 import { syncPostsecondary } from './sync-postsecondary.js';
 import { syncRapid } from './sync-rapid.js';
@@ -12,6 +12,7 @@ import { syncPhaseActualsQ3_2026, syncPhaseActuals2025 } from './sync-phase-dash
 import { syncStudentCompetency } from './sync-student-competency.js';
 import { syncAttendance } from './sync-attendance.js';
 import { syncEnrollment } from './sync-enrollment.js';
+import { syncQuotes } from './sync-quotes.js';
 
 export type SyncResult = SyncRunRecord;
 
@@ -33,6 +34,7 @@ export async function sync(): Promise<SyncResult> {
     const employment = await safeRun('employment', syncEmployment);
     const postsecondary = await safeRun('postsecondary', syncPostsecondary);
     const certifications = await safeRun('certifications', syncCertifications);
+    const outcomesTab = await safeRun('outcomes tab', syncOutcomesTab);
     const dashboard = await safeRun('dashboard', syncDashboard);
     const phaseBudget = await safeRun('phase budget dashboard', syncPhaseBudgetDashboard);
     const phaseQ3 = await safeRun('phase actuals Q3 2026', syncPhaseActualsQ3_2026);
@@ -55,16 +57,29 @@ export async function sync(): Promise<SyncResult> {
       console.error(`google-sheets: distances FAILED —`, err instanceof Error ? err.message : String(err));
     }
 
+    let quotesSynced = 0;
+    let quotesSeen = 0;
+    let quotesEmpty = 0;
+    try {
+      const q = await syncQuotes();
+      quotesSynced = q.rows_synced;
+      quotesSeen = q.rows_seen;
+      quotesEmpty = q.rows_skipped_empty;
+      console.log(`google-sheets: quotes — ${q.rows_synced} synced (${q.rows_seen} seen)`);
+    } catch (err) {
+      console.error(`google-sheets: quotes FAILED —`, err instanceof Error ? err.message : String(err));
+    }
+
     const total =
-      students + outcomes + employment + postsecondary + certifications +
+      students + outcomes + employment + postsecondary + certifications + outcomesTab +
       dashboard + phaseBudget + phaseQ3 + phase2025 +
       rapid + pex + competency + devCrm +
-      attendance + enrollment + distanceUpdated;
+      attendance + enrollment + distanceUpdated + quotesSynced;
 
     return {
       status: 'ok',
       recordsUpserted: total,
-      notes: `students: ${students}; outcomes: ${outcomes}; employment: ${employment}; postsecondary: ${postsecondary}; certifications: ${certifications}; dashboard: ${dashboard}; phase_budget: ${phaseBudget}; phase_q3_2026: ${phaseQ3}; phase_2025: ${phase2025}; rapid: ${rapid}; pex: ${pex}; competency: ${competency}; dev_crm: ${devCrm}; attendance: ${attendance}; enrollment: ${enrollment}; distances: ${distanceUpdated} updated / ${distanceSkipped} skipped`,
+      notes: `students: ${students}; outcomes: ${outcomes}; employment: ${employment}; postsecondary: ${postsecondary}; certifications: ${certifications}; outcomes_tab: ${outcomesTab}; dashboard: ${dashboard}; phase_budget: ${phaseBudget}; phase_q3_2026: ${phaseQ3}; phase_2025: ${phase2025}; rapid: ${rapid}; pex: ${pex}; competency: ${competency}; dev_crm: ${devCrm}; attendance: ${attendance}; enrollment: ${enrollment}; distances: ${distanceUpdated} updated / ${distanceSkipped} skipped; quotes: ${quotesSynced} synced / ${quotesSeen} seen / ${quotesEmpty} empty`,
     };
   }, {
     tables: [
@@ -78,11 +93,12 @@ export async function sync(): Promise<SyncResult> {
       'enrollment_snapshots',
       'finance_snapshots',
       'entity_aliases',
+      'document_chunks',
     ],
   });
 }
 
-export { syncStudents, syncOutcomes, syncCertifications } from './sync-students.js';
+export { syncStudents, syncOutcomes, syncCertifications, syncOutcomesTab } from './sync-students.js';
 export { syncEmployment } from './sync-employment.js';
 export { syncPostsecondary } from './sync-postsecondary.js';
 export { syncRapid } from './sync-rapid.js';

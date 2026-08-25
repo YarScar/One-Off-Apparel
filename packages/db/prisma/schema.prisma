@@ -69,6 +69,26 @@ model Student {
   workReadyQ1           String?   @map("work_ready_q1")
   ell                   Boolean?
 
+  // Outcomes tab (V2 sheet, added 2026-08-24) — post-program tracking.
+  // college_enroll/university/major/workforce_program_referral/workforce_referral_status/
+  // internship_status above are shared with this tab; the rest are new.
+  hsDiploma                        Boolean?  @map("hs_diploma")
+  hsFinalGpa                       Decimal?  @map("hs_final_gpa") @db.Decimal(4, 2)
+  collegeCreditsEarned             Decimal?  @map("college_credits_earned") @db.Decimal(6, 2)
+  highestPcepScore                 Decimal?  @map("highest_pcep_score") @db.Decimal(5, 2)
+  internshipHours                  Decimal?  @map("internship_hours") @db.Decimal(6, 2)
+  internshipPayRate                Decimal?  @map("internship_pay_rate") @db.Decimal(7, 2)
+  internshipSite                   String?   @map("internship_site")
+  initialPlacementHourlyWage       Decimal?  @map("initial_placement_hourly_wage") @db.Decimal(7, 2)
+  initialPlacementWeeklyHours      Decimal?  @map("initial_placement_weekly_hours") @db.Decimal(6, 2)
+  initialPlacementStartDate        DateTime? @map("initial_placement_start_date") @db.Date
+  initialPlacementSite             String?   @map("initial_placement_site")
+  status12moPostPlacement          String?   @map("status_12mo_post_placement")
+  currentEmployer                  String?   @map("current_employer")
+  currentHourlyWage                Decimal?  @map("current_hourly_wage") @db.Decimal(7, 2)
+  currentWeeklyHours               Decimal?  @map("current_weekly_hours") @db.Decimal(6, 2)
+  currentEmploymentUpdatedAt       DateTime? @map("current_employment_updated_at") @db.Date
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

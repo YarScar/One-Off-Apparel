@@ -405,6 +405,104 @@ export const POSTSECONDARY_CLASS_LEVEL_LABELS: Record<string, string> = {
 };
 
 
+// ---------------------------------------------------------------------------
+// Outcomes-tab row → typed record (V2 sheet, literal "Outcomes" tab — distinct
+// from the "PhaseCompletion" tab that parseOutcomesRow/syncOutcomes handle).
+// Post-program tracking: HS diploma, college credits, PCEP score, internship,
+// initial placement, current employment. Header-checked like Students, since a
+// silent column shift here would misfile wage/employment data.
+// ---------------------------------------------------------------------------
+
+export const EXPECTED_OUTCOMES_TAB_HEADERS = [
+  'ID',                                     // A  0 → student_number
+  'First Name',                             // B  1 — unused (name comes from Students tab)
+  'Last Name',                              // C  2 — unused
+  'HS Diploma',                             // D  3
+  'HS Final GPA',                           // E  4
+  'College Credits Earned (In Program)',    // F  5
+  'Highest PCEP Score',                     // G  6 — also drives a synthetic PCEP cert row; >70 = Pass
+  'Internship',                             // H  7
+  'Internship Hours',                       // I  8
+  'Internship Pay Rate',                    // J  9
+  'Internship Site',                        // K  10
+  'College Enrollement',                    // L  11 (sheet spelling)
+  'University',                             // M  12
+  'Major',                                  // N  13
+  'Workforce Program Referral',             // O  14
+  'Workforce Referral Status',              // P  15
+  'Initial Placement Hourly Wage',          // Q  16
+  'Initial Placement Weekly Hours',         // R  17
+  'Initial Placement Start Date',           // S  18
+  'Initial Placement Site',                 // T  19
+  'Status 12 Months Post-Placement',        // U  20
+  'Current Employer',                       // V  21
+  'Current Hourly Wage',                    // W  22
+  'Currently Weekly Hours',                 // X  23 (sheet spelling)
+  'Current Employment Date Last Updated',   // Y  24
+] as const;
+
+export type OutcomesTabRow = {
+  studentNumber: string;
+  hsDiploma: boolean | null;
+  hsFinalGpa: string | null;
+  collegeCreditsEarned: string | null;
+  highestPcepScore: string | null;
+  internshipStatus: string | null;
+  internshipHours: string | null;
+  internshipPayRate: string | null;
+  internshipSite: string | null;
+  collegeEnroll: string | null;
+  university: string | null;
+  major: string | null;
+  workforceProgramReferral: string | null;
+  workforceReferralStatus: string | null;
+  initialPlacementHourlyWage: string | null;
+  initialPlacementWeeklyHours: string | null;
+  initialPlacementStartDate: string | null;
+  initialPlacementSite: string | null;
+  status12moPostPlacement: string | null;
+  currentEmployer: string | null;
+  currentHourlyWage: string | null;
+  currentWeeklyHours: string | null;
+  currentEmploymentUpdatedAt: string | null;
+};
+
+function cleanCurrency(v: string | undefined): string | null {
+  return parseNum(v?.replace(/[\$,]/g, ''));
+}
+
+export function parseOutcomesTabRow(raw: string[]): OutcomesTabRow | null {
+  const get = (i: number) => raw[i]?.trim();
+  const studentNumber = get(0);
+  if (!studentNumber) return null;
+
+  return {
+    studentNumber,
+    hsDiploma: parseBool(get(3)),
+    hsFinalGpa: parseNum(get(4)),
+    collegeCreditsEarned: parseNum(get(5)),
+    highestPcepScore: parseNum(get(6)),
+    internshipStatus: str(get(7)),
+    internshipHours: parseNum(get(8)),
+    internshipPayRate: cleanCurrency(get(9)),
+    internshipSite: str(get(10)),
+    collegeEnroll: str(get(11)),
+    university: str(get(12)),
+    major: str(get(13)),
+    workforceProgramReferral: str(get(14)),
+    workforceReferralStatus: str(get(15)),
+    initialPlacementHourlyWage: cleanCurrency(get(16)),
+    initialPlacementWeeklyHours: parseNum(get(17)),
+    initialPlacementStartDate: parseDate(get(18)),
+    initialPlacementSite: str(get(19)),
+    status12moPostPlacement: str(get(20)),
+    currentEmployer: str(get(21)),
+    currentHourlyWage: cleanCurrency(get(22)),
+    currentWeeklyHours: parseNum(get(23)),
+    currentEmploymentUpdatedAt: parseDate(get(24)),
+  };
+}
+
 export type PostsecondaryRow = {
   studentNumber: string;
   firstName: string | null;

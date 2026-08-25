@@ -9,15 +9,32 @@ the code does; that one describes why it does it that way.
 
 ## Purpose
 
-**Discovery, not ingestion.** The connector walks the Drive tree and writes one catalog row per
-file — path, funder, application year, document kind, honesty flags, and the **Drive file ID that
-content is fetched with**. It writes no document text and no embeddings.
+**Discovery, not ingestion — plus an opt-in Docs ingestion path.** The main walk still records one
+catalog row per file in `grant_documents`, no text, no embeddings. Alongside it, a **separate,
+opt-in path** ingests a small explicit list of Google Docs by ID into `document_chunks` with
+embeddings — see "Docs ingestion" below.
 
-That split is deliberate. Inside the shared `Grants` tree, reading a file by ID works and always
-did; *finding* a file does not. Embedding the corpus to answer questions a catalog query answers
-would be cost with no capability behind it. `document_chunks` stays out of this path until there
-is a stated need for semantic search over the corpus — see
-[google-drive-discovery.md §6](google-drive-discovery.md) Fix 4.
+The catalog split is deliberate. Inside the shared `Grants` tree, reading a file by ID works and
+always did; *finding* a file does not. Embedding the entire corpus to answer questions a catalog
+query answers would be cost with no capability behind it. Instead, specific narrative docs (a
+Prospecting Criteria document, a playbook, an evaluation guide) can be added to
+`GOOGLE_DOC_IDS` and the ingestion path picks them up.
+
+## Docs ingestion (opt-in)
+
+Configured via `GOOGLE_DOC_IDS` — a comma-separated list of `id:Name` pairs. On every sync:
+
+1. Each doc is fetched via **Docs API v1** with `includeTabsContent=true`, so every tab of a
+   multi-tab document is included. `files.export?mimeType=text/plain` only reliably returns the
+   first tab of a tabbed doc; this path avoids that silent loss.
+2. Tab titles become markdown headers so retrieval keeps the tab context in the chunk content.
+3. Body is chunked (~1000 chars, 200-char overlap) and embedded with OpenAI
+   `text-embedding-3-large` (1536-dim).
+4. Rows land in `document_chunks` with `source='drive'`, `source_id='drive:doc:<docId>:<i>'`, and
+   metadata including `subtype='doc'`, `google_doc_id`, `doc_title`, `revision_id`, `tab_titles`.
+
+The service account must be explicitly shared on each configured doc (`Share` → paste the
+`client_email`) — same permission model as the catalog walk.
 
 ## Documents in Scope
 

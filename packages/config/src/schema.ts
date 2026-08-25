@@ -35,7 +35,8 @@ export const envSchema = z.object({
   GOOGLE_OAUTH_CLIENT_ID: optional,
   GOOGLE_OAUTH_CLIENT_SECRET: optional,
   GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN: optional,
-  GOOGLE_SHEETS_STUDENT_INFO_ID: optional,
+  /** Comma-separated "id:Name" pairs. Each doc is fetched with all tabs and ingested into document_chunks. */
+  GOOGLE_DOC_IDS: optional,
   GOOGLE_SHEETS_STUDENT_INFO_V2: optional,
   GOOGLE_SHEETS_DASHBOARD_ID: optional,
   GOOGLE_SHEETS_PHASE_DASHBOARD_ID: optional,
@@ -50,7 +51,10 @@ export const envSchema = z.object({
   GOOGLE_SHEETS_ATTENDANCE_COHORT_1_LIFTOFF: optional,
   GOOGLE_SHEETS_ATTENDANCE_COHORT_2: optional,
   GOOGLE_SHEETS_ATTENDANCE_COHORT_3: optional,
+  GOOGLE_SHEETS_ATTENDANCE_COHORT_4: optional,
   GOOGLE_SHEETS_FINANCE_WORKBOOK: optional,
+  /** Quote Bank spreadsheet ID. Rows are embedded into document_chunks (source='sheets', subtype='quote'). */
+  GOOGLE_SHEETS_QUOTE_BANK_ID: optional,
 
   BIGQUERY_PROJECT_ID: z.string().trim().min(1).default('lp-internal-ai'),
   BIGQUERY_DATASET: optional,

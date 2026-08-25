@@ -6,7 +6,7 @@ Syncs structured data from multiple Google Sheets into Postgres. The connector i
 
 | Sheet | Env var | Destination |
 |---|---|---|
-| Student Information for Launchpad LLMs | `GOOGLE_SHEETS_STUDENT_INFO_ID` | `students`, `student_phase_outcomes`, `student_certifications` |
+| Student Information for Launchpad LLMs (V2) | `GOOGLE_SHEETS_STUDENT_INFO_V2` | `students`, `student_phase_outcomes` |
 | Launchpad Dashboard | `GOOGLE_SHEETS_DASHBOARD_ID` | `finance_snapshots` (6 tabs) |
 | Launchpad Budget by Phase Dashboard | `GOOGLE_SHEETS_PHASE_DASHBOARD_ID` | `finance_snapshots` (3 tabs: 2025 Actuals, Monthly LiftOff Only, Monthly HS Only) |
 | Launchpad By Phase Actuals Q3 2026 | `GOOGLE_SHEETS_BY_PHASE_Q3_2026_ACTUALS` | `finance_snapshots` (3 tabs) |
@@ -18,6 +18,25 @@ Syncs structured data from multiple Google Sheets into Postgres. The connector i
 | Attendance — Cohort 1 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_1` | `attendance_records` (cohort=1) |
 | Attendance — Cohort 2 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_2` | `attendance_records` (cohort=2) |
 | Attendance — Cohort 3 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_3` | `attendance_records` (cohort=3) |
+| Attendance — Cohort 4 | `GOOGLE_SHEETS_ATTENDANCE_COHORT_4` | `attendance_records` (cohort=4) |
+| Quote Bank | `GOOGLE_SHEETS_QUOTE_BANK_ID` | `document_chunks` (`source='sheets'`, `subtype='quote'`, one row per non-empty quote — see below) |
+
+`student_certifications` had been sourced from the legacy `GOOGLE_SHEETS_STUDENT_INFO_ID` sheet,
+retired 2026-08-24 with no replacement tab on V2 yet. `syncCertifications()` now no-ops (warns and
+returns 0) when that env var is absent; existing rows are untouched, just not refreshed.
+
+## Quote Bank — free-form ingestion
+
+Unlike every other sheet above, the Quote Bank sync writes **embedded chunks**, not typed rows.
+Each row with a non-empty Quote column becomes one `document_chunks` row whose content is the
+quote followed by a compact attribution (`— Name (Role, Cohort N, School)`) so retrieval can
+semantically match on the quote and its context. The full row (name, role, cohort, school,
+company, title, source) is preserved on `metadata`. This exists so the grant-writing tools can
+pull relevant quotes by meaning; if quotes ever need structural queries ("all quotes from cohort
+1"), a typed `quotes` Prisma table can be added alongside without disturbing this path.
+
+Column matching is by header name (lowercased, non-alphanumeric collapsed to `_`), so light
+renames on the sheet don't break the sync. Required columns: `Name` and `Quote`.
 
 ## Read-Only Enforcement
 
