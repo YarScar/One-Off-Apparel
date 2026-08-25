@@ -252,6 +252,7 @@ export async function syncOutcomesTab(): Promise<number> {
     if (!raw) continue;
     const o = parseOutcomesTabRow(raw);
     if (!o) continue;
+    if (o.studentNumber === 'LP0000') continue; // demo/test account, not a real outcome
 
     const student = await prisma.student.findUnique({
       where: { studentNumber: o.studentNumber },
