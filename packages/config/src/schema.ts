@@ -37,7 +37,6 @@ export const envSchema = z.object({
   GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN: optional,
   /** Comma-separated "id:Name" pairs. Each doc is fetched with all tabs and ingested into document_chunks. */
   GOOGLE_DOC_IDS: optional,
-  GOOGLE_SHEETS_STUDENT_INFO_ID: optional,
   GOOGLE_SHEETS_STUDENT_INFO_V2: optional,
   GOOGLE_SHEETS_DASHBOARD_ID: optional,
   GOOGLE_SHEETS_PHASE_DASHBOARD_ID: optional,

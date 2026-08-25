@@ -6,7 +6,7 @@ description: Draft a Launchpad grant application, LOI, or funder report. Runs th
 # Grant writing
 
 Turn a funder's form into a draft answer package for staff review. Never a first draft — the version
-Chip Linehan or Dannyelle Austin sees should already read like a third draft.
+Chip, Iman, or Dannyelle sees should already read like a third draft.
 
 **A person always reviews and submits. Never submit. Never send anything to a funder.**
 
@@ -28,11 +28,11 @@ Write `{ "meta": { "funder", "program", "due" }, "questions": [{ "text", "limit"
 to the scratchpad. `unit` is `"words"` or `"characters"`. Record limits **verbatim** from the funder;
 never infer one. Seven real fixtures live in `packages/grants/seed/forms/` and can be passed by id.
 
-Prior filed responses are reachable through the **Drive MCP → `search_documents` chain**
-(`source` filter scoped to the grants corpus once ingested), never through a local mirror — the
-server has no `data/Grants` tree and none of its 1,234 files are in git. Many filings hold the real
-filed response alongside the questions — read the prior response for reusable material, but re-verify
-every figure in it.
+Prior filed responses are reachable through the **`find_grant_documents` → `get_grant_document_text`
+chain** (`search_documents`/`document_chunks` are empty for every grant source — see
+`packages/grants/docs/STATE.md`), never through a local mirror — the server has no `data/Grants` tree
+and none of its 1248 files (with a resolvable Drive ID) are in git. Many filings hold the real filed response alongside the
+questions — read the prior response for reusable material, but re-verify every figure in it.
 
 ## Step 1 — Run the work order
 
@@ -86,8 +86,8 @@ node .claude/skills/grant-writing/scripts/gapfill.mjs --validate candidates.json
 Work the source ladder in order, stopping when a rung settles it: live platform data → internal docs
 and conversations → **prior filed applications** → the Notion research wiki → the funder's own
 material → ask staff. Rung 3 is the highest-yield and the most often skipped, because for most
-questions someone has already written a good answer for another funder. Reach it through the same
-MCP chain as rung 2 — `search_documents` scoped to the grants corpus — not a local grep. The
+questions someone has already written a good answer for another funder. Reach it through
+`find_grant_documents` → `get_grant_document_text` (see Step 0), not a local grep. The
 `corpus_search.py` script is a dev-only fallback for when the Drive corpus is not yet ingested:
 
 ```bash
@@ -110,20 +110,33 @@ entity names, and definitional figure conflicts.
 
 ## Step 2 — Intake: ask before writing
 
+**Gate: wait for Iman's Criteria + Positioning section.** Before intake questions, check whether Iman
+has already built the "Criteria + Positioning" bullet section (Grant Criteria/Hot Buttons +
+Positioning/Main sell) in the Grant Overview Template — she builds it from her own research, Step 1's
+research, and funder history. If it exists, intake answers come from it, not from a fresh ask. If it
+doesn't exist yet, say so explicitly rather than drafting a positioning stance from scratch — this
+section is what keeps drafting from drifting off the strategic angle, and skipping it just means
+redoing the work once Iman produces it.
+
 Research what you can, then ask. Do not guess at funder priorities, program scope, framing, or dollar
 amounts. Three answers are needed every time, and the third is mandatory:
 
-1. **Which programs to tee up** — 101 (two pathways: AI Software Development, Entrepreneurial
+1. **Positioning** — workforce-oriented (job outcomes, paid work, certifications, employers) or
+   education-oriented (AI fluency, durable skills, competency-based learning). Any specific angle the
+   funder's priorities call for? This is the same question Criteria + Positioning answers — work
+   through feasibility with Iman if the section is still open.
+2. **Which programs to tee up** — 101 (two pathways: AI Software Development, Entrepreneurial
    Leadership), LiftOff (six-month learn-and-earn), Launchpad Inc. (paid client work). Workforce
    funders lead with LiftOff + Inc; education funders with 101 + AI fluency. Propose a default from
    the funder's priorities, then wait.
-2. **Positioning** — workforce-oriented (job outcomes, paid work, certifications, employers) or
-   education-oriented (AI fluency, durable skills, competency-based learning).
 3. **Fiscal-sponsorship framing — ASK EVERY TIME, never assume.** Initiative (an initiative of
    Building 21) / Fiscal Sponsorship (the formal structure, with planned spin-out) / Silent (focus on
    Launchpad, B21 relationship not detailed).
 
 Also ask which prior applications to build from, and propose candidates by matching orientation.
+
+**Essential before drafting starts:** Dannyelle, Iman, and Chip have an upfront strategic conversation
+about positioning, letters of support, and narrative framing before drafting begins.
 
 ## Step 3 — Fetch every figure live, then cut it the way the question asks
 
@@ -171,6 +184,9 @@ Then, per `references/figures.md`:
   populations and the question does not say which it wants.
 - **Stamp every confirmed figure** with its source tool and `asOf` date. Re-check anything measured
   more than three days before submission.
+- **Call `grant_verify_figure`** on the finished text before finalizing any answer that quotes a live
+  figure — it diffs the drafted number against the actual `query_*` result, so a figure that got typed
+  wrong or drifted between the call and the draft is caught here rather than by a funder.
 - **ACL denial is not permission to quote the frozen figure.** Write `[DATA UNAVAILABLE]`. Neither is a
   tool that returns something other than what you asked for: `get_finance_brief` carries no income or
   expense totals, so it cannot answer a budget question no matter how successfully it returns.
@@ -223,9 +239,20 @@ something plausible.
 `needs_staff` note. A reviewer reads an answer written this session from research differently from one
 drawn from established filed material, and should.
 
+**What happens after hand-off, so a status question can be answered accurately:** Iman does a first
+pass (word count, canonical and content facts) and tags Dannyelle (program content) and Chip (budgets,
+budget narratives, financial reports) on what needs their input. After the second round, Iman
+pressure-tests the draft with a neutral LLM (e.g. ChatGPT) about a week out from deadline — Claude
+cannot fill that role for itself, being biased toward its own output. Dannyelle, Iman, and Chip edit
+from that feedback; the third-round draft goes back to Iman for a Claude clarity/consistency/alignment
+pass, then Iman uploads the final draft for Chip and Dannyelle's submission review.
+
 ## References
 
 - `references/style.md` — voice, banned words, the non-negotiables, the self-edit checklist
+- `packages/grants/seed/testimonials.json` — the quotes bank: 23 student/employer/other testimonials,
+  filtered by role/school/cohort. Student rows are de-identified (no name); quote by role/school, never
+  invent a name. Employer/client rows carry a real, professional attribution.
 - `references/figure-cuts.md` — **the cut catalogue: question shape to tool, `query_type` and filters.**
   Read this whenever a question asks for a number
 - `references/figures.md` — drift in stored claims, conflict resolution, ACL denial

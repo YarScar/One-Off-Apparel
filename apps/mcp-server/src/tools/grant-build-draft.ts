@@ -16,7 +16,7 @@ import {
   type DraftPackage,
 } from '@lp-ai/lib-grants';
 
-import { runTool, parseNum, parseStr } from '../tool-helpers.js';
+import { runTool, parseNum, parseStr, READ_ONLY_ANNOTATIONS } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
 
 const NAME = 'grant_build_draft';
@@ -30,7 +30,9 @@ const DESCRIPTION =
   'network. Where a stored answer does not drop straight into a field — over the limit, or a short ' +
   'field whose stored answer is narrative — the result carries a `handback` with the source text, the ' +
   'limit, the measurement, and the rules, and YOU do that rewrite: see `your_tasks`. `staff_actions` ' +
-  'is what needs a person instead. Nothing it returns is submittable as-is.';
+  'is what needs a person instead. Nothing it returns is submittable as-is. This pipeline — not ' +
+  '`skill_grant_writing`\'s freehand drafting — is the canonical, fabrication-preventing path for a ' +
+  'captured funder form; use `skill_grant_writing` only when this tool is unavailable.';
 
 const limitSchema = z.object({
   unit: z.enum(['words', 'characters', 'chars', 'sentences']),
@@ -181,7 +183,7 @@ function outstanding(pkg: DraftPackage, actor: Actor): OutstandingItem[] {
 }
 
 export function registerGrantBuildDraft(server: McpServer): void {
-  server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, (input) =>
+  server.registerTool(NAME, { description: DESCRIPTION, inputSchema, annotations: READ_ONLY_ANNOTATIONS }, (input) =>
     runTool(NAME, input, async () => {
       const raw = input as Record<string, unknown>;
       const formId = parseStr(raw, 'form_id');

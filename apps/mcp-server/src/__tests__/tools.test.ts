@@ -131,6 +131,24 @@ describeLocal('MCP tool handlers (integration)', () => {
     expect(Array.isArray(result.records)).toBe(true);
   });
 
+  // Regression for #4/finding-batch-2: a 0, negative, or non-finite limit used to reach
+  // Prisma's `take` unguarded (Math.min alone has no lower bound), and the response shape
+  // didn't surface `truncated`. clampLimit()/resultEnvelope() now cover both.
+  it('find_grant_documents clamps a non-positive limit into range and returns a conforming envelope', async () => {
+    for (const limit of [0, -5]) {
+      const result = (await client.callTool('find_grant_documents', { limit })) as {
+        record_count: number;
+        total_matching: number;
+        truncated: boolean;
+        limit: number;
+        results: unknown[];
+      };
+      expect(result.limit).toBeGreaterThanOrEqual(1);
+      expect(result.record_count).toBe(result.results.length);
+      expect(result.truncated).toBe(result.record_count < result.total_matching);
+    }
+  });
+
   it('query_attendance aggregate returns valid shape', async () => {
     const result = (await client.callTool('query_attendance', {
       query_type: 'aggregate',

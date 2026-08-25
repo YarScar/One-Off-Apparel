@@ -3,7 +3,7 @@
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
-  "memory": "1024",
+  "memory": "2048",
   "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-execution-role",
   "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-task-role",
   "runtimePlatform": {
@@ -29,7 +29,6 @@
         { "name": "DATABASE_URL",                "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/db:DATABASE_URL::" },
         { "name": "GOOGLE_SERVICE_ACCOUNT_JSON", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SERVICE_ACCOUNT_JSON::" },
         { "name": "GOOGLE_DRIVE_FOLDER_ID",            "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_DRIVE_FOLDER_ID::" },
-        { "name": "GOOGLE_SHEETS_STUDENT_INFO_ID",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_STUDENT_INFO_ID::" },
         { "name": "GOOGLE_SHEETS_STUDENT_INFO_V2",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_STUDENT_INFO_V2::" },
         { "name": "GOOGLE_SHEETS_DASHBOARD_ID",        "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_DASHBOARD_ID::" },
         { "name": "GOOGLE_SHEETS_PHASE_DASHBOARD_ID",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_PHASE_DASHBOARD_ID::" },

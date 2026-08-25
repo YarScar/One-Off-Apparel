@@ -2,6 +2,11 @@
 
 Condensed from `packages/grants/docs/PLAYBOOK.md`, which wins on any conflict.
 
+Canonical program-language/messaging source as of 2026-08-24: the "Launchpad Programming MASTER" doc
+(Doc `1YYEsi0PWm0oCtKAG_8jyQuP2PFEOhovnFroxkVeJ-WI`), reconciled into `kb_launchpad.json`'s
+`meta.source_recency`. It wins on wording and terminology; it does NOT win on numeric claims — those
+still come from a live `query_*` call or a filed application, per the rules below.
+
 ## The standard
 
 Simple, straight, data-backed. State the point, back it with a number, move on. Impact through
@@ -29,7 +34,11 @@ The recurring complaint about AI-written content here is that it sounds generic 
   organization with." Write how a sharp person talks in a serious meeting.
 - **One idea per sentence. Verbs over abstractions.**
 - **Story-led when it earns it.** When a concrete student example lands harder than an abstraction,
-  use it. Do not default to abstraction.
+  use it. Do not default to abstraction. `packages/grants/seed/testimonials.json` is the quotes bank
+  — 23 student/employer/other quotes, filtered by role/school/cohort. Student rows are de-identified
+  (no name); quote a de-identified one by role and school ("a student at Furness"), never invent a
+  name to attach. Employer/client rows carry a real attribution — those are professional attributions,
+  not student PII, and can be quoted by name.
 - **No defensive or apologetic framing.**
 - **Honest about evidence weight.** Distinguish demonstrated outcomes from projected ones.
 

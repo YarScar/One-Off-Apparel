@@ -493,8 +493,9 @@ export const IMMUTABLE_FIGURES: readonly { readonly pattern: RegExp; readonly re
   {
     pattern: /\bsix competencies\b|\b24 skills\b/g,
     reason:
-      'The AI Engineer competency framework’s structure — a design decision, not a count of anything ' +
-      'measured. Changing it means rewriting the framework, which rewrites the sentence.',
+      'The Junior AI Builder competency framework’s structure (renamed from "AI Engineer" ' +
+      '2026-08-25 — OpenProject #336) — a design decision, not a count of anything measured. ' +
+      'Changing it means rewriting the framework, which rewrites the sentence.',
   },
   // No leading `\b` before `\$`. A word boundary requires a word character on one side, and `$` is not
   // one — `/\b\$50,000/` therefore never matches "a $50,000 living wage", which is how every currency
@@ -513,10 +514,12 @@ export const IMMUTABLE_FIGURES: readonly { readonly pattern: RegExp; readonly re
   // verification path for these is the citation, which is a documentation question rather than a
   // figure question.
   {
-    pattern: /\$12,500\b/g,
+    pattern: /\$8,200\b/g,
     reason:
       'Median earnings for a Philadelphia high-school graduate without college — an external ' +
-      'benchmark. Not ours to measure. Needs a citation, not a query_* call.',
+      'benchmark. Not ours to measure. Needs a citation, not a query_* call. Was $12,500 until ' +
+      '2026-08-25, when staff resolved OpenProject #336 in favour of the "Launchpad Programming ' +
+      'MASTER" doc figure — see kb_launchpad.json meta.staff_decisions_2026_08_25.',
   },
   {
     pattern: /\b40[–-]60% administrative time savings\b/g,

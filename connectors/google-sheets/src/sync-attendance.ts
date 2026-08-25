@@ -35,25 +35,23 @@ function parseDateStr(v: string | undefined): Date | null {
 }
 
 // `cohort` here is a raw identifier for which source spreadsheet a row came from — not
-// the removed student-facing cohort concept. Values 4-7 (not 1-3) are deliberate: 1/2/3
-// identify rows from the old point-in-time cohort sheets (being retired). Keeping the new
-// live sheets on a disjoint range means old and new attendance_records rows can never
-// collide on this column while both exist during the cutover, and old rows stay easy to
-// find and remove afterward (`WHERE cohort IN (1, 2, 3)`).
+// the removed student-facing cohort concept. Cohorts 1-3 were cut over directly to the
+// new live sheets (the old point-in-time sheets are fully retired, no coexistence period),
+// and cohort 4 is a new fourth sheet added alongside them.
 //
 // NOTE: once the cohort-removal branch (`feat/remove-cohort-designation`) merges into
 // main, `AttendanceRecord.cohort` is renamed to `sourceFormat` in the schema — this file
 // (and its `cohort:` upsert fields below) will need a follow-up rename to match.
 type CohortConfig = {
-  cohort: 4 | 5 | 6 | 7;
+  cohort: 1 | 2 | 3 | 4;
   envKey: string;
 };
 
 const COHORT_CONFIGS: CohortConfig[] = [
-  { cohort: 4, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_1' },
-  { cohort: 5, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_2' },
-  { cohort: 6, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_3' },
-  { cohort: 7, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_4' },
+  { cohort: 1, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_1' },
+  { cohort: 2, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_2' },
+  { cohort: 3, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_3' },
+  { cohort: 4, envKey: 'GOOGLE_SHEETS_ATTENDANCE_COHORT_4' },
 ];
 
 const ROW_CHUNK_SIZE = 5000;

@@ -1,4 +1,4 @@
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, GetPromptResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { logUsage } from './usage-log.js';
 import { canCallTool, permissionDeniedError } from './permissions.js';
@@ -129,6 +129,42 @@ function sanitizeErrorMessage(message: string): string {
     sanitized = sanitized.replace(pattern, '[REDACTED]');
   }
   return sanitized;
+}
+
+/**
+ * The `registerTool` annotations shared by every read-only grant tool. Introduced under #24 (WP
+ * #333) after a review found this exact object hand-copied across 8 of 9 grant tool registrations —
+ * `openWorldHint` is the one field that legitimately varies (Drive-backed tools set it `true`; see
+ * {@link READ_ONLY_OPEN_WORLD_ANNOTATIONS}).
+ */
+export const READ_ONLY_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+/** {@link READ_ONLY_ANNOTATIONS} for a tool that calls out to an external system (e.g. Drive). */
+export const READ_ONLY_OPEN_WORLD_ANNOTATIONS = {
+  ...READ_ONLY_ANNOTATIONS,
+  openWorldHint: true,
+} as const;
+
+/**
+ * Flattens a prompt's message list into the single `instructions` string every `skill_*` tool
+ * returns. Extracted under #11 (WP #333) — the map/join below was hand-copied identically across
+ * `skill-grant-writing.ts`, `-prospecting.ts`, `-sourcing-evaluation.ts`, `skill-board-reporting.ts`,
+ * and `skill-finance-audit.ts`; each of those keeps its own args mapping, `build*Messages` call, and
+ * `note` string, since those genuinely differ per skill.
+ */
+export function flattenMessages(messages: GetPromptResult['messages']): string {
+  return messages
+    .map((m) => {
+      const text =
+        typeof m.content === 'string' ? m.content : m.content.type === 'text' ? m.content.text : '';
+      return `[${m.role.toUpperCase()}]\n${text}`;
+    })
+    .join('\n\n---\n\n');
 }
 
 export function parseStr(raw: Record<string, unknown>, key: string): string | undefined {

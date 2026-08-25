@@ -5,7 +5,7 @@ import { prisma } from '@lp-ai/lib-db';
 import { extractDocxText } from '@lp-ai/lib-grants';
 import { clientFromEnv } from '@lp-ai/connector-google-drive';
 
-import { runTool, parseStr } from '../tool-helpers.js';
+import { runTool, parseStr, READ_ONLY_OPEN_WORLD_ANNOTATIONS } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
 
 const NAME = 'get_grant_document_text';
@@ -38,12 +38,7 @@ export function registerGetGrantDocumentText(server: McpServer): void {
     {
       description: DESCRIPTION,
       inputSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
+      annotations: READ_ONLY_OPEN_WORLD_ANNOTATIONS,
     },
     (input) =>
       runTool(NAME, input, async () => {

@@ -297,6 +297,53 @@ describe('derive_from_reference — a short field gets the prose as source, not 
   });
 });
 
+// The module comment on `buildAnswer` calls its branch order "load-bearing": confidence, then
+// kb_ref, then whether it resolves, then whether it is real content, and only then length/type.
+// Most adjacent branches are already pinned by a test elsewhere in this file (structured-vs-
+// derive_from_reference, derive_from_reference-vs-length, figure-gate-vs-resolveTextAnswer). These
+// four fixtures cover the ones that were not: each satisfies two branches' predicates at once and
+// asserts the earlier branch — the one prose says must win — actually does. #13, WP #333.
+describe('buildAnswer branch order — pairs no other test exercises together', () => {
+  it('confidence beats a null kb_ref: needs_review, not per_application', () => {
+    const out = buildAnswer(match({ is_confident: false, confidence: 0.2, kb_ref: null }), null, kbWith('kb.mission', 'text'));
+    expect(out.status).toBe<AnswerStatus>('needs_review');
+    expect(out.actor).toBe('staff');
+  });
+
+  it('confidence beats a placeholder entry: needs_review, not kb_placeholder', () => {
+    const out = buildAnswer(
+      match({ is_confident: false, confidence: 0.2 }),
+      null,
+      kbWith('kb.mission', '[PLACEHOLDER] fill me'),
+    );
+    expect(out.status).toBe<AnswerStatus>('needs_review');
+  });
+
+  it('a placeholder beats attachment routing: kb_placeholder, not needs_attachment', () => {
+    // Reordering these would hand a person "gather and upload the files" for a KB slot that was
+    // never written, instead of telling them the slot itself is the problem.
+    const out = buildAnswer(
+      match({ answer_type: 'attachment', kb_ref: 'kb.docs' }),
+      null,
+      kbWith('kb.docs', '[PLACEHOLDER] checklist tbd'),
+    );
+    expect(out.status).toBe<AnswerStatus>('kb_placeholder');
+  });
+
+  it('a placeholder beats fetch_figure: kb_placeholder, not a live-figure instruction', () => {
+    // The concrete failure the module comment warns about: swap this pair and a number question on
+    // an unwritten KB slot would silently tell the caller to run query_finances and write the
+    // returned figure, never surfacing that the slot itself has no real content.
+    const out = buildAnswer(
+      match({ answer_type: 'number', kb_ref: 'kb.financials', matched_id: 'financials.operating_budget' }),
+      null,
+      kbWith('kb.financials', '[PLACEHOLDER] figure tbd'),
+    );
+    expect(out.status).toBe<AnswerStatus>('kb_placeholder');
+    expect(out.figure_call).toBeUndefined();
+  });
+});
+
 describe('compression_infeasible — still handed back, with the fact-dropping named', () => {
   it('separates a far overrun from an ordinary one without dead-ending either', () => {
     const ordinary = buildAnswer(match(), WORDS(5), kbWith('kb.mission', 'one two three four five six', true));
@@ -458,6 +505,32 @@ describe('structured values — a stored short value is the answer, keyed by que
     expect(silent.answer).toBe('default value');
     const none = buildAnswer(m, null, kbFor());
     expect(none.answer).toBe('default value');
+  });
+
+  it('attaches the compression-infeasible warning to a structured value too, not just narrative text', () => {
+    // Before resolveTextAnswer unified the two branches, only the narrative branch attached
+    // infeasibleRule's warning to handback.extraRules — the structured branch dropped it silently.
+    const out = buildAnswer(
+      match({ answer_type: 'field', kb_ref: 'kb.program_desc', matched_id: 'cover.project_title' }),
+      WORDS(1),
+      {
+        ...kbWith('kb.program_desc', 'long narrative', true),
+        answers: {
+          'kb.program_desc': {
+            label: 'L',
+            verified: true,
+            text: 'long narrative',
+            structured: { 'cover.project_title': { value: 'one two three four five six', verified: true } },
+          },
+        },
+      },
+    );
+    expect(out.status).toBe<AnswerStatus>('compression_infeasible');
+    expect(out.actor).toBe('llm');
+    expect(out.action).toContain('which facts you dropped');
+    expect(out.handback?.rules.length).toBeGreaterThan(RESIZE_RULES.length);
+    expect(out.handback?.rules[0]).toContain('Facts WILL have to be dropped');
+    expect(out.handback?.rules).toEqual(expect.arrayContaining([...RESIZE_RULES]));
   });
 
   it('lets a per-value verified flag override the entry-level one', () => {
@@ -894,7 +967,7 @@ describe('renderMarkdown — an expand handback', () => {
     },
     results: [plan],
     kb_refs_used: plan.kb_ref === null ? [] : [plan.kb_ref],
-    figure_work_order: buildFigureWorkOrder([]),
+    figure_work_order: buildFigureWorkOrder([], kbWith('kb.target_population', PROSE, true)),
     integrity_warnings: [],
   });
 

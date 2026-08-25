@@ -52,7 +52,7 @@ const EXTERNAL_REFERENCE_SEGMENTS = ['reference', 'references'];
 /** Extensions we can turn into text today. Anything else needs another tool. */
 const TEXT_EXTRACTABLE = new Set([
   '.docx', '.doc', '.dotx', '.pdf', '.xlsx', '.csv', '.pptx', '.vtt', '.html', '.txt',
-  '.gdoc', '.gsheet',
+  '.gdoc', '.gsheet', '.gslides',
 ]);
 
 /** Audio/video/image files: no text to extract without transcription or OCR. */
@@ -267,6 +267,19 @@ function classifyByFolder(segments: string[]): DocKind | null {
   return null;
 }
 
+/**
+ * Folder kinds that name a process, not an artifact — "Grant Application", "Responses",
+ * "Submission" say an application is happening here, but nothing about what this particular file
+ * is. A filename that names a specific artifact is more informative than that, so it is allowed to
+ * override these folder kinds. Every other folder kind (budget, letters of support, grant
+ * agreement, ...) names the artifact directly and stays decisive — "folder wins" holds for those
+ * without exception.
+ */
+const GENERIC_CONTAINER_KINDS: ReadonlySet<DocKind> = new Set(['application_response']);
+
+/** Filename kinds specific enough to be trusted over a generic container folder (see above). */
+const OVERRIDES_GENERIC_CONTAINER: ReadonlySet<DocKind> = new Set(['template', 'loi', 'report']);
+
 function classifyByFilename(filename: string): DocKind | null {
   // Underscores are word characters, so `\bReport\b` does not match "Report_"
   // — and these filenames are full of underscore-delimited words
@@ -324,13 +337,11 @@ export function classify(root: string, segments: string[], filename: string): Cl
     doc_kind = classifyByFolder(segments) ?? classifyByFilename(filename) ?? 'other';
   }
 
-  // A filename naming a specific artifact overrides a generic container folder
-  // like "Grant Application", which says little on its own. Without this,
-  // "7_31_26 CCFF Final Grant Report_.docx" reads as an application response
-  // purely because of the folder it sits in.
-  if (doc_kind === 'application_response') {
+  // A filename naming a specific artifact overrides a generic container folder kind — see
+  // GENERIC_CONTAINER_KINDS below for the rule this implements.
+  if (GENERIC_CONTAINER_KINDS.has(doc_kind)) {
     const fromName = classifyByFilename(filename);
-    if (fromName === 'template' || fromName === 'loi' || fromName === 'report') {
+    if (fromName && OVERRIDES_GENERIC_CONTAINER.has(fromName)) {
       doc_kind = fromName;
     }
   }
@@ -478,6 +489,19 @@ const COMPARABLE_EXT =
   /\.(gdoc|gsheet|gslides|docx?|dotx|xlsx?|pptx?|pdf|csv|tsv|txt|rtf|md|vtt|html?|jpe?g|png|heic|gif|mp4|m4a|mp3|mov|wav|zip)$/;
 
 /**
+ * `looseKey`, `scopedNameKey`, and `normalizePath` sit at three different looseness levels on the
+ * same identity-resolution ladder (see `connectors/google-drive/src/reconcile.ts`'s tiered lookup,
+ * run in order: drive_id -> exact_path -> normalized_path -> loose_path -> scoped_name). All three
+ * used to return plain `string`, so nothing stopped a caller from putting a `LooseKey` into the
+ * normalized-path map — a swap that would typecheck cleanly and only fail at runtime as wrong or
+ * missing matches. These branded types are erased at compile time (no runtime cost); each function
+ * below is the only place allowed to assert its own brand.
+ */
+export type NormalizedPath = string & { readonly __brand: 'NormalizedPath' };
+export type LooseKey = string & { readonly __brand: 'LooseKey' };
+export type ScopedNameKey = string & { readonly __brand: 'ScopedNameKey' };
+
+/**
  * A deliberately lossy comparison key: same document, however either side spelled it.
  *
  * Downloading the corpus rewrote characters in ways no single rule predicts — a `/`
@@ -490,12 +514,12 @@ const COMPARABLE_EXT =
  * is only ever consulted **after** the precise keys miss, and only when it names
  * exactly one candidate. Ambiguity here is refused, not resolved.
  */
-export function looseKey(path: string): string {
+export function looseKey(path: string): LooseKey {
   return path
     .toLowerCase()
     .replace(COMPARABLE_EXT, '')
     .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+    .trim() as LooseKey;
 }
 
 /**
@@ -513,17 +537,17 @@ export function looseKey(path: string): string {
  *
  * Callers must additionally require the key to be unique on **both** sides.
  */
-export function scopedNameKey(path: string): string {
+export function scopedNameKey(path: string): ScopedNameKey {
   const segments = path.split('/');
   const collection = segments[1]?.toLowerCase() ?? '';
   const scope =
     segments.length > 3 && FUNDER_COLLECTIONS.has(collection)
       ? looseKey(`${collection}/${segments[2] ?? ''}`)
       : '';
-  return `${scope}||${looseKey(segments[segments.length - 1] ?? '')}`;
+  return `${scope}||${looseKey(segments[segments.length - 1] ?? '')}` as ScopedNameKey;
 }
 
-export function normalizePath(path: string): string {
+export function normalizePath(path: string): NormalizedPath {
   return path
     .toLowerCase()
     // Drive for Desktop substitutes '_' for '/' and ':' in names.
@@ -531,5 +555,5 @@ export function normalizePath(path: string): string {
     // Google-native files gain a .gdoc/.gsheet extension locally.
     .replace(/\.(gdoc|gsheet|gslides)$/, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim() as NormalizedPath;
 }

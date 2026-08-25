@@ -94,6 +94,21 @@ describe('classifyPath', () => {
     ).toBe('report');
   });
 
+  it('lets a template filename override a generic container folder', () => {
+    expect(
+      classifyPath('Grants/Current and Past/GSK/2026/Grant Application/Report Template.docx')
+        .doc_kind,
+    ).toBe('template');
+  });
+
+  it('lets an LOI filename override a generic container folder', () => {
+    expect(
+      classifyPath(
+        'Grants/Prospects and Proposals/Truist/2026/Responses/Letter of Intent.docx',
+      ).doc_kind,
+    ).toBe('loi');
+  });
+
   it('marks pre-2025 applications archive-only', () => {
     // The program shifted, so older applications describe something Launchpad no
     // longer runs. Searchable, never drafting context.
@@ -173,9 +188,25 @@ describe('content class and extensions', () => {
   it('calls Google-native docs, sheets and slides extractable', () => {
     expect(contentClassForMime('application/vnd.google-apps.document')).toBe('text');
     expect(contentClassForMime('application/vnd.google-apps.spreadsheet')).toBe('text');
+    expect(contentClassForMime('application/vnd.google-apps.presentation')).toBe('text');
     // A form or a folder has no text to extract.
     expect(contentClassForMime('application/vnd.google-apps.form')).toBe('unknown');
     expect(contentClassForMime('application/vnd.google-apps.folder')).toBe('unknown');
+  });
+
+  it('agrees with itself on Google-native extensions vs. MIME types (#23 regression)', () => {
+    // The extension path (fileExtension/contentClassForExt) and the MIME path
+    // (contentClassForMime) classify the same file two different ways. They must agree,
+    // or a file gets classified one way locally and another way via Drive.
+    const cases: ReadonlyArray<[ext: string, mime: string]> = [
+      ['.gdoc', 'application/vnd.google-apps.document'],
+      ['.gsheet', 'application/vnd.google-apps.spreadsheet'],
+      ['.gslides', 'application/vnd.google-apps.presentation'],
+    ];
+    for (const [ext, mime] of cases) {
+      expect(contentClassForExt(ext)).toBe(contentClassForMime(mime));
+      expect(contentClassForExt(ext)).toBe('text');
+    }
   });
 
   it('calls audio, video and images media', () => {

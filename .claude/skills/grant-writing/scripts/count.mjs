@@ -15,7 +15,7 @@ import { argv, exit } from 'node:process';
 import { readFileSync } from 'node:fs';
 
 const GRANTS = new URL('../../../../packages/grants/dist/index.js', import.meta.url).href;
-const { measureAll } = await import(GRANTS);
+const { measureAll, BANNED_JARGON } = await import(GRANTS);
 
 const path = argv[2];
 if (!path) {
@@ -52,12 +52,11 @@ if (emDash.length > 0) {
   }
 }
 
-const BANNED = [
-  'transformative', 'innovative', 'holistic', 'leverage', 'ecosystem',
-  'move the needle', 'at the intersection of', 'reimagine', 'survivable',
-];
 const jargon = drafts
-  .map((d) => ({ label: d.label, hits: BANNED.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(d.text ?? '')) }))
+  .map((d) => ({
+    label: d.label,
+    hits: BANNED_JARGON.filter((w) => new RegExp(`\\b${w}\\b`, 'i').test(d.text ?? '')),
+  }))
   .filter((x) => x.hits.length > 0);
 if (jargon.length > 0) {
   failed += 1;

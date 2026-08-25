@@ -10,7 +10,7 @@ import { attendanceCurrentPhaseIndex } from '../filter-domain-loaders.js';
 const NAME = 'query_attendance';
 
 const DESCRIPTION =
-  'Query Launchpad student attendance from the three cohort sheets (Cohort 1 / 2 / 3). Use for per-student attendance rates, aggregate rates by phase / race / cohort / school / etc., or raw event drill-downs over a date range. Cohorts are loose Launchpad groupings; rates blend cohort 1 (already-aggregated weekly %), cohort 2 (daily P/A/E codes), and cohort 3 (weekly check-in/out logs with codes). Excused absences are excluded from rate calculations. Every response echoes filters_applied, and filters_ignored when an input does not apply to the query_type, so a rate is never silently unscoped. current_phase and cohort are matched literally against the values those columns hold; a value absent from its column returns a no_records error listing the values present, rather than an answer covering everyone.';
+  'Query Launchpad student attendance from the four cohort sheets (Cohort 1 / 2 / 3 / 4). Use for per-student attendance rates, aggregate rates by phase / race / cohort / school / etc., or raw event drill-downs over a date range. Cohorts are loose Launchpad groupings; rates blend cohort 1 (already-aggregated weekly %, where present) with the daily P/A/E codes cohorts 1-4 otherwise carry. Excused absences are excluded from rate calculations. Every response echoes filters_applied, and filters_ignored when an input does not apply to the query_type, so a rate is never silently unscoped. current_phase and cohort are matched literally against the values those columns hold; a value absent from its column returns a no_records error listing the values present, rather than an answer covering everyone.';
 
 const inputSchema = {
   query_type: z.enum(['by_student', 'aggregate', 'events']),
@@ -18,7 +18,7 @@ const inputSchema = {
     .string()
     .optional()
     .describe('LP#### (joins students.student_number).'),
-  cohort: z.number().optional().describe('1, 2, or 3.'),
+  cohort: z.number().optional().describe('1, 2, 3, or 4.'),
   current_phase: z
     .string()
     .optional()

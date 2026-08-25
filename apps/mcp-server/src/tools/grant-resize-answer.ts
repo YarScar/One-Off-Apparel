@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { resizeAnswer, type ResizeContextInput } from '@lp-ai/lib-grants';
 
-import { runTool, parseNum, parseStr } from '../tool-helpers.js';
+import { runTool, parseNum, parseStr, READ_ONLY_ANNOTATIONS } from '../tool-helpers.js';
 import { toolError } from '../errors.js';
 
 const NAME = 'grant_resize_answer';
@@ -66,12 +66,7 @@ export function registerGrantResizeAnswer(server: McpServer): void {
     {
       description: DESCRIPTION,
       inputSchema,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
+      annotations: READ_ONLY_ANNOTATIONS,
     },
     (input) =>
       runTool(NAME, input, async () => {

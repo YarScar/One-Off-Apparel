@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { runTool, parseStr } from '../tool-helpers.js';
+import { runTool, parseStr, READ_ONLY_ANNOTATIONS, flattenMessages } from '../tool-helpers.js';
 import {
   grantWritingArgsSchema,
   buildGrantWritingMessages,
@@ -14,12 +14,15 @@ const DESCRIPTION =
   'Accepts a URL to scrape grant requirements or pasted text. Returns a step-by-step ' +
   'workflow: research the funder, gather internal data via MCP tools, then draft in the ' +
   'organization\'s voice with real numbers. IMPORTANT: After receiving the instructions, ' +
-  'follow them step by step — call the MCP data tools as directed, then write the draft.';
+  'follow them step by step — call the MCP data tools as directed, then write the draft. ' +
+  'If `grant_build_draft`, `grant_match_question`, `grant_resize_answer`, and ' +
+  '`grant_verify_figure` are registered, prefer that deterministic pipeline for drafting ' +
+  'against a captured funder form — use this tool only as a fallback when they are not available.';
 
 export function registerSkillGrantWriting(server: McpServer): void {
   server.registerTool(
     NAME,
-    { description: DESCRIPTION, inputSchema: grantWritingArgsSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+    { description: DESCRIPTION, inputSchema: grantWritingArgsSchema, annotations: READ_ONLY_ANNOTATIONS },
     (input) =>
       runTool(NAME, input, async () => {
         const raw = input as Record<string, unknown>;
@@ -36,17 +39,7 @@ export function registerSkillGrantWriting(server: McpServer): void {
         };
 
         const result = buildGrantWritingMessages(args);
-        const instructions = result.messages
-          .map((m) => {
-            const text =
-              typeof m.content === 'string'
-                ? m.content
-                : m.content.type === 'text'
-                  ? m.content.text
-                  : '';
-            return `[${m.role.toUpperCase()}]\n${text}`;
-          })
-          .join('\n\n---\n\n');
+        const instructions = flattenMessages(result.messages);
 
         return {
           skill: NAME,

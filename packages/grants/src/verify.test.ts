@@ -63,4 +63,26 @@ describe('verifyFigureAnswer', () => {
     expect(verdict.matched).toBe(false);
     expect(verdict.unmatched).toEqual(['$999,999', '12345']);
   });
+
+  it('matches a magnitude-suffixed figure against the live raw number it abbreviates', () => {
+    const verdict = verifyFigureAnswer(
+      'Total annual budget was $1.34M this year.',
+      { tool: 'query_finances', args: { query_type: 'annual_budget' } },
+      { actuals: 1_340_000 },
+    );
+
+    expect(verdict.matched).toBe(true);
+    expect(verdict.unmatched).toEqual([]);
+  });
+
+  it('still flags a magnitude-suffixed figure whose magnitude is wrong', () => {
+    const verdict = verifyFigureAnswer(
+      'Total annual budget was $1.34M this year.',
+      { tool: 'query_finances', args: { query_type: 'annual_budget' } },
+      { actuals: 134_000 },
+    );
+
+    expect(verdict.matched).toBe(false);
+    expect(verdict.unmatched).toEqual(['$1.34M']);
+  });
 });
