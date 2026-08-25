@@ -67,6 +67,11 @@ The 13 tests this document offered as the G2 bar were not sufficient on their ow
 
 4. **The Playbook asks for things these documents do not sanction, and we deliberately have not resolved them.** It opens by having Claude *create* a Grant Applications record and closes by *updating* it — a write path, against control 6 and the `readOnlyHint` on every planned tool. It also carries two rules stronger than anything in `TAD.md` section 3 (never name an entity not traceable to a confirmed current source; ask the fiscal-sponsorship framing every time), and it reconciles the wage claim as $550K stale versus $300K current where `TAD.md` section 3.2 documents $350,268 versus $362,361.82. **Decision: build the pipeline first, then assess.** Watering either document down to match the other before we can see a real draft package would be guessing.
 
+   **Deferral over, 2026-08-25.** G1–G4 have passed and the pipeline is built. A change proposal
+   covering all three sub-items is at `admin/PLAYBOOK-PROPOSAL.md`, for Iman's review — not yet
+   applied to either document. WPs #65 (C1) and #63 (B7) were closed as superseded by that
+   proposal rather than worked as separate tasks.
+
 5. **Two ordinary grant questions do not match confidently, and that is the prototype's behaviour, not a port defect.** "How will you measure whether the program succeeded?" and "Upload your IRS letter of determination." both score below the 0.42 threshold in the Python original and in ours. They route to human review, which is the safe outcome, but it suggests the bank wants variants for them. A matching quality review is worth scheduling separately from parity.
 
    **Reviewed 2026-08-03 under board B6 (#62). Half closed.** The review confirmed this flag was right

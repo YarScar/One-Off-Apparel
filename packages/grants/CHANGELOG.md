@@ -25,6 +25,62 @@ entry can be verified rather than trusted.
 
 ---
 
+## 2026-08-25
+
+### Added — WP #66 (C2): Playbook change proposal drafted, folding in C1 and B7
+
+`admin/PLAYBOOK-PROPOSAL.md` is new — the write-up `HANDOFF.md`'s 2026-07-28 flag 4 deferred until
+the draft pipeline was built. G1–G4 have since passed, so the deferral is over. Three items, for
+Iman's review, not yet applied to `TAD.md`/`docs/PLAYBOOK.md`:
+
+1. **Promotion** — the two Playbook rules stronger than `TAD.md` §3 (never name an unconfirmed
+   entity; ask fiscal-sponsorship framing every time) move up into `TAD.md` as new §3.7/§3.8.
+2. **Correction (closes WP #65/C1, superseded 2026-08-25)** — recommends dropping the Playbook's
+   Claude-creates/updates-the-Grant-Applications-record steps; no write tool exists in the
+   platform (all three registered tools are `readOnlyHint: true`), and the built pipeline needed
+   none. Record-keeping becomes a staff action instead. Adds `TAD.md` §5 decision 8.
+3. **Correction (closes WP #63/B7, superseded 2026-08-25)** — the Playbook's non-negotiables cite
+   a stale $550K vs $300K wage-figure example that itself now disagrees with `TAD.md` §3.2's
+   ($350,268 vs $362,361.82) numbers. Recommends removing the fixed pair entirely — any snapshot
+   goes stale within days per §3.2's own $331.56/day drift — in favor of stating the
+   live-precedence rule with no number attached.
+4. **Addition** — short procedural notes on Playbook Steps 1–4, per the 2026-07-29 feedback
+   ("likes non-negotiables, not enough information per step"), cross-referencing tools built since
+   that feedback (`search_documents`, `find_grant_documents`, WP #320's `program`/`framing` gate).
+
+**Not yet applied.** `TAD.md` and `docs/PLAYBOOK.md` are unchanged pending Iman's review — the WP's
+acceptance criterion is a document reviewable in one sitting, not a landed edit.
+
+### Changed — WP #336/#337: staff decisions applied to `kb_launchpad.json`; `docs/STATE.md` item 20 resolved
+
+Three staff-decision items opened 2026-08-24 (OpenProject #336, #337 — see the 2026-08-24 entry
+below and `docs/STATE.md` item 20) were settled by direct staff decision and written back into
+`kb_launchpad.json`'s new `meta.staff_decisions_2026_08_25` field, per that field's own instruction
+to record the decision rather than resolve it unilaterally:
+
+1. **Baseline earnings ($8,200 vs $12,500, #336):** the "Launchpad Programming MASTER" doc's
+   `$8,200`/yr is correct. `kb.need` and `kb.metrics` updated; `slots.ts`'s `IMMUTABLE_FIGURES`
+   exemption pattern updated `$12,500` → `$8,200` in the same commit — `slots.test.ts` asserts every
+   exemption pattern matches somewhere in the corpus and every literal figure has one, so the two
+   files cannot drift apart silently. The `docs/grant-data-triage/H2.4-outcome-reconciliation.md`
+   row #35 reading (these two figures as complementary — subpopulation vs. broad benchmark — rather
+   than conflicting) was not re-verified: that file is not present in this checkout.
+2. **Terminology ("Junior AI Builder" vs "AI Engineer", #336):** "Junior AI Builder" is correct,
+   matching the most recent filed draft (`drafts/answers/chubb_eitc_2027.json:42`) over the Siegel
+   EOG's older "Junior AI Engineer". "AI Engineer competency framework" renamed "Junior AI Builder
+   competency framework" in all eight `kb_launchpad.json` entries that name it: `kb.programs`,
+   `kb.program_desc`, `kb.evaluation`, `kb.uniqueness`, `kb.goals`, `kb.innovation`,
+   `kb.theory_of_change`, `kb.capacity`. Each carries a `_provenance` note. `slots.ts`'s
+   `six competencies`/`24 skills` exemption comment updated to match.
+3. **Competency count (six vs seven, #337):** six is correct — the Siegel EOG (most recent) wins
+   over the Connelly Foundation's seven (May 2026). No KB text changed; it already said six
+   throughout. `meta.source_recency` gained a Siegel EOG entry, positioned above Connelly, so future
+   reconciliation passes carry the ranking rather than re-deriving it.
+
+`packages/grants` full suite still green after these edits (344/344) and `tsc --noEmit` clean.
+`docs/STATE.md` item 20 is marked resolved rather than removed, so the record of what was unresolved
+and for how long survives.
+
 ## 2026-08-24
 
 ### Changed — WP #335: `kb.mission` reconciled against the "Launchpad Programming MASTER" doc; `meta.source_recency` updated

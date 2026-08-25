@@ -19,6 +19,7 @@ A working prototype proves the method and runs today. This package moves that me
 | The architecture, the security and compliance model, the data rules | [`admin/TAD.md`](./admin/TAD.md) |
 | The build detail and the release gates | [`admin/SPEC.md`](./admin/SPEC.md) |
 | A one-page orientation and where the flags are | [`admin/HANDOFF.md`](./admin/HANDOFF.md) |
+| The pending Playbook/TAD reconciliation, for Iman's review | [`admin/PLAYBOOK-PROPOSAL.md`](./admin/PLAYBOOK-PROPOSAL.md) |
 | Where the project stands, and the OpenProject work packages | [`admin/OPENPROJECT-TASKS.md`](./admin/OPENPROJECT-TASKS.md) |
 | What to pick up next, and the three open items | [`admin/NEXT-SESSION.md`](./admin/NEXT-SESSION.md) |
 | How we actually draft: the intake steps, the style rules, the non-negotiables | [`docs/PLAYBOOK.md`](./docs/PLAYBOOK.md) |
