@@ -1,0 +1,52 @@
+{
+  "skill_name": "grant-report-draft",
+  "evals": [
+    {
+      "id": 1,
+      "name": "william-penn-repeat-funder",
+      "prompt": "Can you draft the final report for William Penn? It's due August 31st and I want a full draft I can review before I send it in.",
+      "expected_output": "A single native Google Doc titled with the funder, report type, and due date, placed in the William Penn reporting folder. Contains, in order: a Grant Report Overview table (real Google Docs table, not markdown text) with every Detail cell carrying its own inline source hyperlink; Missing Source Materials (if any); Inconsistencies Found (comparing the application and the signed agreement, including any drift already visible across the prior draft versions in Drive); a narrative structured around William Penn's actual numbered report questions, in prose, with every cited figure linked inline to its source. No separate Sources table anywhere in the document.",
+      "files": [],
+      "expectations": [
+        "The delivered output is a native Google Doc, not a PDF and not a .md/plain-text file",
+        "The Grant Report Overview is a real rendered Google Docs table, not markdown pipe syntax (| like | this |) pasted as text",
+        "Every Detail cell in the Grant Report Overview table contains its own inline hyperlink to a source document",
+        "No standalone 'Sources' table or section exists anywhere in the document",
+        "An Inconsistencies Found section is present, even if some or all items resolve to 'no inconsistency found'",
+        "The narrative's section headers match William Penn's actual numbered report questions rather than an invented numbering scheme",
+        "The narrative does not include a full per-cohort or internal tracking-style breakdown table"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "lenfest-scoped-initiative",
+      "prompt": "I need to work on the Lenfest follow-up report — it's due October 15th. Can you put together a draft?",
+      "expected_output": "A single native Google Doc draft for the H. Chase Lenfest Philanthropy follow-up report. The Applicable Initiative field correctly identifies the specific program this grant funds (not generic 'Launchpad' programming) based on the agreement's scope language, cited to the specific clause establishing it. Every figure used in the narrative actually belongs to that funded program's scope, not Launchpad's programming generally. Every fact anywhere in the doc carries an inline source hyperlink, and there is no separate Sources table.",
+      "files": [],
+      "expectations": [
+        "The delivered output is a native Google Doc, not a PDF and not a .md/plain-text file",
+        "The Applicable Initiative field names the specific program/initiative this grant funds, not a generic 'Launchpad' label, and is sourced to the agreement's scope language",
+        "Every figure cited in the narrative is scoped to the grant's actual funded program rather than Launchpad-wide figures",
+        "If the agreement's scope language is ambiguous about what's covered, that ambiguity is flagged as a row in Inconsistencies Found rather than silently resolved",
+        "The Grant Report Overview is a real rendered Google Docs table with inline hyperlinks in each Detail cell, not markdown table text",
+        "No standalone 'Sources' table or section exists anywhere in the document",
+        "If this is Launchpad's first report for this grant, the draft says so plainly rather than listing 'no prior reports found' under Missing Source Materials as if something were lost"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "chappell-culpeper-consistency-check",
+      "prompt": "The Chappell Culpeper final report is overdue — can you get me a draft ASAP so I can get it out the door?",
+      "expected_output": "A single native Google Doc draft for the Chappell Culpeper Family Foundation final report, produced with the same structure, citation style, and table formatting as the other two funders' drafts, despite the urgency in the request. The 'ASAP' framing does not cause the draft to skip the cross-check, skip inline citations, or ship as a PDF/plain text instead of a Doc.",
+      "files": [],
+      "expectations": [
+        "The delivered output is a native Google Doc, not a PDF and not a .md/plain-text file, despite the request's urgent tone",
+        "The Grant Report Overview is a real rendered Google Docs table, not markdown pipe syntax pasted as text",
+        "Every Detail cell in the Grant Report Overview table contains its own inline hyperlink to a source document",
+        "An Inconsistencies Found section is present and compares the application against the signed agreement",
+        "No standalone 'Sources' table or section exists anywhere in the document",
+        "The draft does not stop to ask a clarifying question before producing a complete first draft"
+      ]
+    }
+  ]
+}
