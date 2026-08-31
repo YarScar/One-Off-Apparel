@@ -427,6 +427,56 @@ model UsageLog {
   @@map("usage_logs")
 }
 
+/// One row per Claude Code OpenTelemetry metric data point (token usage, cost,
+/// session/commit/PR counts, etc.). `sourceId` is a hash of the raw data point so a
+/// retried/re-sent export upserts instead of double-counting. Metric-specific detail
+/// (token type, model, tool name) lives in `attributes` rather than dedicated columns —
+/// the metric surface is still being learned, and a new metric name needs no migration.
+model ClaudeTelemetryMetric {
+  id             String   @id @default(uuid())
+  sourceId       String   @unique @map("source_id")
+  metricName     String   @map("metric_name")
+  value          Decimal  @db.Decimal(20, 6)
+  unit           String?
+  recordedAt     DateTime @map("recorded_at")
+  userId         String?  @map("user_id")
+  userEmail      String?  @map("user_email")
+  organizationId String?  @map("organization_id")
+  sessionId      String?  @map("session_id")
+  attributes     Json?
+  receivedAt     DateTime @default(now()) @map("received_at")
+
+  @@index([metricName])
+  @@index([recordedAt])
+  @@index([userEmail])
+  @@index([sessionId])
+  @@map("claude_telemetry_metrics")
+}
+
+/// One row per Claude Code OpenTelemetry event (tool_result, api_request, tool_decision,
+/// etc.) — the "what did this person actually do" detail the token/cost metrics above
+/// don't carry. Same `sourceId`-hash upsert as the metrics table, same reason.
+model ClaudeTelemetryEvent {
+  id             String   @id @default(uuid())
+  sourceId       String   @unique @map("source_id")
+  eventName      String   @map("event_name")
+  occurredAt     DateTime @map("occurred_at")
+  userId         String?  @map("user_id")
+  userEmail      String?  @map("user_email")
+  organizationId String?  @map("organization_id")
+  sessionId      String?  @map("session_id")
+  promptId       String?  @map("prompt_id")
+  toolUseId      String?  @map("tool_use_id")
+  attributes     Json?
+  receivedAt     DateTime @default(now()) @map("received_at")
+
+  @@index([eventName])
+  @@index([occurredAt])
+  @@index([userEmail])
+  @@index([sessionId])
+  @@map("claude_telemetry_events")
+}
+
 model SyncRun {
   id              String    @id @default(uuid())
   connector       String

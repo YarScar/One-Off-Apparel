@@ -4,7 +4,10 @@ import { NextResponse } from 'next/server';
 
 // '/api/notion/meeting-router' is the Notion webhook receiver — Notion calls it
 // unauthenticated, so it's verified by signature inside the route, not by session auth.
-const PUBLIC_PATHS = ['/auth/signin', '/api/auth', '/api/health', '/api/notion/meeting-router'];
+// '/api/telemetry' is the Claude Code OTLP ingestion endpoint — same reasoning: Claude
+// Code has no Google session to present, so it's verified by a shared bearer token
+// inside the route (see app/api/telemetry/_lib/auth.ts).
+const PUBLIC_PATHS = ['/auth/signin', '/api/auth', '/api/health', '/api/notion/meeting-router', '/api/telemetry'];
 
 const { auth } = NextAuth(authConfig);
 

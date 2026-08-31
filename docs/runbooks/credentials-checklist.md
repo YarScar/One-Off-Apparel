@@ -18,6 +18,7 @@ What credentials to request, from whom, and what each one unlocks. Suggested gat
 | 9 | `SENTRY_DSN_HQ` + `SENTRY_DSN_MCP` | Sentry workspace owner | Production error monitoring | Local errors print to stderr |
 | 10 | `SYNC_SECRET` | Generated; share between EventBridge + the ECS MCP service | Bearer auth on the MCP server's `/mcp` HTTP endpoint | Endpoint is unauthed when unset |
 | 11 | MCP OAuth (`MCP_OAUTH_ISSUER`, `JWT_PRIVATE_KEY`, `JWT_KID`) | Generated during Phase 23 setup | MCP OAuth 2.0 PKCE flow for tool-level access control | Tools accessible without OAuth when unset |
+| 12 | `CLAUDE_TELEMETRY_SHARED_TOKEN` | Generated; share between the Claude organization's managed settings (`claude.ai/admin-settings/claude-code`) and HQ | Bearer auth on `/api/telemetry`, the Claude Code OpenTelemetry ingestion endpoint | Endpoint rejects every request (fails closed) when unset — see [docs/setup/22-anthropic-usage-connector.md](../setup/22-anthropic-usage-connector.md) |
 
 ## Recommended order
 
@@ -45,6 +46,7 @@ What credentials to request, from whom, and what each one unlocks. Suggested gat
 6. **Google OAuth client (#4)** — needed once you want to share the HQ dashboard with the team rather than running it locally.
 7. **Sentry DSNs (#9)** — production-only; not strictly required until ECS deploy.
 8. **`SYNC_SECRET` (#10)** — generate with `openssl rand -base64 32` once we have ECS + EventBridge.
+9. **`CLAUDE_TELEMETRY_SHARED_TOKEN` (#12)** — generate the same way, once `/api/telemetry` is deployed; the same value goes into both Secrets Manager and the Claude org's managed settings (`OTEL_EXPORTER_OTLP_HEADERS`).
 
 ## What's safe to share with admins
 
@@ -74,6 +76,7 @@ All credentials are added to `.env` locally (which is gitignored) and to AWS Sec
 | `SENTRY_DSN_HQ` / `SENTRY_DSN_MCP` | `.env` | Secrets Manager `lp-internal/sentry` |
 | `SYNC_SECRET` | `.env` | Secrets Manager `lp-internal/sync` |
 | `MCP_OAUTH_ISSUER` / `JWT_PRIVATE_KEY` / `JWT_KID` | `.env` | Secrets Manager `lp-internal/mcp-oauth` |
+| `CLAUDE_TELEMETRY_SHARED_TOKEN` | `.env` | Secrets Manager `lp-internal/anthropic` |
 
 Once `USE_AWS_SECRETS=true` in production, `packages/config` fetches all of these from Secrets Manager on startup and validates them through the Zod schema before any business logic runs.
 

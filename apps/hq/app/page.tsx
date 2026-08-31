@@ -13,22 +13,36 @@ interface SourceFreshness {
 interface TokenUsageRow {
   user_id: string | null;
   user_email: string | null;
-  call_count: string;
+  session_count: string;
   input_tokens: string | null;
   output_tokens: string | null;
   cache_read_tokens: string | null;
-  cache_creation_tokens: string | null;
+  total_tokens: string | null;
+  cost_usd: string | null;
   last_seen: Date | null;
 }
 
 interface TokenSummary {
-  total_calls: string;
   total_input: string | null;
   total_output: string | null;
-  total_cache_read: string | null;
-  total_cache_creation: string | null;
+  total_tokens: string | null;
+  total_cost_usd: string | null;
   distinct_users: string;
-  calls_with_tokens: string;
+  distinct_sessions: string;
+}
+
+interface ActivityRow {
+  user_id: string | null;
+  user_email: string | null;
+  event_count: string;
+  session_count: string;
+  last_seen: Date | null;
+}
+
+interface ActivitySummary {
+  total_events: string;
+  distinct_users: string;
+  distinct_sessions: string;
 }
 
 async function fetchFreshness(): Promise<SourceFreshness[]> {
@@ -133,38 +147,48 @@ function resolveDateRange(searchParams: { [k: string]: string | string[] | undef
   return { from, to: today, label: `Last ${String(days)} days` };
 }
 
+/**
+ * Reads `claude_telemetry_metrics` (fed by Claude Code's OpenTelemetry exporter — see
+ * apps/hq/app/api/telemetry) rather than `usage_logs`. `usage_logs` only ever covers calls
+ * to *our own* MCP tools; this covers all Claude Code activity, which is what the token
+ * total on this page is actually supposed to mean. The `type` attribute on
+ * `claude_code.token.usage` data points is assumed to carry 'input' / 'output' /
+ * 'cacheRead' — unverified against a real export (see the comment in
+ * app/api/telemetry/_lib/otlp.ts); `total_tokens` doesn't depend on that assumption, only
+ * the input/output/cache breakdown columns do.
+ */
 async function fetchTokenUsage(from: Date | null, to: Date | null): Promise<{
   perUser: TokenUsageRow[];
   summary: TokenSummary | null;
 }> {
-  const clauses: string[] = [];
+  const clauses: string[] = [`metric_name IN ('claude_code.token.usage', 'claude_code.cost.usage')`];
   const params: unknown[] = [];
   if (from) {
     params.push(from);
-    clauses.push(`called_at >= $${String(params.length)}`);
+    clauses.push(`recorded_at >= $${String(params.length)}`);
   }
   if (to) {
     params.push(to);
-    clauses.push(`called_at <= $${String(params.length)}`);
+    clauses.push(`recorded_at <= $${String(params.length)}`);
   }
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  const where = `WHERE ${clauses.join(' AND ')}`;
 
   const perUser = await prisma.$queryRawUnsafe<TokenUsageRow[]>(
     `
     SELECT
-      anthropic_user_id        AS user_id,
-      anthropic_user_email     AS user_email,
-      COUNT(*)::text           AS call_count,
-      SUM(input_tokens)::text  AS input_tokens,
-      SUM(output_tokens)::text AS output_tokens,
-      SUM(cache_read_tokens)::text     AS cache_read_tokens,
-      SUM(cache_creation_tokens)::text AS cache_creation_tokens,
-      MAX(called_at) AS last_seen
-    FROM usage_logs
+      user_id,
+      user_email,
+      COUNT(DISTINCT session_id)::text AS session_count,
+      SUM(CASE WHEN metric_name = 'claude_code.token.usage' AND attributes->>'type' = 'input' THEN value ELSE 0 END)::text AS input_tokens,
+      SUM(CASE WHEN metric_name = 'claude_code.token.usage' AND attributes->>'type' = 'output' THEN value ELSE 0 END)::text AS output_tokens,
+      SUM(CASE WHEN metric_name = 'claude_code.token.usage' AND attributes->>'type' IN ('cacheRead', 'cache_read') THEN value ELSE 0 END)::text AS cache_read_tokens,
+      SUM(CASE WHEN metric_name = 'claude_code.token.usage' THEN value ELSE 0 END)::text AS total_tokens,
+      SUM(CASE WHEN metric_name = 'claude_code.cost.usage' THEN value ELSE 0 END)::text AS cost_usd,
+      MAX(recorded_at) AS last_seen
+    FROM claude_telemetry_metrics
     ${where}
-    GROUP BY anthropic_user_id, anthropic_user_email
-    ORDER BY SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)) DESC NULLS LAST,
-             COUNT(*) DESC
+    GROUP BY user_id, user_email
+    ORDER BY SUM(CASE WHEN metric_name = 'claude_code.token.usage' THEN value ELSE 0 END) DESC NULLS LAST
     LIMIT 50
     `,
     ...params,
@@ -173,20 +197,85 @@ async function fetchTokenUsage(from: Date | null, to: Date | null): Promise<{
   const summaryRows = await prisma.$queryRawUnsafe<TokenSummary[]>(
     `
     SELECT
-      COUNT(*)::text                                              AS total_calls,
-      SUM(input_tokens)::text                                     AS total_input,
-      SUM(output_tokens)::text                                    AS total_output,
-      SUM(cache_read_tokens)::text                                AS total_cache_read,
-      SUM(cache_creation_tokens)::text                            AS total_cache_creation,
-      COUNT(DISTINCT COALESCE(anthropic_user_id, anthropic_user_email))::text AS distinct_users,
-      SUM(CASE WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL THEN 1 ELSE 0 END)::text AS calls_with_tokens
-    FROM usage_logs
+      SUM(CASE WHEN metric_name = 'claude_code.token.usage' AND attributes->>'type' = 'input' THEN value ELSE 0 END)::text AS total_input,
+      SUM(CASE WHEN metric_name = 'claude_code.token.usage' AND attributes->>'type' = 'output' THEN value ELSE 0 END)::text AS total_output,
+      SUM(CASE WHEN metric_name = 'claude_code.token.usage' THEN value ELSE 0 END)::text AS total_tokens,
+      SUM(CASE WHEN metric_name = 'claude_code.cost.usage' THEN value ELSE 0 END)::text AS total_cost_usd,
+      COUNT(DISTINCT COALESCE(user_id, user_email))::text AS distinct_users,
+      COUNT(DISTINCT session_id)::text AS distinct_sessions
+    FROM claude_telemetry_metrics
     ${where}
     `,
     ...params,
   );
 
   return { perUser, summary: summaryRows[0] ?? null };
+}
+
+/** Same shape of query as `fetchTokenUsage`, over `claude_telemetry_events` instead — the
+ * per-tool-call/session activity detail token totals alone don't carry. */
+async function fetchClaudeActivity(from: Date | null, to: Date | null): Promise<{
+  perUser: ActivityRow[];
+  summary: ActivitySummary | null;
+}> {
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  if (from) {
+    params.push(from);
+    clauses.push(`occurred_at >= $${String(params.length)}`);
+  }
+  if (to) {
+    params.push(to);
+    clauses.push(`occurred_at <= $${String(params.length)}`);
+  }
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+
+  const perUser = await prisma.$queryRawUnsafe<ActivityRow[]>(
+    `
+    SELECT
+      user_id,
+      user_email,
+      COUNT(*)::text AS event_count,
+      COUNT(DISTINCT session_id)::text AS session_count,
+      MAX(occurred_at) AS last_seen
+    FROM claude_telemetry_events
+    ${where}
+    GROUP BY user_id, user_email
+    ORDER BY COUNT(*) DESC
+    LIMIT 50
+    `,
+    ...params,
+  );
+
+  const summaryRows = await prisma.$queryRawUnsafe<ActivitySummary[]>(
+    `
+    SELECT
+      COUNT(*)::text AS total_events,
+      COUNT(DISTINCT COALESCE(user_id, user_email))::text AS distinct_users,
+      COUNT(DISTINCT session_id)::text AS distinct_sessions
+    FROM claude_telemetry_events
+    ${where}
+    `,
+    ...params,
+  );
+
+  return { perUser, summary: summaryRows[0] ?? null };
+}
+
+/** Mirrors `/api/telemetry/status`'s logic directly against the DB, rather than the page
+ * making an HTTP call to its own API route. */
+async function fetchTelemetryHealth(): Promise<{ status: 'healthy' | 'stale' | 'no_data_yet'; lastReceivedAt: Date | null }> {
+  const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+  const [lastMetric, lastEvent] = await Promise.all([
+    prisma.claudeTelemetryMetric.findFirst({ orderBy: { receivedAt: 'desc' }, select: { receivedAt: true } }),
+    prisma.claudeTelemetryEvent.findFirst({ orderBy: { receivedAt: 'desc' }, select: { receivedAt: true } }),
+  ]);
+  const lastReceivedAt = [lastMetric?.receivedAt, lastEvent?.receivedAt]
+    .filter((d): d is Date => d !== undefined)
+    .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  if (lastReceivedAt === null) return { status: 'no_data_yet', lastReceivedAt: null };
+  const stale = Date.now() - lastReceivedAt.getTime() > STALE_AFTER_MS;
+  return { status: stale ? 'stale' : 'healthy', lastReceivedAt };
 }
 
 function fmtInt(s: string | null | undefined): string {
@@ -214,6 +303,36 @@ function TokenStatCard({
   );
 }
 
+function TelemetryHealthBadge({
+  health,
+}: {
+  health: { status: 'healthy' | 'stale' | 'no_data_yet'; lastReceivedAt: Date | null };
+}): JSX.Element {
+  const styles: Record<typeof health.status, string> = {
+    healthy: 'bg-green-50 text-green-700',
+    stale: 'bg-amber-50 text-amber-800',
+    no_data_yet: 'bg-slate-100 text-muted',
+  };
+  const labels: Record<typeof health.status, string> = {
+    healthy: 'Receiving data',
+    stale: 'No data in 24h+',
+    no_data_yet: 'Not connected yet',
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[health.status]}`}
+      title={health.lastReceivedAt ? `Last received ${health.lastReceivedAt.toISOString()}` : undefined}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          health.status === 'healthy' ? 'bg-green-500' : health.status === 'stale' ? 'bg-amber-500' : 'bg-slate-400'
+        }`}
+      />
+      {labels[health.status]}
+    </span>
+  );
+}
+
 interface PageProps {
   searchParams: { [key: string]: string | string[] | undefined };
 }
@@ -221,20 +340,17 @@ interface PageProps {
 export default async function HomePage({ searchParams }: PageProps): Promise<JSX.Element> {
   const range = resolveDateRange(searchParams);
 
-  const [freshness, usage, tokens] = await Promise.all([
+  const [freshness, usage, tokens, activity, health] = await Promise.all([
     fetchFreshness(),
     fetchRecentUsage(),
     fetchTokenUsage(range.from, range.to),
+    fetchClaudeActivity(range.from, range.to),
+    fetchTelemetryHealth(),
   ]);
 
-  const totalTokens = (() => {
-    const i = parseInt(tokens.summary?.total_input ?? '0', 10) || 0;
-    const o = parseInt(tokens.summary?.total_output ?? '0', 10) || 0;
-    return i + o;
-  })();
-  const callsWithTokens = parseInt(tokens.summary?.calls_with_tokens ?? '0', 10) || 0;
-  const totalCalls = parseInt(tokens.summary?.total_calls ?? '0', 10) || 0;
-  const noTokenData = totalCalls > 0 && callsWithTokens === 0;
+  const totalTokens = parseInt(tokens.summary?.total_tokens ?? '0', 10) || 0;
+  const totalCostUsd = Number(tokens.summary?.total_cost_usd ?? '0') || 0;
+  const noTokenData = health.status === 'no_data_yet';
 
   return (
     <div className="space-y-12">
@@ -264,9 +380,12 @@ export default async function HomePage({ searchParams }: PageProps): Promise<JSX
       <section id="token-usage" className="scroll-mt-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-ink">Claude token usage</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold text-ink">Claude token usage</h2>
+              <TelemetryHealthBadge health={health} />
+            </div>
             <p className="mt-1 text-sm text-muted">
-              Token consumption by user · <span className="text-ink">{range.label}</span>
+              Token consumption by user, from Claude Code · <span className="text-ink">{range.label}</span>
             </p>
           </div>
           <TokenUsageDateFilter />
@@ -276,10 +395,9 @@ export default async function HomePage({ searchParams }: PageProps): Promise<JSX
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <div className="font-medium">Waiting on data source</div>
             <p className="mt-1 text-xs">
-              The schema is ready, but no usage rows have token counts yet. Token data is populated by the
-              Anthropic Admin API connector — see{' '}
-              <code className="rounded bg-amber-100 px-1 py-0.5">docs/setup/22-anthropic-usage-connector.md</code>
-              . Until then, the table below shows tool-call activity only.
+              No telemetry has arrived at <code className="rounded bg-amber-100 px-1 py-0.5">/api/telemetry</code> yet.
+              This fills in once Claude Code&apos;s OpenTelemetry export is pointed at it — see{' '}
+              <code className="rounded bg-amber-100 px-1 py-0.5">docs/setup/22-anthropic-usage-connector.md</code>.
             </p>
           </div>
         )}
@@ -288,7 +406,7 @@ export default async function HomePage({ searchParams }: PageProps): Promise<JSX
           <TokenStatCard
             label="Total tokens"
             value={fmtInt(totalTokens.toString())}
-            hint="Input + output"
+            hint="Input + output + cache"
           />
           <TokenStatCard
             label="Input tokens"
@@ -299,9 +417,9 @@ export default async function HomePage({ searchParams }: PageProps): Promise<JSX
             value={fmtInt(tokens.summary?.total_output ?? '0')}
           />
           <TokenStatCard
-            label="Distinct users"
-            value={fmtInt(tokens.summary?.distinct_users ?? '0')}
-            hint={`${fmtInt(tokens.summary?.total_calls ?? '0')} total calls`}
+            label="Estimated cost"
+            value={`$${totalCostUsd.toFixed(2)}`}
+            hint={`${fmtInt(tokens.summary?.distinct_users ?? '0')} people`}
           />
         </div>
 
@@ -310,26 +428,26 @@ export default async function HomePage({ searchParams }: PageProps): Promise<JSX
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-2">User</th>
-                <th className="px-4 py-2 text-right">Calls</th>
+                <th className="px-4 py-2 text-right">Sessions</th>
                 <th className="px-4 py-2 text-right">Input</th>
                 <th className="px-4 py-2 text-right">Output</th>
                 <th className="px-4 py-2 text-right">Cache read</th>
                 <th className="px-4 py-2 text-right">Total</th>
+                <th className="px-4 py-2 text-right">Cost</th>
                 <th className="px-4 py-2">Last seen</th>
               </tr>
             </thead>
             <tbody>
               {tokens.perUser.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-center text-muted" colSpan={7}>
-                    No tool calls recorded in this range.
+                  <td className="px-4 py-6 text-center text-muted" colSpan={8}>
+                    No Claude Code usage recorded in this range.
                   </td>
                 </tr>
               ) : (
                 tokens.perUser.map((r) => {
-                  const input = parseInt(r.input_tokens ?? '0', 10) || 0;
-                  const output = parseInt(r.output_tokens ?? '0', 10) || 0;
-                  const total = input + output;
+                  const total = parseInt(r.total_tokens ?? '0', 10) || 0;
+                  const cost = Number(r.cost_usd ?? '0') || 0;
                   const label = r.user_email ?? r.user_id ?? '— unknown —';
                   const unknown = !r.user_email && !r.user_id;
                   return (
@@ -340,13 +458,65 @@ export default async function HomePage({ searchParams }: PageProps): Promise<JSX
                           <span className="ml-2 text-xs text-muted">({r.user_id.slice(0, 8)}…)</span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums">{fmtInt(r.call_count)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{fmtInt(r.session_count)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-muted">{fmtInt(r.input_tokens)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-muted">{fmtInt(r.output_tokens)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-muted">{fmtInt(r.cache_read_tokens)}</td>
                       <td className="px-4 py-2 text-right tabular-nums font-medium text-ink">
                         {total > 0 ? total.toLocaleString() : '—'}
                       </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted">${cost.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-xs text-muted">
+                        {r.last_seen ? r.last_seen.toISOString().slice(0, 19).replace('T', ' ') + 'Z' : '—'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="claude-activity" className="scroll-mt-6">
+        <h2 className="text-xl font-semibold text-ink">Claude Code activity</h2>
+        <p className="mt-1 text-sm text-muted">
+          Tool calls, prompts, and other session activity per person ·{' '}
+          <span className="text-ink">{range.label}</span>
+        </p>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <TokenStatCard label="Total events" value={fmtInt(activity.summary?.total_events ?? '0')} />
+          <TokenStatCard label="Distinct sessions" value={fmtInt(activity.summary?.distinct_sessions ?? '0')} />
+          <TokenStatCard label="Distinct users" value={fmtInt(activity.summary?.distinct_users ?? '0')} />
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-lg border bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-muted">
+              <tr>
+                <th className="px-4 py-2">User</th>
+                <th className="px-4 py-2 text-right">Events</th>
+                <th className="px-4 py-2 text-right">Sessions</th>
+                <th className="px-4 py-2">Last seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activity.perUser.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-muted" colSpan={4}>
+                    No Claude Code activity recorded in this range.
+                  </td>
+                </tr>
+              ) : (
+                activity.perUser.map((r) => {
+                  const label = r.user_email ?? r.user_id ?? '— unknown —';
+                  const unknown = !r.user_email && !r.user_id;
+                  return (
+                    <tr key={`${r.user_id ?? ''}|${r.user_email ?? ''}`} className="border-t">
+                      <td className={`px-4 py-2 ${unknown ? 'italic text-muted' : 'text-ink'}`}>{label}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{fmtInt(r.event_count)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted">{fmtInt(r.session_count)}</td>
                       <td className="px-4 py-2 text-xs text-muted">
                         {r.last_seen ? r.last_seen.toISOString().slice(0, 19).replace('T', ' ') + 'Z' : '—'}
                       </td>

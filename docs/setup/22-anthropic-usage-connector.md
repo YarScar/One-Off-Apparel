@@ -1,169 +1,132 @@
-# Phase 22 — Anthropic Admin API Usage Connector
+# Phase 22 — Claude Code Telemetry Ingestion
 
-**Goal:** Populate `usage_logs` with real Claude token consumption per workspace user so the HQ home page's token usage section shows actual data.
+**Goal:** Populate the HQ home page's "Claude token usage" and "Claude Code activity" sections
+with real per-person data — token consumption, cost, and tool/session activity.
 
-**Prerequisites:**
-- Phase 4 complete — `usage_logs` table includes `anthropic_user_id`, `anthropic_user_email`, `anthropic_workspace`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `model` columns
-- Anthropic workspace admin access (required for Admin API tokens)
-
----
-
-## Why a separate connector
-
-The MCP server only sees tool invocations, not Claude's full token spend. Token data lives on Anthropic's side — accessible via the **Admin API** (`/v1/organizations/usage_report`) using an admin-scoped API key.
-
-This connector pulls usage_report records and either:
-- **Backfills** `usage_logs` rows with token totals matched to existing tool-call records (preferred), or
-- **Inserts** new rows representing daily aggregate usage per user (fallback if matching by timestamp is unreliable)
+**Status:** Live. `apps/hq/app/api/telemetry` receives it; `apps/hq/app/page.tsx` displays it.
 
 ---
 
-## 1. Generate an Admin API key
+## Why this replaced the original Admin API plan
 
-1. Log into [console.anthropic.com](https://console.anthropic.com) as an **organization admin**
-2. **Settings → Admin Keys → Create Admin Key**
-3. Scope: `usage_report:read` (minimal — no write access needed)
-4. Store the key:
-   ```bash
-   aws secretsmanager put-secret-value \
-     --secret-id lp-internal/anthropic \
-     --secret-string '{"ANTHROPIC_API_KEY":"sk-ant-...","ANTHROPIC_ADMIN_KEY":"sk-ant-admin-..."}'
-   ```
+The original version of this doc planned to pull usage from Anthropic's **Admin API**
+(`/v1/organizations/usage_report`). That requires an Enterprise plan — Team plans (what this
+org is on) only expose a manual CSV export from the claude.ai console, with no API and a
+built-in one-day delay.
 
----
+Claude Code has its own **OpenTelemetry export**, independent of the Team/Enterprise
+distinction — it's a Claude Code CLI feature, not a claude.ai billing feature. It reports
+token usage, cost, and session/tool-call activity in real time, and (for this org, which
+does its work through Claude Code) is a superset of what the Admin API would have given —
+it adds per-tool-call activity detail the Admin API doesn't carry at all. That's what this
+phase builds against instead.
 
-## 2. API reference
-
-- Docs: https://docs.anthropic.com/en/api/admin-api
-- Endpoint: `GET https://api.anthropic.com/v1/organizations/usage_report/messages`
-- Auth: `x-api-key: <admin-key>` header
-- Key parameters:
-  - `starting_at` (ISO 8601)
-  - `ending_at` (ISO 8601)
-  - `bucket_width`: `"1m"` | `"1h"` | `"1d"` (granularity)
-  - `group_by[]`: `["workspace_id", "api_key_id", "model"]`
-
-Each returned bucket contains:
-```
-{
-  "starting_at": "...",
-  "ending_at": "...",
-  "results": [
-    {
-      "workspace_id": "wrkspc_...",
-      "api_key_id": "apikey_...",
-      "model": "claude-sonnet-4-5",
-      "input_tokens": ...,
-      "output_tokens": ...,
-      "cache_read_input_tokens": ...,
-      "cache_creation_input_tokens": ...
-    }
-  ]
-}
-```
-
-> **Note:** Admin API returns `workspace_id` and `api_key_id`, NOT user emails. To map back to humans, you also need to call the `/v1/organizations/api_keys` endpoint and join `api_key_id → user`.
+The trade-off, for the record: this covers Claude Code specifically, not `claude.ai` web
+chat, Projects, Cowork, or Office Agents — a gap the Admin API wouldn't have had. And unlike
+the Admin API, this is a pipeline we own and have to keep an eye on ourselves (see
+"Watching it" below), not a service Anthropic runs for us.
 
 ---
 
-## 3. Scaffold the connector
+## How it fits together
 
-```bash
-mkdir -p "connectors/anthropic-usage/src"
-```
+1. **Ingestion** — `apps/hq/app/api/telemetry/v1/metrics` and `.../v1/logs` accept OTLP/HTTP
+   JSON POSTs (the format Claude Code's exporter sends). Auth is a shared bearer token,
+   `CLAUDE_TELEMETRY_SHARED_TOKEN`, checked in `_lib/auth.ts` — this endpoint is
+   unauthenticated at the NextAuth/middleware layer (Claude Code has no Google session to
+   present), same pattern as the Notion webhook receiver.
+2. **Storage** — two tables, `claude_telemetry_metrics` (token/cost/session-count data
+   points) and `claude_telemetry_events` (tool calls, prompts, other session activity).
+   Both key their upsert on a hash of the raw data point (`sourceId`), so a retried/re-sent
+   export can't double-count — the same discipline this repo's sync connectors use, applied
+   to a push endpoint instead of a pull.
+3. **Display** — `apps/hq/app/page.tsx`'s `fetchTokenUsage` / `fetchClaudeActivity` read
+   these tables directly (not `usage_logs`, which only ever covers calls to *our own* MCP
+   tools, a narrower thing than "all Claude Code activity").
+4. **Health** — `apps/hq/app/api/telemetry/status` and the badge next to "Claude token
+   usage" on the home page both check "has anything actually arrived recently," not just
+   "is the server up." The threshold is day-scale on purpose — nights and weekends are
+   legitimate silence, not a broken pipeline.
 
-**`connectors/anthropic-usage/package.json`:**
+---
+
+## Turning it on for the team
+
+Once the endpoint is deployed and reachable at a real URL, an **Owner** or **Primary
+Owner** on the Claude organization (not just any Admin) configures it from
+[`claude.ai/admin-settings/claude-code`](https://claude.ai/admin-settings/claude-code) →
+Managed settings — no per-laptop file, no MDM:
+
 ```json
 {
-  "name": "@lp-ai/connector-anthropic-usage",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "sync": "node --env-file=../../.env dist/index.js",
-    "build": "tsc",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@lp-ai/lib-db": "workspace:*",
-    "@lp-ai/lib-config": "workspace:*",
-    "zod": "^3.23.0"
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://<hq-domain>/api/telemetry",
+    "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer <CLAUDE_TELEMETRY_SHARED_TOKEN>"
   }
 }
 ```
 
----
-
-## 4. Sync strategy
-
-**Daily aggregate insert** (simplest, recommended for v1 of this connector):
-
-1. Fetch `usage_report` with `bucket_width=1d` for the previous 7 days
-2. For each (workspace × api_key × model × day) bucket, insert one synthetic `usage_logs` row:
-   ```typescript
-   await prisma.usageLog.create({
-     data: {
-       toolName: '_aggregate_daily',  // sentinel — not a real tool
-       calledAt: bucket.endingAt,
-       anthropicWorkspace: bucket.workspaceId,
-       anthropicUserId: apiKeyToUserMap.get(bucket.apiKeyId) ?? null,
-       anthropicUserEmail: apiKeyToEmailMap.get(bucket.apiKeyId) ?? null,
-       model: bucket.model,
-       inputTokens: bucket.inputTokens,
-       outputTokens: bucket.outputTokens,
-       cacheReadTokens: bucket.cacheReadInputTokens,
-       cacheCreationTokens: bucket.cacheCreationInputTokens,
-     },
-   });
-   ```
-3. Use a unique constraint on `(anthropic_workspace, anthropic_user_id, model, called_at)` for `_aggregate_daily` rows so re-runs are idempotent.
-
-**Per-call attribution** (future enhancement):
-Match Admin API per-message records to existing `usage_logs` rows by timestamp (within ±2s). Requires `bucket_width=1m` or message-level granularity. More accurate but more complex.
+The exporter appends `/v1/metrics` and `/v1/logs` to that base endpoint itself — don't
+include those suffixes in the configured URL. Each teammate sees a one-time approval
+dialog in Claude Code the first time this reaches them (Claude Code always asks before
+applying a policy that sets a real destination URL).
 
 ---
 
-## 5. Schedule
+## Unverified assumptions — check these against real traffic first
 
-Add an EventBridge rule for daily sync at 4am UTC (after Anthropic's usage data has settled):
+These were built from Claude Code's published metric/event names and the general OTLP
+spec, not from inspecting a real export (nothing in this environment could enable
+telemetry and capture real traffic). Before trusting the numbers:
 
-```bash
-aws events put-rule \
-  --name lp-sync-anthropic-usage \
-  --schedule-expression "cron(0 4 * * ? *)" \
-  --state ENABLED
-```
+- **The `type` attribute on `claude_code.token.usage`** is assumed to hold `input` /
+  `output` / `cacheRead` (or `cache_read`) — this is what splits the input/output/cache
+  columns on the home page. If the real attribute key or values differ, the *total*
+  tokens figure stays correct (it doesn't depend on `type`), but the breakdown columns
+  will read zero. Check `attributes` on a few real `claude_telemetry_metrics` rows to
+  confirm, and adjust the `CASE WHEN` clauses in `fetchTokenUsage` (`apps/hq/app/page.tsx`)
+  if the key or values are different.
+- **`eventName` vs. an `event.name` attribute** — the logs route checks both, since OTLP's
+  event-log convention has shifted between a dedicated field and an attribute over time.
+- **Field names in general** — `user.id`, `user.email`, `session.id`, `tool_use_id`, etc.
+  are read from OTLP attributes as documented by Claude Code; the full raw attribute set
+  is always kept in the `attributes` JSON column on both tables regardless, specifically
+  so a wrong mapping guess is recoverable without losing data — reprocess `attributes`
+  once the real shape is confirmed, rather than re-collecting.
+
+Do this check as part of testing on one person before turning telemetry on for the whole
+team (see the "test on one or two people first" step in the rollout plan).
 
 ---
 
-## 6. UI integration
+## Watching it
 
-The HQ home page already reads from these columns. Once the connector starts running, the token usage section automatically begins showing real numbers — no UI changes required.
+Unlike the Admin API (Anthropic's own service, billing-grade, backed by their pipeline),
+this is infrastructure we run — a health check has to be someone's job:
 
-The "Waiting on data source" banner on the home page checks if any rows have `input_tokens` or `output_tokens` populated in the selected date range. The banner disappears as soon as this connector inserts its first row.
-
----
-
-## Verification checklist
-
-- [ ] Admin API key created and stored in Secrets Manager
-- [ ] `pnpm sync:anthropic-usage` runs without errors
-- [ ] `SELECT COUNT(*) FROM usage_logs WHERE input_tokens IS NOT NULL` returns > 0
-- [ ] HQ home page token usage section shows per-user totals
-- [ ] Date filter updates the table correctly
-- [ ] EventBridge rule firing daily
+- `/api/telemetry/status` and the badge on the home page say whether data is actually
+  flowing, not just whether the server responds.
+- Errors in the ingestion routes should reach the same Sentry project the rest of HQ uses.
+- The `claude_telemetry_events` table especially can grow fast (one row per tool call,
+  across the whole team) — worth a retention policy (e.g., keep 90 days of detail, matching
+  the CSV export's own window) once this has been running a while.
 
 ---
 
 ## Known pitfalls
 
-- **Admin keys cannot be created by org members** — must be an organization admin in the Anthropic console
-- **Usage data lags 1–4 hours** — schedule the sync at least 4 hours after midnight UTC
-- **API key → user mapping requires a second call** — `usage_report` returns `api_key_id`; you need `/v1/organizations/api_keys` to resolve it to a person
-- **Workspace scoping** — if Launchpad uses multiple workspaces (dev/prod/etc.), the connector should iterate them or filter to one
-
----
-
-## When to come back here
-
-Build this connector when the home page token usage section needs real data — typically once a few users are actively using Claude with the MCP server in production and you want to see who's consuming what.
+- **This is Claude Code activity only** — it does not see `claude.ai` web chat, Projects,
+  Cowork, or Office Agents usage. If someone chats with Claude outside Claude Code, that
+  usage won't appear here.
+- **A retried export is deduplicated, not rejected** — the `sourceId` hash upsert means a
+  legitimate resend lands as a no-op update, which is correct, but also means a bug that
+  hashes two genuinely different data points to the same value would silently drop one.
+  Watch for suspiciously round numbers if this is ever suspected.
+- **The shared bearer token is one token for the whole org** — anyone with it can post
+  fake data. It's a shared secret, not per-user auth; rotate it via
+  `CLAUDE_TELEMETRY_SHARED_TOKEN` and the console's `OTEL_EXPORTER_OTLP_HEADERS` together
+  if it ever leaks.

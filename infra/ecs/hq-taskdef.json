@@ -37,6 +37,7 @@
         { "name": "AUTH_GOOGLE_ID",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/nextauth:AUTH_GOOGLE_ID::" },
         { "name": "AUTH_GOOGLE_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/nextauth:AUTH_GOOGLE_SECRET::" },
         { "name": "ANTHROPIC_API_KEY",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/anthropic:ANTHROPIC_API_KEY::" },
+        { "name": "CLAUDE_TELEMETRY_SHARED_TOKEN", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/anthropic:CLAUDE_TELEMETRY_SHARED_TOKEN::" },
         { "name": "SENTRY_DSN_HQ",      "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/sentry:SENTRY_DSN_HQ::" },
         { "name": "NOTION_API_KEY",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/notion:NOTION_API_KEY::" },
         { "name": "GOOGLE_SERVICE_ACCOUNT_JSON", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SERVICE_ACCOUNT_JSON::" }
