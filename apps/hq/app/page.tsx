@@ -1,5 +1,6 @@
 import { prisma } from '@lp-ai/lib-db';
-import { ClaudeUsageCard, type ClaudeUsageBreakdownRow } from './components/ClaudeUsageCard';
+import { type ClaudeUsageBreakdownRow } from './components/ClaudeUsageCard';
+import { ClaudeUsageList } from './components/ClaudeUsageList';
 import { fmtInt } from './lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -325,22 +326,21 @@ export default async function HomePage(): Promise<JSX.Element> {
           />
         </div>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4">
           {csv.perUser.length === 0 ? (
             <div className="rounded-lg border bg-white px-4 py-6 text-center text-sm text-muted shadow-sm">
               No usage rows in the latest upload.
             </div>
           ) : (
-            csv.perUser.map((r) => (
-              <ClaudeUsageCard
-                key={r.user_email ?? ''}
-                userEmail={r.user_email}
-                requestCount={r.request_count}
-                totalTokens={r.total_tokens}
-                costUsd={r.cost_usd}
-                breakdown={csv.breakdownByUser.get(r.user_email ?? '') ?? []}
-              />
-            ))
+            <ClaudeUsageList
+              users={csv.perUser.map((r) => ({
+                userEmail: r.user_email,
+                requestCount: r.request_count,
+                totalTokens: r.total_tokens,
+                costUsd: r.cost_usd,
+                breakdown: csv.breakdownByUser.get(r.user_email ?? '') ?? [],
+              }))}
+            />
           )}
         </div>
       </section>
