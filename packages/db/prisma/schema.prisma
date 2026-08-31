@@ -72,22 +72,22 @@ model Student {
   // Outcomes tab (V2 sheet, added 2026-08-24) — post-program tracking.
   // college_enroll/university/major/workforce_program_referral/workforce_referral_status/
   // internship_status above are shared with this tab; the rest are new.
-  hsDiploma                        Boolean?  @map("hs_diploma")
-  hsFinalGpa                       Decimal?  @map("hs_final_gpa") @db.Decimal(4, 2)
-  collegeCreditsEarned             Decimal?  @map("college_credits_earned") @db.Decimal(6, 2)
-  highestPcepScore                 Decimal?  @map("highest_pcep_score") @db.Decimal(5, 2)
-  internshipHours                  Decimal?  @map("internship_hours") @db.Decimal(6, 2)
-  internshipPayRate                Decimal?  @map("internship_pay_rate") @db.Decimal(7, 2)
-  internshipSite                   String?   @map("internship_site")
-  initialPlacementHourlyWage       Decimal?  @map("initial_placement_hourly_wage") @db.Decimal(7, 2)
-  initialPlacementWeeklyHours      Decimal?  @map("initial_placement_weekly_hours") @db.Decimal(6, 2)
-  initialPlacementStartDate        DateTime? @map("initial_placement_start_date") @db.Date
-  initialPlacementSite             String?   @map("initial_placement_site")
-  status12moPostPlacement          String?   @map("status_12mo_post_placement")
-  currentEmployer                  String?   @map("current_employer")
-  currentHourlyWage                Decimal?  @map("current_hourly_wage") @db.Decimal(7, 2)
-  currentWeeklyHours               Decimal?  @map("current_weekly_hours") @db.Decimal(6, 2)
-  currentEmploymentUpdatedAt       DateTime? @map("current_employment_updated_at") @db.Date
+  hsDiploma                   Boolean?  @map("hs_diploma")
+  hsFinalGpa                  Decimal?  @map("hs_final_gpa") @db.Decimal(4, 2)
+  collegeCreditsEarned        Decimal?  @map("college_credits_earned") @db.Decimal(6, 2)
+  highestPcepScore            Decimal?  @map("highest_pcep_score") @db.Decimal(5, 2)
+  internshipHours             Decimal?  @map("internship_hours") @db.Decimal(6, 2)
+  internshipPayRate           Decimal?  @map("internship_pay_rate") @db.Decimal(7, 2)
+  internshipSite              String?   @map("internship_site")
+  initialPlacementHourlyWage  Decimal?  @map("initial_placement_hourly_wage") @db.Decimal(7, 2)
+  initialPlacementWeeklyHours Decimal?  @map("initial_placement_weekly_hours") @db.Decimal(6, 2)
+  initialPlacementStartDate   DateTime? @map("initial_placement_start_date") @db.Date
+  initialPlacementSite        String?   @map("initial_placement_site")
+  status12moPostPlacement     String?   @map("status_12mo_post_placement")
+  currentEmployer             String?   @map("current_employer")
+  currentHourlyWage           Decimal?  @map("current_hourly_wage") @db.Decimal(7, 2)
+  currentWeeklyHours          Decimal?  @map("current_weekly_hours") @db.Decimal(6, 2)
+  currentEmploymentUpdatedAt  DateTime? @map("current_employment_updated_at") @db.Date
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -427,54 +427,58 @@ model UsageLog {
   @@map("usage_logs")
 }
 
-/// One row per Claude Code OpenTelemetry metric data point (token usage, cost,
-/// session/commit/PR counts, etc.). `sourceId` is a hash of the raw data point so a
-/// retried/re-sent export upserts instead of double-counting. Metric-specific detail
-/// (token type, model, tool name) lives in `attributes` rather than dedicated columns —
-/// the metric surface is still being learned, and a new metric name needs no migration.
-model ClaudeTelemetryMetric {
-  id             String   @id @default(uuid())
-  sourceId       String   @unique @map("source_id")
-  metricName     String   @map("metric_name")
-  value          Decimal  @db.Decimal(20, 6)
-  unit           String?
-  recordedAt     DateTime @map("recorded_at")
-  userId         String?  @map("user_id")
-  userEmail      String?  @map("user_email")
-  organizationId String?  @map("organization_id")
-  sessionId      String?  @map("session_id")
-  attributes     Json?
-  receivedAt     DateTime @default(now()) @map("received_at")
+/// One row per manual upload of Anthropic's Team-plan spend-report CSV — the only export
+/// available without an Enterprise plan, and the one source that covers every Claude
+/// surface (chat, Claude Code, Cowork, Office Agents) for every person in the org. An
+/// earlier OpenTelemetry-based pipeline was built and verified working, but was dropped:
+/// it only reports from Claude Code's terminal CLI (a confirmed, unfixed upstream bug
+/// keeps it from working in the VS Code extension — see
+/// docs/setup/22-anthropic-usage-connector.md), and this org's usage is almost entirely
+/// VS Code. `coveredFrom`/`coveredTo` record the date range the export itself covers, not
+/// when it was uploaded — the two can differ by days, and the dashboard needs the former
+/// to know how current its numbers actually are.
+model ClaudeCsvUpload {
+  id               String    @id @default(uuid())
+  uploadedAt       DateTime  @default(now()) @map("uploaded_at")
+  uploadedByEmail  String?   @map("uploaded_by_email")
+  originalFilename String?   @map("original_filename")
+  coveredFrom      DateTime? @map("covered_from")
+  coveredTo        DateTime? @map("covered_to")
+  rowCount         Int       @map("row_count")
 
-  @@index([metricName])
-  @@index([recordedAt])
-  @@index([userEmail])
-  @@index([sessionId])
-  @@map("claude_telemetry_metrics")
+  rows ClaudeCsvUsageRow[]
+
+  @@index([uploadedAt])
+  @@map("claude_csv_uploads")
 }
 
-/// One row per Claude Code OpenTelemetry event (tool_result, api_request, tool_decision,
-/// etc.) — the "what did this person actually do" detail the token/cost metrics above
-/// don't carry. Same `sourceId`-hash upsert as the metrics table, same reason.
-model ClaudeTelemetryEvent {
-  id             String   @id @default(uuid())
-  sourceId       String   @unique @map("source_id")
-  eventName      String   @map("event_name")
-  occurredAt     DateTime @map("occurred_at")
-  userId         String?  @map("user_id")
-  userEmail      String?  @map("user_email")
-  organizationId String?  @map("organization_id")
-  sessionId      String?  @map("session_id")
-  promptId       String?  @map("prompt_id")
-  toolUseId      String?  @map("tool_use_id")
-  attributes     Json?
-  receivedAt     DateTime @default(now()) @map("received_at")
+/// One row per (user x product x model) combination from one upload. Column names are now
+/// verified against a real export: `total_requests`, `total_prompt_tokens`,
+/// `total_completion_tokens`, `total_net_spend_usd`, `total_gross_spend_usd` (see
+/// `apps/hq/app/api/csv-upload/_lib/parse.ts`). `promptTokens`/`completionTokens` are BigInt —
+/// a single user's per-period prompt-token sum regularly exceeds Postgres's int4 range (e.g.
+/// 2.3B tokens). `rowData` still keeps the original row alongside the parsed columns, the same
+/// hedge used on the telemetry tables above, since several exported columns (cache read/write
+/// tokens, web search count) aren't parsed into their own columns yet.
+model ClaudeCsvUsageRow {
+  id               String   @id @default(uuid())
+  uploadId         String   @map("upload_id")
+  userEmail        String?  @map("user_email")
+  accountUuid      String?  @map("account_uuid")
+  productType      String?  @map("product_type")
+  model            String?
+  requestCount     Int?     @map("request_count")
+  promptTokens     BigInt?  @map("prompt_tokens")
+  completionTokens BigInt?  @map("completion_tokens")
+  costUsd          Decimal? @map("cost_usd") @db.Decimal(12, 4)
+  grossSpendUsd    Decimal? @map("gross_spend_usd") @db.Decimal(12, 4)
+  rowData          Json     @map("row_data")
 
-  @@index([eventName])
-  @@index([occurredAt])
+  upload ClaudeCsvUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@index([uploadId])
   @@index([userEmail])
-  @@index([sessionId])
-  @@map("claude_telemetry_events")
+  @@map("claude_csv_usage_rows")
 }
 
 model SyncRun {
@@ -689,8 +693,8 @@ model GrantDocument {
 
   ext          String?
   /// text | media | unknown — whether text can be extracted today.
-  contentClass String? @map("content_class")
-  sizeBytes    BigInt? @map("size_bytes")
+  contentClass String?   @map("content_class")
+  sizeBytes    BigInt?   @map("size_bytes")
   modifiedAt   DateTime? @map("modified_at")
 
   syncedAt DateTime @default(now()) @map("synced_at")

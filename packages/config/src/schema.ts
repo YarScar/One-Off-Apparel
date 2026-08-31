@@ -88,14 +88,6 @@ export const envSchema = z.object({
     z.string().trim().min(32, 'SYNC_SECRET must be at least 32 characters').optional(),
   ),
 
-  // Shared bearer token Claude Code's OpenTelemetry exporter authenticates with against
-  // /api/telemetry (see apps/hq/app/api/telemetry) — that endpoint has no Google session
-  // to check, so this is its own auth instead.
-  CLAUDE_TELEMETRY_SHARED_TOKEN: z.preprocess(
-    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.string().trim().min(32, 'CLAUDE_TELEMETRY_SHARED_TOKEN must be at least 32 characters').optional(),
-  ),
-
   // MCP OAuth (Phase 23). Active on the MCP servers in production; ignored locally.
   // AWS MCP server runtime flags
   MOCK_TERRAFORM: optional,   // 'false' to use real terraform; default mock
