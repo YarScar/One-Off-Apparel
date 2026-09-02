@@ -1,0 +1,60 @@
+{
+  "family": "lp-sync-google-sheets",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "sync",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/lp-internal/sync:latest",
+      "essential": true,
+      "command": [
+        "/bin/sh", "-c",
+        "cd /workspace/connectors/google-sheets && node dist/cli.js"
+      ],
+      "environment": [
+        { "name": "NODE_ENV",           "value": "production" },
+        { "name": "USE_AWS_SECRETS",    "value": "true" },
+        { "name": "AWS_REGION",         "value": "us-east-1" },
+        { "name": "AWS_SECRETS_PREFIX", "value": "lp-internal" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL",                "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/db:DATABASE_URL::" },
+        { "name": "GOOGLE_SERVICE_ACCOUNT_JSON", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SERVICE_ACCOUNT_JSON::" },
+        { "name": "GOOGLE_DRIVE_FOLDER_ID",            "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_DRIVE_FOLDER_ID::" },
+        { "name": "GOOGLE_SHEETS_STUDENT_INFO_V2",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_STUDENT_INFO_V2::" },
+        { "name": "GOOGLE_SHEETS_DASHBOARD_ID",        "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_DASHBOARD_ID::" },
+        { "name": "GOOGLE_SHEETS_PHASE_DASHBOARD_ID",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_PHASE_DASHBOARD_ID::" },
+        { "name": "GOOGLE_SHEETS_BY_PHASE_Q3_2026_ACTUALS",       "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_BY_PHASE_Q3_2026_ACTUALS::" },
+        { "name": "GOOGLE_SHEETS_BUDGET_BY_PHASE_ACTUALS_2025",   "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_BUDGET_BY_PHASE_ACTUALS_2025::" },
+        { "name": "GOOGLE_SHEETS_RAPID",                "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_RAPID::" },
+        { "name": "GOOGLE_SHEETS_PEX",                  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_PEX::" },
+        { "name": "GOOGLE_SHEETS_STUDENT_COMPETENCY",   "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_STUDENT_COMPETENCY::" },
+        { "name": "GOOGLE_SHEETS_DEVELOPMENT_CRM",      "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_DEVELOPMENT_CRM::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_1",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_1::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_2",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_2::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_3",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_3::" },
+        { "name": "GOOGLE_SHEETS_ATTENDANCE_COHORT_4",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_ATTENDANCE_COHORT_4::" },
+        { "name": "GOOGLE_SHEETS_FINANCE_WORKBOOK",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_FINANCE_WORKBOOK::" },
+        { "name": "GOOGLE_SHEETS_QUOTE_BANK_ID",        "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SHEETS_QUOTE_BANK_ID::" },
+        { "name": "OPENAI_API_KEY",                     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/openai:OPENAI_API_KEY::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/lp-sync-google-sheets",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

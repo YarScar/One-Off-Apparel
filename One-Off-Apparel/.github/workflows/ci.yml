@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: lpapp
+          POSTGRES_PASSWORD: lpapp
+          POSTGRES_DB: lpinternal
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd="pg_isready -U lpapp -d lpinternal"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://lpapp:lpapp@localhost:5433/lpinternal?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Enable pgvector + pg_trgm
+        run: |
+          PGPASSWORD=lpapp psql -h localhost -p 5433 -U lpapp -d lpinternal \
+            -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+      - name: Generate Prisma client
+        run: pnpm --filter @lp-ai/lib-db generate
+
+      - name: Push schema to test database
+        run: pnpm --filter @lp-ai/lib-db push
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Run tests
+        run: pnpm test

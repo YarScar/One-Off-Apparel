@@ -1,0 +1,14 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'connectors/*'
+allowBuilds:
+  '@prisma/engines': true
+  # Transitive dep of @sentry/nextjs (apps/hq). Its postinstall downloads the sentry-cli
+  # binary, only needed for source-map upload during `next build`. It was absent from this
+  # list before, i.e. already not running — pinned to false to keep that behaviour and to
+  # stop pnpm prompting on every install.
+  '@sentry/cli': false
+  esbuild: true
+  prisma: true
+  sharp: true

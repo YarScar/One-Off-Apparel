@@ -1,0 +1,61 @@
+{
+  "family": "lp-internal-hq",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "hq",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/lp-internal/hq:latest",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 3000, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "NODE_ENV",            "value": "production" },
+        { "name": "USE_AWS_SECRETS",     "value": "true" },
+        { "name": "AWS_REGION",          "value": "us-east-1" },
+        { "name": "AWS_SECRETS_PREFIX",  "value": "lp-internal" },
+        { "name": "AUTH_TRUST_HOST",     "value": "true" },
+        { "name": "AUTH_URL",            "value": "https://hq.launchpadinc.org" },
+        { "name": "AUTH_ALLOWED_DOMAIN", "value": "launchpadphilly.org,b21.org" },
+        { "name": "PORT",                "value": "3000" },
+        { "name": "HOSTNAME",            "value": "0.0.0.0" },
+        { "name": "NOTION_MEETING_TRANSCRIPTS_DB_ID", "value": "15d1f4e8-9763-4bcb-bfcc-9e2ba152c14b" },
+        { "name": "NOTION_PEOPLE_DB_ID",              "value": "695211e1-afbd-4730-a576-2bb87a66349e" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL",       "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/db:DATABASE_URL::" },
+        { "name": "AUTH_SECRET",        "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/nextauth:AUTH_SECRET::" },
+        { "name": "AUTH_GOOGLE_ID",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/nextauth:AUTH_GOOGLE_ID::" },
+        { "name": "AUTH_GOOGLE_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/nextauth:AUTH_GOOGLE_SECRET::" },
+        { "name": "ANTHROPIC_API_KEY",  "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/anthropic:ANTHROPIC_API_KEY::" },
+        { "name": "SENTRY_DSN_HQ",      "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/sentry:SENTRY_DSN_HQ::" },
+        { "name": "NOTION_API_KEY",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/notion:NOTION_API_KEY::" },
+        { "name": "GOOGLE_SERVICE_ACCOUNT_JSON", "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/google:GOOGLE_SERVICE_ACCOUNT_JSON::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/lp-internal-hq",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

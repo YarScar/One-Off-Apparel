@@ -1,0 +1,40 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadAppSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/*"
+    },
+    {
+      "Sid": "DecryptSecretsViaSecretsManager",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "secretsmanager.us-east-1.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "WriteApplicationLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-hq:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-mcp-server:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/ecs/lp-internal-aws-mcp-server:*",
+        "arn:aws:logs:us-east-1:${AWS_ACCOUNT_ID}:log-group:/lp-internal/app:*"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,654 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+  engineType      = "library"
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector, pg_trgm]
+}
+
+model Student {
+  id               String    @id @default(uuid())
+  studentNumber    String?   @unique @map("student_number")
+  canonicalName    String    @map("canonical_name")
+  email            String?
+  phone            String?
+  currentPhase     String?   @map("current_phase")
+  enrollmentStatus String?   @map("enrollment_status")
+  cohort           Int?
+  distanceToOffice Float?    @map("distance_to_office")
+  neighborhood     String?
+  graduationDate   DateTime? @map("graduation_date")
+
+  gender                   String?
+  raceEthnicity            String?   @map("race_ethnicity")
+  schoolName               String?   @map("school_name")
+  hsGraduationYear         Int?      @map("hs_graduation_year")
+  entryDate                DateTime? @map("entry_date") @db.Date
+  withdrawalDate           DateTime? @map("withdrawal_date") @db.Date
+  withdrawalCode           String?   @map("withdrawal_code")
+  zip                      String?
+  city                     String?
+  state                    String?
+  launchpadEmail           String?   @map("launchpad_email")
+  workforceProgramReferral String?   @map("workforce_program_referral")
+  workforceReferralStatus  String?   @map("workforce_referral_status")
+  internshipStatus         String?   @map("internship_status")
+  interviewScore           Decimal?  @map("interview_score") @db.Decimal(5, 2)
+  techInterestOnboarding   Int?      @map("tech_interest_onboarding")
+  interviewPassionScore    Int?      @map("interview_passion_score")
+  interviewCollegeScore    Int?      @map("interview_college_score")
+  hsGpa                    Decimal?  @map("hs_gpa") @db.Decimal(4, 2)
+  algebra1Grade            String?   @map("algebra1_grade")
+  geometryGrade            String?   @map("geometry_grade")
+  collegeEnroll            String?   @map("college_enroll")
+  university               String?
+  major                    String?
+  income                   String?
+  parentalEd               String?   @map("parental_ed")
+
+  // V2 sheet additions
+  dob                   DateTime? @db.Date
+  suffix                String?
+  altSchoolEmail        String?   @map("alt_school_email")
+  asuriteUserId         String?   @map("asurite_user_id")
+  rapidAccountNumber    String?   @map("rapid_account_number")
+  altContact            String?   @map("alt_contact")
+  idCardNumber          String?   @map("id_card_number")
+  docFolderUrl          String?   @map("doc_folder_url")
+  tShirtSize            String?   @map("t_shirt_size")
+  algebraKeystoneScore  Decimal?  @map("algebra_keystone_score") @db.Decimal(6, 2)
+  worksOutsideLaunchpad Boolean?  @map("works_outside_launchpad")
+  hoursOutsideCommitted Decimal?  @map("hours_outside_committed") @db.Decimal(5, 2)
+  permissionSlip        Boolean?  @map("permission_slip")
+  extraTime             Boolean?  @map("extra_time")
+  workReadyQ1           String?   @map("work_ready_q1")
+  ell                   Boolean?
+
+  // Outcomes tab (V2 sheet, added 2026-08-24) — post-program tracking.
+  // college_enroll/university/major/workforce_program_referral/workforce_referral_status/
+  // internship_status above are shared with this tab; the rest are new.
+  hsDiploma                        Boolean?  @map("hs_diploma")
+  hsFinalGpa                       Decimal?  @map("hs_final_gpa") @db.Decimal(4, 2)
+  collegeCreditsEarned             Decimal?  @map("college_credits_earned") @db.Decimal(6, 2)
+  highestPcepScore                 Decimal?  @map("highest_pcep_score") @db.Decimal(5, 2)
+  internshipHours                  Decimal?  @map("internship_hours") @db.Decimal(6, 2)
+  internshipPayRate                Decimal?  @map("internship_pay_rate") @db.Decimal(7, 2)
+  internshipSite                   String?   @map("internship_site")
+  initialPlacementHourlyWage       Decimal?  @map("initial_placement_hourly_wage") @db.Decimal(7, 2)
+  initialPlacementWeeklyHours      Decimal?  @map("initial_placement_weekly_hours") @db.Decimal(6, 2)
+  initialPlacementStartDate        DateTime? @map("initial_placement_start_date") @db.Date
+  initialPlacementSite             String?   @map("initial_placement_site")
+  status12moPostPlacement          String?   @map("status_12mo_post_placement")
+  currentEmployer                  String?   @map("current_employer")
+  currentHourlyWage                Decimal?  @map("current_hourly_wage") @db.Decimal(7, 2)
+  currentWeeklyHours               Decimal?  @map("current_weekly_hours") @db.Decimal(6, 2)
+  currentEmploymentUpdatedAt       DateTime? @map("current_employment_updated_at") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  aliases        EntityAlias[]
+  certifications StudentCertification[]
+  phaseOutcomes  StudentPhaseOutcome[]
+  studentInfo    StudentInfo[]
+  employment     StudentEmployment[]
+  postsecondary  StudentPostsecondary[]
+
+  @@index([canonicalName])
+  @@index([cohort])
+  @@map("students")
+}
+
+model Staff {
+  id            String   @id @default(uuid())
+  canonicalName String   @map("canonical_name")
+  email         String?
+  role          String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  aliases EntityAlias[]
+
+  @@index([canonicalName])
+  @@map("staff")
+}
+
+model EntityAlias {
+  id         String   @id @default(uuid())
+  alias      String
+  entityType String   @map("entity_type")
+  studentId  String?  @map("student_id")
+  staffId    String?  @map("staff_id")
+  source     String?
+  confidence Float    @default(1.0)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  student Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  staff   Staff?   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([alias, entityType])
+  @@index([entityType])
+  @@map("entity_aliases")
+}
+
+model PendingAlias {
+  id         String   @id @default(uuid())
+  alias      String
+  entityType String   @map("entity_type")
+  source     String?
+  context    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType])
+  @@map("pending_aliases")
+}
+
+model StudentInfo {
+  id          String   @id @default(uuid())
+  studentId   String   @map("student_id")
+  driveFileId String   @map("drive_file_id")
+  content     String
+  syncedAt    DateTime @default(now()) @map("synced_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("student_info")
+}
+
+model StudentCertification {
+  id           String   @id @default(uuid())
+  sourceId     String   @unique @map("source_id")
+  studentId    String   @map("student_id")
+  type         String?
+  date         String?
+  result       String?
+  score        Decimal? @db.Decimal(5, 2)
+  phase        String
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([phase])
+  @@index([type])
+  @@index([date])
+  @@map("student_certifications")
+}
+
+model StudentPhaseOutcome {
+  id                   String    @id @default(uuid())
+  studentId            String    @unique @map("student_id")
+  foundationsStatus    String?   @map("foundations_status")
+  foundationsStartDate DateTime? @map("foundations_start_date") @db.Date
+  foundationsEndDate   DateTime? @map("foundations_end_date") @db.Date
+  phase101Status       String?   @map("phase_101_status")
+  phase101StartDate    DateTime? @map("phase_101_start_date") @db.Date
+  phase101EndDate      DateTime? @map("phase_101_end_date") @db.Date
+  lightspeedStatus     String?   @map("lightspeed_status")
+  lightspeedStartDate  DateTime? @map("lightspeed_start_date") @db.Date
+  lightspeedEndDate    DateTime? @map("lightspeed_end_date") @db.Date
+  liftoffStatus        String?   @map("liftoff_status")
+  liftoffStartDate     DateTime? @map("liftoff_start_date") @db.Date
+  liftoffEndDate       DateTime? @map("liftoff_end_date") @db.Date
+  lastSyncedAt         DateTime  @default(now()) @map("last_synced_at")
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@map("student_phase_outcomes")
+}
+
+model StudentEmployment {
+  id             String    @id @default(uuid())
+  sourceId       String    @unique @map("source_id")
+  studentNumber  String    @map("student_number")
+  studentName    String?   @map("student_name")
+  employerName   String?   @map("employer_name")
+  employmentType String?   @map("employment_type")
+  jobTitle       String?   @map("job_title")
+  startDate      DateTime? @map("start_date") @db.Date
+  endDate        DateTime? @map("end_date") @db.Date
+  hourlyWage     Decimal?  @map("hourly_wage") @db.Decimal(8, 2)
+  weeklyHours    Decimal?  @map("weekly_hours") @db.Decimal(5, 2)
+  totalEarned    Decimal?  @map("total_earned") @db.Decimal(12, 2)
+  exitCode       String?   @map("exit_code")
+  notes          String?
+  lastSyncedAt   DateTime  @default(now()) @map("last_synced_at")
+
+  student Student? @relation(fields: [studentNumber], references: [studentNumber])
+
+  @@index([studentNumber])
+  @@index([employerName])
+  @@index([exitCode])
+  @@map("student_employment")
+}
+
+model StudentPostsecondary {
+  id                String    @id @default(uuid())
+  sourceId          String    @unique @map("source_id")
+  studentNumber     String    @map("student_number")
+  firstName         String?   @map("first_name")
+  lastName          String?   @map("last_name")
+  institution       String?
+  institutionLength String?   @map("institution_length")
+  institutionType   String?   @map("institution_type")
+  enrollmentBegin   DateTime? @map("enrollment_begin") @db.Date
+  enrollmentEnd     DateTime? @map("enrollment_end") @db.Date
+  // National Student Clearinghouse single-letter codes:
+  // F=Full-time, Q=Three-quarter, H=Half-time, L=Less than half, A=Leave of absence, W=Withdrawn, D=Deceased
+  enrollmentStatus  String?   @map("enrollment_status")
+  // F=Freshman, S=Sophomore, J=Junior, R=Senior, C=Cert (UG), N=Unspec (UG), B=Bachelor's,
+  // M=Master's, D=Doctoral, P=Postdoc, L=First Prof, G=Unspec (Grad), A=Associate's, T=Post Bacc Cert
+  classLevel        String?   @map("class_level")
+  enrollmentMajor1  String?   @map("enrollment_major_1")
+  enrollmentMajor2  String?   @map("enrollment_major_2")
+  graduated         Boolean?
+  graduationDate    DateTime? @map("graduation_date") @db.Date
+  degreeTitle       String?   @map("degree_title")
+  degreeMajor1      String?   @map("degree_major_1")
+  degreeMajor2      String?   @map("degree_major_2")
+  degreeMajor3      String?   @map("degree_major_3")
+  lastSyncedAt      DateTime  @default(now()) @map("last_synced_at")
+
+  student Student? @relation(fields: [studentNumber], references: [studentNumber])
+
+  @@index([studentNumber])
+  @@index([institution])
+  @@index([enrollmentStatus])
+  @@map("student_postsecondary")
+}
+
+model StudentCompetency {
+  id                 String   @id @default(uuid())
+  sourceId           String   @unique @map("source_id")
+  studentNumber      String   @map("student_number")
+  competency         String
+  portfolio          String?
+  baseline           Decimal? @db.Decimal(5, 2)
+  performanceLevel   Decimal? @map("performance_level") @db.Decimal(5, 2)
+  growth             Decimal? @db.Decimal(5, 2)
+  progress           Decimal? @db.Decimal(5, 2)
+  totalEr            Int?     @map("total_er")
+  completedEr        Int?     @map("completed_er")
+  missedEr           Int?     @map("missed_er")
+  totalOpportunities Int?     @map("total_opportunities")
+  lastSyncedAt       DateTime @default(now()) @map("last_synced_at")
+
+  @@index([studentNumber])
+  @@index([competency])
+  @@map("student_competencies")
+}
+
+model EnrollmentSnapshot {
+  sourceId     String   @id @map("source_id")
+  periodMonth  DateTime @map("period_month") @db.Date
+  phase        String
+  count        Decimal  @db.Decimal(10, 2)
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
+
+  @@index([periodMonth])
+  @@index([phase])
+  @@map("enrollment_snapshots")
+}
+
+model AttendanceRecord {
+  id            String    @id @default(uuid())
+  sourceId      String    @unique @map("source_id")
+  cohort        Int
+  studentNumber String    @map("student_number")
+  date          DateTime? @db.Date
+  startDate     DateTime? @map("start_date") @db.Date
+  endDate       DateTime? @map("end_date") @db.Date
+  code          String?
+  percentage    Decimal?  @db.Decimal(5, 2)
+  rowData       Json      @map("row_data")
+  lastSyncedAt  DateTime  @default(now()) @map("last_synced_at")
+
+  @@index([studentNumber])
+  @@index([cohort, date])
+  @@index([date])
+  @@map("attendance_records")
+}
+
+model FinanceSnapshot {
+  id           String   @id @default(uuid())
+  sourceId     String   @unique @map("source_id")
+  tabName      String   @map("tab_name")
+  period       String?
+  rowData      Json     @map("row_data")
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
+
+  @@index([tabName])
+  @@index([period])
+  @@map("finance_snapshots")
+}
+
+model DonorContact {
+  id                  String   @id @default(uuid())
+  givebutterContactId String?  @map("givebutter_contact_id")
+  firstName           String?  @map("first_name")
+  lastName            String?  @map("last_name")
+  email               String?
+  phone               String?
+  organizationName    String?  @map("organization_name")
+  syncedAt            DateTime @default(now()) @map("synced_at")
+
+  gifts    DonorGift[]
+  pipeline DonorPipeline[]
+
+  @@index([organizationName])
+  @@map("donor_contacts")
+}
+
+model DonorGift {
+  id             String   @id @default(uuid())
+  donorContactId String?  @map("donor_contact_id")
+  givebutterTxId String?  @map("givebutter_tx_id")
+  amount         Float
+  giftDate       String   @map("gift_date")
+  campaignName   String?  @map("campaign_name")
+  fund           String?
+  isRecurring    Boolean  @default(false) @map("is_recurring")
+  syncedAt       DateTime @default(now()) @map("synced_at")
+
+  donorContact DonorContact? @relation(fields: [donorContactId], references: [id])
+
+  @@map("donor_gifts")
+}
+
+model DonorPipeline {
+  id             String   @id @default(uuid())
+  donorContactId String?  @map("donor_contact_id")
+  stage          String?
+  askAmount      Float?   @map("ask_amount")
+  likelihood     String?
+  notes          String?
+  syncedAt       DateTime @default(now()) @map("synced_at")
+
+  donorContact DonorContact? @relation(fields: [donorContactId], references: [id])
+
+  @@map("donor_pipeline")
+}
+
+model DonorGrant {
+  id        String   @id @default(uuid())
+  funder    String
+  amount    Float?
+  status    String?
+  deadline  String?
+  awardDate String?  @map("award_date")
+  fund      String?
+  notes     String?
+  syncedAt  DateTime @default(now()) @map("synced_at")
+
+  @@map("donor_grants")
+}
+
+model DocumentChunk {
+  id        String                       @id @default(uuid())
+  source    String
+  sourceId  String                       @map("source_id")
+  title     String?
+  content   String
+  embedding Unsupported("vector(1536)")?
+  metadata  Json?
+  syncedAt  DateTime                     @default(now()) @map("synced_at")
+
+  @@index([source, sourceId])
+  @@map("document_chunks")
+}
+
+model UsageLog {
+  id                  String   @id @default(uuid())
+  toolName            String   @map("tool_name")
+  inputJson           Json?    @map("input_json")
+  outputJson          Json?    @map("output_json")
+  durationMs          Int?     @map("duration_ms")
+  error               String?
+  calledAt            DateTime @default(now()) @map("called_at")
+  anthropicUserId     String?  @map("anthropic_user_id")
+  anthropicUserEmail  String?  @map("anthropic_user_email")
+  anthropicWorkspace  String?  @map("anthropic_workspace")
+  inputTokens         Int?     @map("input_tokens")
+  outputTokens        Int?     @map("output_tokens")
+  cacheReadTokens     Int?     @map("cache_read_tokens")
+  cacheCreationTokens Int?     @map("cache_creation_tokens")
+  model               String?
+
+  @@index([toolName])
+  @@index([calledAt])
+  @@index([anthropicUserId])
+  @@index([anthropicUserEmail])
+  @@map("usage_logs")
+}
+
+model SyncRun {
+  id              String    @id @default(uuid())
+  connector       String
+  status          String
+  startedAt       DateTime  @default(now()) @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  recordsUpserted Int       @default(0) @map("records_upserted")
+  error           String?
+  notes           String?
+
+  @@index([connector, startedAt])
+  @@map("sync_runs")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts Account[]
+  sessions Session[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model AwsResourceJob {
+  id           String   @id @default(uuid())
+  developer    String   @map("developer")
+  actionType   String   @map("action_type") // CREATE, UPDATE, DELETE
+  resourceType String   @map("resource_type") // e.g. AWS::S3::Bucket, terraform
+  parameters   Json     @map("parameters") // Inputs / TF code / variables
+  planOutput   String?  @map("plan_output") // Plan / Dry-run details
+  status       String   @map("status") // PENDING_APPROVAL, APPROVED, REJECTED, IN_PROGRESS, SUCCEEDED, FAILED
+  error        String?  @map("error")
+  approver     String?  @map("approver") // Approver email
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([developer])
+  @@index([status])
+  @@map("aws_resource_jobs")
+}
+
+// ---------- MCP OAuth 2.0 (Phase 23) ----------
+//
+// The `users` table is the source of truth for MCP access. Anyone who completes
+// the OAuth flow ends up with a row here; their `status` + `roles` decide what
+// they can do. NextAuth's `Account`/`Session`/`User` tables (above) are
+// independent — those gate HQ sign-in only.
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+model McpUser {
+  email     String     @id
+  status    UserStatus @default(PENDING)
+  roles     String[]   @default([])
+  createdAt DateTime   @default(now()) @map("created_at")
+  lastLogin DateTime?  @map("last_login")
+
+  @@index([status])
+  @@map("mcp_users")
+}
+
+model OAuthClient {
+  clientId       String   @id @map("client_id")
+  clientName     String   @map("client_name")
+  redirectUris   String[] @map("redirect_uris")
+  tokenLifetimeS Int      @default(3600) @map("token_lifetime_s")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("oauth_clients")
+}
+
+model OAuthAuthorizationCode {
+  code          String    @id
+  clientId      String    @map("client_id")
+  userEmail     String    @map("user_email")
+  redirectUri   String    @map("redirect_uri")
+  codeChallenge String    @map("code_challenge")
+  scopes        String[]  @default([])
+  expiresAt     DateTime  @map("expires_at")
+  usedAt        DateTime? @map("used_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("oauth_authorization_codes")
+}
+
+model OAuthRefreshToken {
+  tokenId   String    @id @map("token_id")
+  clientId  String    @map("client_id")
+  userEmail String    @map("user_email")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userEmail])
+  @@index([expiresAt])
+  @@map("oauth_refresh_tokens")
+}
+
+// Tool-level ACL, editable from HQ /admin. The MCP server reads this table
+// (cached for ~60s) instead of a static TS registry, so admins can change
+// who can call what without a code deploy.
+model ToolPermission {
+  toolName     String   @id @map("tool_name")
+  allowedRoles String[] @default([]) @map("allowed_roles")
+  category     String   @default("other") // students | donor_finance | search | future | other
+  description  String?
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("tool_permissions")
+}
+
+// Catalog of grant documents held in the Google Drive "Grants" tree.
+//
+// This table exists because Drive discovery is broken for that tree: listing a
+// subfolder's children or searching by title/fullText returns nothing, while
+// fetching a file by its ID works fine. So the corpus cannot be *found* through
+// Drive, only *read* once you already know the ID.
+//
+// This is a catalog, not a content store — one row per file, no document text.
+// The MCP `find_grant_documents` tool queries these rows to narrow ~1250 files
+// to a handful, then the caller fetches just those from Drive by `driveFileId`.
+// That keeps 3.5+ GiB of grant material reachable without embedding any of it.
+//
+// `funder`, `year`, and `docKind` are inferred from the Drive folder path by
+// packages/grants/scripts/build-grants-index.ts. They are best-effort labels,
+// not authoritative facts — see `needsReview`.
+model GrantDocument {
+  id String @id @default(uuid())
+
+  /// Drive file ID. The join key to actual content, and null until the Drive
+  /// walk backfills it — the local mirror does not record IDs.
+  driveFileId String? @unique @map("drive_file_id")
+  /// Path below the Grants root. Stable identifier before IDs are backfilled.
+  path        String  @unique
+  filename    String
+  driveUrl    String? @map("drive_url")
+  mimeType    String? @map("mime_type")
+
+  /// prospects | current_past | program_descriptions | org_reference | internal_ai_os | unknown
+  collection String
+  funder     String?
+  /// Application year. For a multi-year period this is the year applied, not the
+  /// year the grant ends.
+  year       Int?
+  /// application_response | budget | agreement | report | letter_of_support |
+  /// loi | meeting_notes | template | attachment | program_description |
+  /// external_reference | transcript | other
+  docKind    String  @map("doc_kind")
+
+  /// Sits under an explicit do-not-ingest folder.
+  excluded          Boolean @default(false) @map("excluded")
+  /// Launchpad did not author this (funder rules, other grantees' applications).
+  /// Implies archiveOnly. Quoting it into a submission would be plagiarism.
+  externalReference Boolean @default(false) @map("external_reference")
+  /// Reference only — must not be used as drafting context.
+  archiveOnly       Boolean @default(false) @map("archive_only")
+  /// Classification was not decisive; a human should confirm funder/year/kind.
+  needsReview       Boolean @default(false) @map("needs_review")
+
+  ext          String?
+  /// text | media | unknown — whether text can be extracted today.
+  contentClass String? @map("content_class")
+  sizeBytes    BigInt? @map("size_bytes")
+  modifiedAt   DateTime? @map("modified_at")
+
+  syncedAt DateTime @default(now()) @map("synced_at")
+
+  @@index([funder])
+  @@index([year])
+  @@index([docKind])
+  @@index([archiveOnly, externalReference])
+  @@index([collection, year])
+  @@map("grant_documents")
+}

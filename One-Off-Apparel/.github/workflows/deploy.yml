@@ -1,0 +1,500 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to deploy (comma-separated, or 'all')"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - mcp-server
+          - hq
+          - aws-mcp-server
+          - sync
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "851725317896"
+  ECS_CLUSTER: lp-internal
+
+jobs:
+  # ─── Gate: only deploy after CI passes ───────────────────────────
+  ci:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/ci.yml
+
+  # ─── Detect which services changed ──────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.ci.result == 'success')
+    needs: [ci]
+    outputs:
+      mcp-server: ${{ steps.detect.outputs.mcp-server }}
+      hq: ${{ steps.detect.outputs.hq }}
+      aws-mcp-server: ${{ steps.detect.outputs.aws-mcp-server }}
+      sync: ${{ steps.detect.outputs.sync }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed services
+        id: detect
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            INPUT="${{ github.event.inputs.services }}"
+            if [[ "$INPUT" == "all" ]]; then
+              echo "mcp-server=true" >> "$GITHUB_OUTPUT"
+              echo "hq=true" >> "$GITHUB_OUTPUT"
+              echo "aws-mcp-server=true" >> "$GITHUB_OUTPUT"
+              echo "sync=true" >> "$GITHUB_OUTPUT"
+            else
+              for svc in $(echo "$INPUT" | tr ',' ' '); do
+                echo "${svc}=true" >> "$GITHUB_OUTPUT"
+              done
+            fi
+            exit 0
+          fi
+
+          # Diff against the push event's actual "before" SHA (not HEAD~1) so
+          # multi-commit pushes and merge commits are diffed correctly — HEAD~1
+          # only walks the first parent and previously missed changes brought
+          # in by a merge, or by earlier commits in a multi-commit push.
+          BEFORE="${{ github.event.before }}"
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "No usable 'before' commit (new branch or force-push) — treating all services as changed."
+            CHANGED=$(git ls-files)
+          else
+            CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          fi
+
+          # Shared packages trigger all services
+          SHARED=false
+          if echo "$CHANGED" | grep -qE '^packages/'; then
+            SHARED=true
+          fi
+
+          if [[ "$SHARED" == "true" ]] || echo "$CHANGED" | grep -qE '^apps/mcp-server/'; then
+            echo "mcp-server=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$SHARED" == "true" ]] || echo "$CHANGED" | grep -qE '^apps/hq/'; then
+            echo "hq=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$SHARED" == "true" ]] || echo "$CHANGED" | grep -qE '^apps/aws-mcp-server/'; then
+            echo "aws-mcp-server=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$SHARED" == "true" ]] || echo "$CHANGED" | grep -qE '^(apps/sync/|connectors/)'; then
+            echo "sync=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ─── Build the MCP server image, register its task definition ────
+  # Runs BEFORE `migrate`, and this ordering is the entire point of the job.
+  #
+  # HISTORY, so this is not "simplified" back: until 2026-08-18 the `migrate`
+  # job launched its one-off task against `--task-definition
+  # lp-internal-mcp-server` with NO revision. ECS resolves that to the latest
+  # REGISTERED revision, which pins the image from the PREVIOUS deploy — and
+  # `migrate` ran before any image was built, because every build lived inside
+  # a deploy job that itself `needs: migrate`. So the migration set the job
+  # could see was always one release behind, a migration added by the commit
+  # under deploy was invisible to the job meant to apply it, and the job
+  # reported success anyway. Run 32047334123 logged "12 migrations found"
+  # while the deployed commit fc2a43d carried 19. Work package #295.
+  #
+  # This job runs whenever ANY of the three DB-backed services is deploying,
+  # not just mcp-server, because the migration task needs an image built from
+  # THIS commit regardless of which service changed. That costs one image
+  # build on an hq-only deploy; correctness is worth it.
+  build-mcp-server:
+    needs: [changes]
+    if: always() && needs.changes.result == 'success' && (needs.changes.outputs.mcp-server == 'true' || needs.changes.outputs.hq == 'true' || needs.changes.outputs.aws-mcp-server == 'true')
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      taskdef-arn: ${{ steps.taskdef.outputs.arn }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/mcp-server/Dockerfile
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/mcp-server:latest
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/mcp-server:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Register task definition
+        id: taskdef
+        run: |
+          sed "s/\${AWS_ACCOUNT_ID}/${{ env.AWS_ACCOUNT_ID }}/g" \
+            infra/ecs/mcp-server-taskdef.json > /tmp/taskdef.json
+
+          # Pin image to this exact SHA instead of :latest
+          jq --arg img "${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/mcp-server:${{ github.sha }}" \
+            '.containerDefinitions[0].image = $img' /tmp/taskdef.json > /tmp/taskdef-final.json
+
+          ARN=$(aws ecs register-task-definition \
+            --cli-input-json file:///tmp/taskdef-final.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+          echo "Registered: $ARN"
+
+  # ─── Run database migrations ─────────────────────────────────────
+  # Runs after the image is built and before any service deploy. Uses an ECS
+  # one-off task because the GitHub Actions runner cannot reach RDS (private
+  # subnet), pinned to the revision `build-mcp-server` just registered so the
+  # migrations it applies are the ones in the commit under deploy.
+  migrate:
+    needs: [changes, build-mcp-server]
+    if: always() && needs.build-mcp-server.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get network config from MCP server service
+        id: network
+        run: |
+          SUBNET=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} \
+            --services lp-internal-mcp-server \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.subnets[0]' \
+            --output text)
+          SG=$(aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} \
+            --services lp-internal-mcp-server \
+            --query 'services[0].networkConfiguration.awsvpcConfiguration.securityGroups[0]' \
+            --output text)
+          echo "subnet=$SUBNET" >> "$GITHUB_OUTPUT"
+          echo "sg=$SG" >> "$GITHUB_OUTPUT"
+
+      - name: Run migrations via ECS one-off task
+        id: run
+        run: |
+          # Applies pending migrations with `prisma migrate deploy`, run inside the
+          # mcp-server image because the GitHub runner cannot reach RDS (private subnet).
+          #
+          # The image carries everything this needs: the prisma CLI (a devDependency of
+          # @lp-ai/lib-db, and the runner stage copies node_modules from the builder),
+          # packages/db/prisma/migrations, and prisma.config.ts at /workspace. The task
+          # definition already injects DATABASE_URL from Secrets Manager.
+          #
+          # prisma.config.ts resolves its `schema` and `migrations.path` relative to
+          # ITSELF, not to the process cwd, so `--config prisma.config.ts` from
+          # /workspace is correct regardless of the image's WORKDIR.
+          #
+          # HISTORY, so this is not "simplified" back: until 2026-08-17 this step ran a
+          # read-only `SELECT migration_name FROM _prisma_migrations` and exited 0. It
+          # applied nothing, while being named `migrate`, titled "Run migrations", and
+          # gated by all three deploy jobs. Work package #220. Then until 2026-08-18 it
+          # ran against an unpinned task definition, so it applied the PREVIOUS
+          # release's migration set — #295. The `--task-definition` below MUST stay
+          # pinned to the revision built from this commit.
+
+          cat > /tmp/overrides.json <<'JSON'
+          {
+            "containerOverrides": [{
+              "name": "mcp-server",
+              "command": [
+                "sh", "-c",
+                "cd /workspace && node_modules/.bin/prisma migrate deploy --config prisma.config.ts && node_modules/.bin/prisma migrate status --config prisma.config.ts"
+              ]
+            }]
+          }
+          JSON
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --task-definition ${{ needs.build-mcp-server.outputs.taskdef-arn }} \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ steps.network.outputs.subnet }}],securityGroups=[${{ steps.network.outputs.sg }}],assignPublicIp=ENABLED}" \
+            --overrides file:///tmp/overrides.json \
+            --query 'tasks[0].taskArn' --output text)
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+          TASK_ID=$(echo "$TASK_ARN" | rev | cut -d/ -f1 | rev)
+          echo "task_id=$TASK_ID" >> "$GITHUB_OUTPUT"
+
+          echo "Waiting for migration task to complete..."
+          aws ecs wait tasks-stopped --cluster ${{ env.ECS_CLUSTER }} --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+
+          # Unconditionally. The applied-migration list is the whole point of the job and
+          # fetching it only on failure is why nobody noticed the step applied nothing —
+          # a successful run left no record anywhere outside CloudWatch.
+          LOGS=$(aws logs get-log-events \
+            --log-group-name /ecs/lp-internal-mcp-server \
+            --log-stream-name "ecs/mcp-server/$TASK_ID" \
+            --query 'events[*].message' --output text) || {
+              echo "::warning::could not fetch migration task logs"
+              LOGS=""
+            }
+          echo "--- migration task output ---"
+          echo "$LOGS"
+          echo "--- end migration task output ---"
+          printf '%s' "$LOGS" > /tmp/migrate-logs.txt
+
+          echo "Migration task exit code: $EXIT_CODE"
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Migration task failed with exit code $EXIT_CODE — no service was deployed"
+            exit 1
+          fi
+
+      - name: Assert the image's migration set matches this commit
+        run: |
+          # The tripwire for #295. `prisma migrate deploy` prints "N migrations found
+          # in prisma/migrations", where N is the count of migration directories in
+          # the IMAGE. If that disagrees with the count in the checked-out commit, the
+          # task ran an image built from some other commit and its success means
+          # nothing. Cheap, and it catches this whole class permanently.
+          EXPECTED=$(find packages/db/prisma/migrations -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+
+          REPORTED=$(grep -oE '[0-9]+ migrations? found in prisma/migrations' /tmp/migrate-logs.txt \
+            | head -1 | grep -oE '^[0-9]+' || true)
+
+          if [ -z "$REPORTED" ]; then
+            echo "::error::Could not read a migration count from the task log — cannot prove which image ran. Expected $EXPECTED migrations for ${{ github.sha }}."
+            exit 1
+          fi
+
+          echo "Migrations in commit ${{ github.sha }}: $EXPECTED"
+          echo "Migrations reported by the task image:  $REPORTED"
+
+          if [ "$REPORTED" != "$EXPECTED" ]; then
+            echo "::error::Migration set mismatch — the task image carries $REPORTED migrations but commit ${{ github.sha }} has $EXPECTED. The migrate job ran the wrong image (see #295); migrations from this commit were NOT applied."
+            exit 1
+          fi
+          echo "Migration sets match — the task ran this commit's image."
+
+  # ─── Deploy MCP Server ─────────────────────────────────────────
+  # The image and task definition were built by `build-mcp-server`; this job
+  # only rolls the service onto the revision that `migrate` has already
+  # migrated the database for.
+  deploy-mcp-server:
+    needs: [changes, build-mcp-server, migrate]
+    if: always() && needs.changes.result == 'success' && needs.migrate.result == 'success' && needs.changes.outputs.mcp-server == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service lp-internal-mcp-server \
+            --task-definition ${{ needs.build-mcp-server.outputs.taskdef-arn }} \
+            --force-new-deployment
+
+      - name: Wait for stability
+        run: |
+          echo "Waiting for service to stabilize (up to 5 minutes)..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services lp-internal-mcp-server
+
+  # ─── Deploy HQ Dashboard ───────────────────────────────────────
+  deploy-hq:
+    needs: [changes, migrate]
+    if: always() && needs.changes.result == 'success' && needs.migrate.result == 'success' && needs.changes.outputs.hq == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/hq/Dockerfile
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/hq:latest
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/hq:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Register task definition
+        id: taskdef
+        run: |
+          sed "s/\${AWS_ACCOUNT_ID}/${{ env.AWS_ACCOUNT_ID }}/g" \
+            infra/ecs/hq-taskdef.json > /tmp/taskdef.json
+
+          jq --arg img "${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/hq:${{ github.sha }}" \
+            '.containerDefinitions[0].image = $img' /tmp/taskdef.json > /tmp/taskdef-final.json
+
+          ARN=$(aws ecs register-task-definition \
+            --cli-input-json file:///tmp/taskdef-final.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+          echo "Registered: $ARN"
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service lp-internal-hq \
+            --task-definition ${{ steps.taskdef.outputs.arn }} \
+            --force-new-deployment
+
+      - name: Wait for stability
+        run: |
+          echo "Waiting for service to stabilize (up to 5 minutes)..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services lp-internal-hq
+
+  # ─── Deploy AWS MCP Server ─────────────────────────────────────
+  deploy-aws-mcp-server:
+    needs: [changes, migrate]
+    if: always() && needs.changes.result == 'success' && needs.migrate.result == 'success' && needs.changes.outputs.aws-mcp-server == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/aws-mcp-server/Dockerfile
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/aws-mcp-server:latest
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/aws-mcp-server:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Register task definition
+        id: taskdef
+        run: |
+          sed "s/\${AWS_ACCOUNT_ID}/${{ env.AWS_ACCOUNT_ID }}/g" \
+            infra/ecs/aws-mcp-server-taskdef.json > /tmp/taskdef.json
+
+          jq --arg img "${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/aws-mcp-server:${{ github.sha }}" \
+            '.containerDefinitions[0].image = $img' /tmp/taskdef.json > /tmp/taskdef-final.json
+
+          ARN=$(aws ecs register-task-definition \
+            --cli-input-json file:///tmp/taskdef-final.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+          echo "Registered: $ARN"
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service lp-internal-aws-mcp-server \
+            --task-definition ${{ steps.taskdef.outputs.arn }} \
+            --force-new-deployment
+
+      - name: Wait for stability
+        run: |
+          echo "Waiting for service to stabilize (up to 5 minutes)..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services lp-internal-aws-mcp-server
+
+  # ─── Build Sync Image (no long-running service — used by EventBridge tasks) ─
+  deploy-sync:
+    needs: [changes]
+    if: always() && needs.changes.result == 'success' && needs.changes.outputs.sync == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/lp-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/sync/Dockerfile
+          push: true
+          platforms: linux/arm64
+          tags: |
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/sync:latest
+            ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/lp-internal/sync:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

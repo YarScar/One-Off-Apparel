@@ -1,0 +1,44 @@
+{
+  "family": "lp-sync-aplos",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/lp-ecs-task-role",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "sync",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/lp-internal/sync:latest",
+      "essential": true,
+      "command": [
+        "/bin/sh", "-c",
+        "cd /workspace/connectors/aplos && node dist/cli.js"
+      ],
+      "environment": [
+        { "name": "NODE_ENV",           "value": "production" },
+        { "name": "USE_AWS_SECRETS",    "value": "true" },
+        { "name": "AWS_REGION",         "value": "us-east-1" },
+        { "name": "AWS_SECRETS_PREFIX", "value": "lp-internal" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL",      "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/db:DATABASE_URL::" },
+        { "name": "APLOS_CLIENT_ID",   "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/aplos:APLOS_CLIENT_ID::" },
+        { "name": "APLOS_API_KEY",     "valueFrom": "arn:aws:secretsmanager:us-east-1:${AWS_ACCOUNT_ID}:secret:lp-internal/aplos:APLOS_API_KEY::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/lp-sync-aplos",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

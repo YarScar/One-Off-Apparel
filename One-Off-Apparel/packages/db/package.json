@@ -1,0 +1,35 @@
+{
+  "name": "@lp-ai/lib-db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "generate": "prisma generate --config ../../prisma.config.ts",
+    "migrate": "prisma migrate deploy --config ../../prisma.config.ts",
+    "migrate:dev": "prisma migrate dev --config ../../prisma.config.ts",
+    "push": "prisma db push --config ../../prisma.config.ts",
+    "studio": "prisma studio --config ../../prisma.config.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lp-ai/lib-config": "workspace:*",
+    "@prisma/client": "^7.0.0",
+    "@prisma/client-runtime-utils": "^7.0.0",
+    "@prisma/adapter-pg": "^7.0.0",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "prisma": "^7.0.0",
+    "typescript": "^5.4.5",
+    "@types/pg": "^8.11.0"
+  }
+}

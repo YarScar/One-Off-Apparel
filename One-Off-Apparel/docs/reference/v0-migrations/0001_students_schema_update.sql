@@ -1,0 +1,10 @@
+ALTER TABLE students DROP COLUMN IF EXISTS left_before_hs_grad;
+ALTER TABLE students DROP COLUMN IF EXISTS completed_phase;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS city text;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS state text;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS enrollment_status text;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS grade_level text;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS launchpad_email text;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS workforce_program_referral text;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS workforce_referral_status text;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS internship_status text;
