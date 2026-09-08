@@ -1,41 +1,24 @@
 import Link from 'next/link';
+import type { JSX } from 'react';
 import { auth, signIn, signOut } from '@/auth';
-import { prisma } from '@lp-ai/lib-db';
 
-export async function Nav() {
+export async function Nav(): Promise<JSX.Element> {
   const session = await auth();
-
-  // Only show the Admin link to users whose mcp_users row carries the admin role.
-  let isAdmin = false;
-  if (session?.user?.email) {
-    const me = await prisma.mcpUser.findUnique({
-      where: { email: session.user.email.toLowerCase() },
-    });
-    isAdmin = me?.status === 'ACTIVE' && me.roles.includes('admin');
-  }
 
   return (
     <header className="border-b bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
         <div className="flex items-center gap-6">
           <Link href="/" className="text-lg font-semibold tracking-tight text-ink">
-            LP Internal AI
+            One Off Apparel
           </Link>
           <nav className="flex items-center gap-4 text-sm text-muted">
             <Link href="/" className="hover:text-ink">
               Home
             </Link>
-            <Link href="/sync" className="hover:text-ink">
-              Sync
+            <Link href="/orders" className="hover:text-ink">
+              Orders
             </Link>
-            <Link href="/tools" className="hover:text-ink">
-              Tool Log
-            </Link>
-            {isAdmin && (
-              <Link href="/admin" className="hover:text-ink">
-                Admin
-              </Link>
-            )}
           </nav>
         </div>
         <div className="text-sm text-muted">
